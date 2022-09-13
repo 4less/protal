@@ -182,9 +182,6 @@ namespace protal {
         }
 
         Genome& GetGenome(GenomeKey const& key) {
-            if (GetLoadedGenomeCount() > 25'000) {
-                std::cout << "GetLoadedGenomeCount: " << GetLoadedGenomeCount() << std::endl;
-            }
             assert(m_genomes.contains(key));
             return m_genomes.at(key);
         }
