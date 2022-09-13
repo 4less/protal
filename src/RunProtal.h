@@ -129,9 +129,12 @@ namespace protal {
                 genomes.LoadAllGenomes();
             }
 
+            using AnchorFinder = SimpleAnchorFinder<KmerLookupSM>;
+//            using AnchorFinder = NaiveAnchorFinder<KmerLookupSM>;
+
             // new anchor finder approach
 //            SimpleAnchorFinder anchor_finder(kmer_lookup);
-            NaiveAnchorFinder anchor_finder(kmer_lookup);
+            AnchorFinder anchor_finder(kmer_lookup);
 
             // AlignmentHandler approach
             SimpleAlignmentHandler alignment_handler(genomes, aligner, kmer_size);
@@ -146,7 +149,7 @@ namespace protal {
 
                 auto protal_stats = protal::classify::RunPairedEnd<
                         SimpleKmerHandler<ClosedSyncmer>,
-                        NaiveAnchorFinder<KmerLookupSM>,
+                        AnchorFinder,
                         SimpleAlignmentHandler,
                         DEBUG_NONE>(
                         reader, options, anchor_finder, alignment_handler, iterator);
@@ -160,7 +163,7 @@ namespace protal {
                 std::cout << "Single-end reads" << std::endl;
                 auto protal_stats = protal::classify::Run<
                         SimpleKmerHandler<ClosedSyncmer>,
-                        NaiveAnchorFinder<KmerLookupSM>,
+                        AnchorFinder,
                         SimpleAlignmentHandler,
                         DEBUG_NONE>(
                         options.GetFirstFile(), options, anchor_finder, alignment_handler, iterator);

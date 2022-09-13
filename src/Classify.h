@@ -199,7 +199,6 @@ namespace protal::classify {
                 }
 
 
-
                 // Calculate Anchors
                 anchor_finder(kmers, anchors);
 
@@ -207,7 +206,6 @@ namespace protal::classify {
 
                 // Do Alignment
                 alignment_handler(anchors, alignment_results, record.sequence);
-
 
                 // Output alignments
                 output_handler(alignment_results, record);
@@ -237,6 +235,7 @@ namespace protal::classify {
             {
                 std::cout << "\n___Thread summary: " << omp_get_thread_num() << std::endl;
                 std::cout << "total_alignments: " << alignment_handler.total_alignments << std::endl;
+                std::cout << "alignments lower 93 " << alignment_handler.alignments_ani_lower93 << std::endl;
                 std::cout << "alignments.... " << output_handler.alignments << std::endl;
             }
         }
@@ -358,7 +357,8 @@ namespace protal::classify {
             {
                 std::cout << "\n___Thread summary: " << omp_get_thread_num() << std::endl;
                 std::cout << "total_alignments: " << alignment_handler.total_alignments << std::endl;
-                std::cout << "alignments.... " << output_handler.alignments << std::endl;
+                std::cout << "alignments lower 93 " << alignment_handler.alignments_ani_lower93 << std::endl;
+                std::cout << "outputted alignments  " << output_handler.alignments << std::endl;
             }
         }
 

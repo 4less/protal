@@ -34,6 +34,7 @@ namespace protal {
 
     public:
         size_t total_alignments = 0;
+        size_t alignments_ani_lower93 = 0;
         size_t dummy = 0;
 
         SimpleAlignmentHandler(GenomeLoader& genome_loader, WFA2Wrapper& aligner, size_t kmer_size) :
@@ -69,6 +70,7 @@ namespace protal {
                 auto& genome = m_genome_loader.GetGenome(anchor.a.taxid);
                 auto& gene = genome.GetGeneOMP(anchor.a.geneid);
 
+
                 int abs_pos = anchor.a.genepos - anchor.a.readpos;
                 dummy += abs_pos;
 
@@ -84,14 +86,25 @@ namespace protal {
                 std::string reference = gene.Sequence().substr(gene_start, overlap);
                 dummy += query.length();
 
-
                 m_aligner.Alignment(query, reference);
 
                 m_alignment_result.Set(anchor.a.taxid, anchor.b.geneid, abs_pos, !reversed);
                 m_alignment_result.Set(m_aligner.GetAligner().getAlignmentScore(), m_aligner.GetAligner().getAlignmentCigar());
 
-                if (WFA2Wrapper::CigarANI(m_alignment_result.Cigar()) > 0.93) {
+                auto cigar_ani = WFA2Wrapper::CigarANI(m_alignment_result.Cigar());
+                if (cigar_ani > 0.93) {
                     results.emplace_back(m_alignment_result);
+                } else {
+//                    int distance = (static_cast<int>(anchor.b.genepos) - anchor.a.genepos) - (static_cast<int>(anchor.b.readpos) - anchor.a.readpos);
+//                    std::cout << "_______________________" << std::endl;
+//                    std::cout << "Anchors: " << anchors.size() << '\t' << cigar_ani << '\t' << distance << "\trev? " << reversed << "\t\t" << anchor.a.ToString() << '\t' << anchor.b.ToString() << std::endl;
+//                    std::cout << "___________Other anchors____________" << std::endl;
+//                    for (auto& anchor : anchors) {
+//                        std::cout << anchor.a.ToString() << " " << anchor.b.ToString() << std::endl;
+//                    }
+//                    std::cout << "____________Alignment___________" << std::endl;
+//                    m_aligner.PrintAlignment();
+                    alignments_ani_lower93++;
                 }
             }
         }

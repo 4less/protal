@@ -18,6 +18,10 @@ namespace protal {
         size_t m_idx_from_left = 0;
         size_t m_idx_from_right = 0;
 
+//        size_t m_advance_after_find = 1;
+        size_t m_advance_after_find = 3;
+
+
         // Anchors. Find better solution?!
         LookupList m_anchor_left_1;
         LookupList m_anchor_right_1;
@@ -25,14 +29,13 @@ namespace protal {
         LookupList m_anchor_right_2;
 
         inline void SearchAnchor(LookupList &anchor_list, KmerList &kmer_list, bool from_left) {
-
             if (from_left) {
                 for (; m_idx_from_left < kmer_list.size(); m_idx_from_left++) {
                     auto [mmer, pos] = kmer_list[m_idx_from_left];
                     m_kmer_lookup.Get(anchor_list, mmer, pos);
 
                     if (!anchor_list.empty()) {
-                        m_idx_from_left++;
+                        m_idx_from_left += m_advance_after_find;
                         break;
                     }
                 }
@@ -42,7 +45,7 @@ namespace protal {
 
                     m_kmer_lookup.Get(anchor_list, mmer, pos);
                     if (!anchor_list.empty()) {
-                        m_idx_from_right++;
+                        m_idx_from_right += m_advance_after_find;
                         break;
                     }
                 }
@@ -68,17 +71,16 @@ namespace protal {
         void operator () (KmerList& kmer_list, AlignmentAnchorList& anchors) {
             anchors.clear();
             Reset();
+
             SearchAnchor(m_anchor_left_1, kmer_list, true);
             SearchAnchor(m_anchor_right_1, kmer_list, false);
             SearchAnchor(m_anchor_left_2, kmer_list, true);
             SearchAnchor(m_anchor_right_2, kmer_list, false);
 
-//            std::cout << "\tAnchors \t" << m_anchor_left_1.size() << " " << m_anchor_right_1.size() << std::endl;
-
             m_seeding.Add(0, m_anchor_left_1.begin(), m_anchor_left_1.end());
             m_seeding.Add(1, m_anchor_left_2.begin(), m_anchor_left_2.end());
-            m_seeding.Add(2, m_anchor_right_1.begin(), m_anchor_right_1.end());
-            m_seeding.Add(3, m_anchor_right_2.begin(), m_anchor_right_2.end());
+            m_seeding.Add(2, m_anchor_right_2.begin(), m_anchor_right_2.end());
+            m_seeding.Add(3, m_anchor_right_1.begin(), m_anchor_right_1.end());
 
             m_seeding.ComputeSeedPairs();
 
@@ -86,8 +88,14 @@ namespace protal {
 //            m_seeding.PrintAnchors();
 
             for (auto& anchor_pair :  m_seeding.GetAnchorList()) {
-                anchors.emplace_back( AlignmentAnchor(anchor_pair.first, anchor_pair.second, 2) );
+                if (anchor_pair.first.genepos < anchor_pair.second.genepos) {
+                    anchors.emplace_back( AlignmentAnchor(anchor_pair.first, anchor_pair.second, 2) );
+                } else {
+                    anchors.emplace_back( AlignmentAnchor(anchor_pair.second, anchor_pair.first, 2) );
+                }
             }
+
+//            m_seeding.PrintAnchors();
         }
     };
 
@@ -98,6 +106,8 @@ namespace protal {
 
         size_t m_idx_from_left = 0;
         size_t m_idx_from_right = 0;
+
+        size_t m_advance_after_find = 10;
 
         // Anchors. Find better solution?!
         LookupList m_anchor_first;
@@ -111,7 +121,7 @@ namespace protal {
                     m_kmer_lookup.Get(anchor_list, mmer, pos);
 
                     if (!anchor_list.empty()) {
-                        m_idx_from_left++;
+                        m_idx_from_left += m_advance_after_find;
                         break;
                     }
                 }
@@ -121,7 +131,7 @@ namespace protal {
 
                     m_kmer_lookup.Get(anchor_list, mmer, pos);
                     if (!anchor_list.empty()) {
-                        m_idx_from_right++;
+                        m_idx_from_right += m_advance_after_find;
                         break;
                     }
                 }
