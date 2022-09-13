@@ -173,10 +173,7 @@ namespace protal {
             }
             std::sort(keys.begin(), keys.end());
 
-            std::cout << "keys: " << keys.size() << std::endl;
-
             for (auto& key : keys) {
-                std::cout << "Load genome: " << key << std::endl;
                 m_genomes.at(key).LoadGenome();
             }
         }
