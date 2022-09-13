@@ -60,7 +60,6 @@ WFAligner::WFAligner(
   this->wfAligner = nullptr;
 }
 WFAligner::~WFAligner() {
-  std::cout << "Destructor wfaligner" << std::endl;
   wavefront_aligner_delete(wfAligner);
 }
 /*
