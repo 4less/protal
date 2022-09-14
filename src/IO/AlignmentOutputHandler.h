@@ -13,6 +13,7 @@
 #include "VarkitInterface.h"
 #include "KmerLookup.h"
 #include "FastxReader.h"
+#include "SamHandler.h"
 
 namespace protal {
     class AlignmentResult {
@@ -112,7 +113,7 @@ namespace protal {
         BufferedStringOutput m_sam_output;
         BufferedOutput<ClassificationLine> m_output;
         ClassificationLine m_line;
-        std::string m_samline;
+        SamEntry m_sam;
         AlignmentInfo m_info;
 
     public:
@@ -169,14 +170,26 @@ namespace protal {
 
             ToClassificationLine(m_line, best.Taxid(), best.GeneId(), best.GenePos() + m_info.alignment_start, m_info.alignment_length, 1, m_info.alignment_ani);
 
-            std::string samline = "";
+            m_sam.m_qname = record.id;
+            m_sam.m_flag = 0;
+            m_sam.m_rname = std::to_string(best.Taxid()) + "_" + std::to_string(best.GeneId());
+            m_sam.m_pos = best.GenePos() + m_info.alignment_start;
+            m_sam.m_mapq = best.AlignmentScore();
+            m_sam.m_cigar = best.Cigar();
+            m_sam.m_rnext = "*";
+            m_sam.m_pnext = 0;
+            m_sam.m_tlen = best.Cigar().length();
+            m_sam.m_seq = record.sequence;
+            m_sam.m_qual = record.quality;
+
+//            std::cout << m_sam.ToString() << std::endl;
 
             alignments++;
             if (!m_output.Write(m_line)) {
 #pragma omp critical(varkit_output)
                 m_output.Write(m_os);
             }
-            if (!m_sam_output.Write(m_samline)) {
+            if (!m_sam_output.Write(m_sam.ToString())) {
 #pragma omp critical(sam_output)
                 m_sam_output.Write(m_sam_os);
             }

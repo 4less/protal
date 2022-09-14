@@ -13,6 +13,7 @@ namespace protal {
         size_t reads = 0;
         size_t kmers_accepted = 0;
         size_t kmers_total = 0;
+        size_t total_anchors = 0;
         size_t total_alignments = 0;
         size_t output_alignments = 0;
         int thread_num = -1;
@@ -22,6 +23,7 @@ namespace protal {
             reads += statistics.reads;
             kmers_total += statistics.kmers_total;
             kmers_accepted += statistics.kmers_accepted;
+            total_anchors += statistics.total_anchors;
             total_alignments += statistics.total_alignments;
             output_alignments += statistics.output_alignments;
             num_threads++;
@@ -34,6 +36,7 @@ namespace protal {
             os << "Processed reads:    \t" << reads << std::endl;
             os << "Total kmers:        \t" << kmers_total << std::endl;
             os << "Minimizers kmers:   \t" << kmers_accepted << std::endl;
+            os << "Anchors:            \t" << total_anchors << std::endl;
             os << "Total alignments:   \t" << total_alignments << std::endl;
             os << "Output alignments:  \t" << output_alignments << std::endl;
             os << "Threads:            \t" << num_threads << std::endl;

@@ -82,24 +82,15 @@ namespace protal::classify {
 
                 // Calculate Anchors
                 anchor_finder(kmers, anchors);
+                thread_statistics.total_anchors += anchors.size();
 
                 // Do Alignment
                 alignment_handler(anchors, alignment_results, record.sequence);
 
-                statistics.total_alignments += alignment_results.size();
+                thread_statistics.total_alignments += alignment_results.size();
 
                 // Output alignments
                 output_handler(alignment_results, record);
-
-                if constexpr(debug == DEBUG_VERBOSE) {
-#pragma omp critical(write)
-                    {
-                        thread_statistics.WriteStats(std::cout);
-                    }
-                }
-                if constexpr(debug == DEBUG_EXTRAVERBOSE) {
-
-                }
             }
 
 #pragma omp critical(statistics)
@@ -188,12 +179,15 @@ namespace protal::classify {
                 anchor_finder(kmers1, anchors1);
                 anchor_finder(kmers2, anchors2);
 
+                thread_statistics.total_anchors += anchors1.size();
+                thread_statistics.total_anchors += anchors2.size();
+
                 // Do Alignment
                 alignment_handler(anchors1, alignment_results1, record1.sequence);
                 alignment_handler(anchors2, alignment_results2, record2.sequence);
 
-                statistics.total_alignments += alignment_results1.size();
-                statistics.total_alignments += alignment_results2.size();
+                thread_statistics.total_alignments += alignment_results1.size();
+                thread_statistics.total_alignments += alignment_results2.size();
 
                 // Output alignments
                 output_handler(alignment_results1, record1);

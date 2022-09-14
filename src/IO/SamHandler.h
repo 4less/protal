@@ -10,12 +10,12 @@
 
 namespace protal {
     using QNAME_t = std::string;
-    using FLAG_t = int;
+    using FLAG_t = uint16_t;
     using RNAME_t = std::string;
-    using POS_t = size_t;
+    using POS_t = uint32_t;
     using MAPQ_t = uint8_t;
     using CIGAR_t = std::string;
-    using ISIZE_t = size_t;
+    using TLEN_t = int64_t;
     using SEQ_t = std::string;
     using QUAL_t = std::string;
 
@@ -26,12 +26,25 @@ namespace protal {
         POS_t m_pos;
         MAPQ_t m_mapq;
         CIGAR_t m_cigar;
-        RNAME_t m_mrnm;
-        POS_t m_mpos;
-        ISIZE_t m_isize;
+        RNAME_t m_rnext;
+        POS_t m_pnext;
+        TLEN_t m_tlen;
         SEQ_t m_seq;
         QUAL_t m_qual;
 
+        std::string ToString() {
+            return  m_qname + '\t'
+                    + std::to_string(m_flag) + '\t'
+                    + m_rname + '\t'
+                    + std::to_string(m_pos) + '\t'
+                    + std::to_string(m_mapq) + '\t'
+                    + m_cigar + '\t'
+                    + m_rnext + '\t'
+                    + std::to_string(m_pnext) + '\t'
+                    + std::to_string(m_tlen) + '\t'
+                    + m_seq + '\t'
+                    + m_qual;
+        }
     };
 
     class SamHandler {

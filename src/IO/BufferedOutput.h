@@ -125,6 +125,18 @@ public:
         }
         std::memcpy(m_buffer + m_buffer_size, line.c_str(), line.length());
         m_buffer_size += line.length();
+        return true;
+    }
+
+    inline bool Write(std::string&& line) {
+        if (m_buffer_size + line.length() + 1 > m_buffer_capacity) {
+            m_line_buffer = line + '\n';
+            return false;
+        }
+        std::memcpy(m_buffer + m_buffer_size, line.c_str(), line.length());
+        m_buffer_size += line.length();
+        m_buffer[m_buffer_size++] = '\n';
+        return true;
     }
 };
 

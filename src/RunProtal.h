@@ -64,7 +64,7 @@ namespace protal {
             using OutputHandler = VarkitOutputHandler;
 
             std::ofstream varkit_output(options.GetOutputFile(),std::ios::binary);
-            std::ofstream sam_output(options.GetOutputFile(),std::ios::binary);
+            std::ofstream sam_output(options.GetOutputFile()+".sam",std::ios::out);
 
             OutputHandler output_handler(varkit_output, sam_output, 1024*512, 1024*1024*16);
 
