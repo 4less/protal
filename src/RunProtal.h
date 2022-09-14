@@ -59,17 +59,16 @@ namespace protal {
             }
 
             using AnchorFinder = SimpleAnchorFinder<KmerLookupSM>;
-            using OutputHandler = VarkitOutputHandler;
-
 //            using AnchorFinder = NaiveAnchorFinder<KmerLookupSM>;
+
+            using OutputHandler = VarkitOutputHandler;
 
             std::ofstream varkit_output(options.GetOutputFile(),std::ios::binary);
             std::ofstream sam_output(options.GetOutputFile(),std::ios::binary);
 
             OutputHandler output_handler(varkit_output, sam_output, 1024*512, 1024*1024*16);
 
-            // new anchor finder approach
-//            SimpleAnchorFinder anchor_finder(kmer_lookup);
+            // AnchorFinder
             AnchorFinder anchor_finder(kmer_lookup);
 
             // AlignmentHandler approach
@@ -108,6 +107,11 @@ namespace protal {
 
                 protal_stats.WriteStats();
             }
+
+            // Close output streams;
+            varkit_output.close();
+            sam_output.close();
+
 
             bm_classify.PrintResults();
 
