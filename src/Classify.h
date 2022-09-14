@@ -202,10 +202,10 @@ namespace protal::classify {
                 // Calculate Anchors
                 anchor_finder(kmers, anchors);
 
-                dummy += anchors.size();
-
                 // Do Alignment
                 alignment_handler(anchors, alignment_results, record.sequence);
+
+                statistics.total_alignments += alignment_results.size();
 
                 // Output alignments
                 output_handler(alignment_results, record);
@@ -222,25 +222,11 @@ namespace protal::classify {
             }
 
 #pragma omp critical(statistics)
-            statistics.Join(thread_statistics);
-
-
-//#pragma omp critical(processor_benchmarks)
-//            processor.PrintSummary();
-//            processor.PrintBMs();
-            std::cout << alignment_handler.dummy << std::endl;
-
-
-#pragma omp critical(processor_benchmarks)
             {
-                std::cout << "\n___Thread summary: " << omp_get_thread_num() << std::endl;
-                std::cout << "total_alignments: " << alignment_handler.total_alignments << std::endl;
-                std::cout << "alignments lower 93 " << alignment_handler.alignments_ani_lower93 << std::endl;
-                std::cout << "alignments.... " << output_handler.alignments << std::endl;
+                thread_statistics.output_alignments = output_handler.alignments;
+                statistics.Join(thread_statistics);
             }
         }
-
-        std::cout << "Dummy: " << dummy << std::endl;
         is.close();
 
         return statistics;
@@ -327,6 +313,8 @@ namespace protal::classify {
                 alignment_handler(anchors1, alignment_results1, record1.sequence);
                 alignment_handler(anchors2, alignment_results2, record2.sequence);
 
+                statistics.total_alignments += alignment_results1.size();
+                statistics.total_alignments += alignment_results2.size();
 
                 // Output alignments
                 output_handler(alignment_results1, record1);
@@ -344,25 +332,11 @@ namespace protal::classify {
             }
 
 #pragma omp critical(statistics)
-            statistics.Join(thread_statistics);
-
-
-//#pragma omp critical(processor_benchmarks)
-//            processor.PrintSummary();
-//            processor.PrintBMs();
-            std::cout << alignment_handler.dummy << std::endl;
-
-
-#pragma omp critical(processor_benchmarks)
             {
-                std::cout << "\n___Thread summary: " << omp_get_thread_num() << std::endl;
-                std::cout << "total_alignments: " << alignment_handler.total_alignments << std::endl;
-                std::cout << "alignments lower 93 " << alignment_handler.alignments_ani_lower93 << std::endl;
-                std::cout << "outputted alignments  " << output_handler.alignments << std::endl;
+                thread_statistics.output_alignments = output_handler.alignments;
+                statistics.Join(thread_statistics);
             }
         }
-
-        std::cout << "Dummy: " << dummy << std::endl;
 
         return statistics;
     }

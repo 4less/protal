@@ -100,10 +100,16 @@ namespace protal {
         }
     };
 
+    /*
+     * Varkit Output Handler
+     *
+     */
     class VarkitOutputHandler {
     private:
         std::ostream& m_os;
 //        BufferedStringOutput m_output;
+
+
         BufferedOutput<ClassificationLine> m_output;
         ClassificationLine m_line;
         AlignmentInfo m_info;
@@ -121,8 +127,6 @@ namespace protal {
         }
 
         void operator () (AlignmentResultList& alignment_results, FastxRecord& record) {
-            alignments++;
-
             if (alignment_results.empty()) return;
 
             int best_score = alignment_results[0].AlignmentScore();
@@ -142,7 +146,6 @@ namespace protal {
             }
 
             if (best_score_occurences > 1) {
-//                std::cout << "No clear best hit: " << best_score_occurences << "/" << alignment_results.size() << std::endl;
                 return;
             }
 
@@ -154,6 +157,7 @@ namespace protal {
 
             ToClassificationLine(m_line, best.Taxid(), best.GeneId(), best.GenePos() + m_info.alignment_start, m_info.alignment_length, 1, m_info.alignment_ani);
 
+            alignments++;
             if (!m_output.Write(m_line)) {
 #pragma omp critical(varkit_output)
                 m_output.Write(m_os);

@@ -129,8 +129,8 @@ namespace protal {
                 genomes.LoadAllGenomes();
             }
 
-//            using AnchorFinder = SimpleAnchorFinder<KmerLookupSM>;
-            using AnchorFinder = NaiveAnchorFinder<KmerLookupSM>;
+            using AnchorFinder = SimpleAnchorFinder<KmerLookupSM>;
+//            using AnchorFinder = NaiveAnchorFinder<KmerLookupSM>;
 
             // new anchor finder approach
 //            SimpleAnchorFinder anchor_finder(kmer_lookup);
