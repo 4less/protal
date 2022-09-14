@@ -235,9 +235,9 @@ namespace protal::classify {
 
 
 
-    template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, DebugLevel debug>
+    template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug>
     requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
-    static Statistics RunPairedEnd(SeqReaderPE& reader_global, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, KmerHandler& kmer_handler_global) {//, GenomeLoader& loader, Seedmap& map) {
+    static Statistics RunPairedEnd(SeqReaderPE& reader_global, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global) {//, GenomeLoader& loader, Seedmap& map) {
 
         size_t dummy = 0;
 
@@ -246,16 +246,14 @@ namespace protal::classify {
 
         Statistics statistics{};
 
-        std::ofstream varkit_output(options.GetOutputFile());
-
-#pragma omp parallel default(none) shared(std::cout, reader_global, varkit_output, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global)//, loader, map)
+#pragma omp parallel default(none) shared(std::cout, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
         {
             // Private variables
             FastxRecord record1;
             FastxRecord record2;
 
             // TODO this is a fix to get varkit output as quickly as possible
-            VarkitOutputHandler output_handler(varkit_output, 1024*128);
+            OutputHandler output_handler(output_handler_global);
 
             // Extract variables from kmi_global
             KmerHandler kmer_handler(kmer_handler_global);

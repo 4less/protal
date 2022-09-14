@@ -107,24 +107,40 @@ namespace protal {
     class VarkitOutputHandler {
     private:
         std::ostream& m_os;
-//        BufferedStringOutput m_output;
+        std::ostream& m_sam_os;
 
+        size_t m_init_output_buffer_capacity;
 
+        BufferedStringOutput m_sam_output;
         BufferedOutput<ClassificationLine> m_output;
         ClassificationLine m_line;
+        std::string m_samline;
         AlignmentInfo m_info;
 
     public:
         size_t alignments = 0;
 
-        VarkitOutputHandler(std::ostream& os, size_t output_buffer_capacity) :
+        VarkitOutputHandler(std::ostream& os, std::ostream& sam_os, size_t output_buffer_capacity) :
+                m_init_output_buffer_capacity(output_buffer_capacity),
                 m_os(os),
-                m_output(output_buffer_capacity) {}
+                m_sam_os(sam_os),
+                m_output(output_buffer_capacity),
+                m_sam_output(output_buffer_capacity) {}
+
+        VarkitOutputHandler(VarkitOutputHandler const& other) :
+                m_init_output_buffer_capacity(other.m_init_output_buffer_capacity),
+                m_os(other.m_os),
+                m_sam_os(other.m_sam_os),
+                m_output(other.m_output),
+                m_sam_output(other.m_init_output_buffer_capacity) {}
 
         ~VarkitOutputHandler() {
 #pragma omp critical(varkit_output)
             m_output.Write(m_os);
+#pragma omp critical(sam_output)
+            m_sam_output.Write(m_sam_os);
         }
+
 
         void operator () (AlignmentResultList& alignment_results, FastxRecord& record) {
             if (alignment_results.empty()) return;
@@ -157,10 +173,16 @@ namespace protal {
 
             ToClassificationLine(m_line, best.Taxid(), best.GeneId(), best.GenePos() + m_info.alignment_start, m_info.alignment_length, 1, m_info.alignment_ani);
 
+            std::string samline = "";
+
             alignments++;
             if (!m_output.Write(m_line)) {
 #pragma omp critical(varkit_output)
                 m_output.Write(m_os);
+            }
+            if (!m_sam_output.Write(m_samline)) {
+#pragma omp critical(sam_output)
+                m_sam_output.Write(m_sam_os);
             }
         }
     };
