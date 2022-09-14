@@ -109,8 +109,6 @@ namespace protal {
         std::ostream& m_os;
         std::ostream& m_sam_os;
 
-        size_t m_init_output_buffer_capacity;
-
         BufferedStringOutput m_sam_output;
         BufferedOutput<ClassificationLine> m_output;
         ClassificationLine m_line;
@@ -120,19 +118,17 @@ namespace protal {
     public:
         size_t alignments = 0;
 
-        VarkitOutputHandler(std::ostream& os, std::ostream& sam_os, size_t output_buffer_capacity) :
-                m_init_output_buffer_capacity(output_buffer_capacity),
+        VarkitOutputHandler(std::ostream& os, std::ostream& sam_os, size_t varkit_buffer_capacity, size_t sam_buffer_capacity) :
                 m_os(os),
                 m_sam_os(sam_os),
-                m_output(output_buffer_capacity),
-                m_sam_output(output_buffer_capacity) {}
+                m_output(varkit_buffer_capacity),
+                m_sam_output(sam_buffer_capacity) {}
 
         VarkitOutputHandler(VarkitOutputHandler const& other) :
-                m_init_output_buffer_capacity(other.m_init_output_buffer_capacity),
                 m_os(other.m_os),
                 m_sam_os(other.m_sam_os),
-                m_output(other.m_output),
-                m_sam_output(other.m_init_output_buffer_capacity) {}
+                m_output(other.m_output.Capacity()),
+                m_sam_output(other.m_sam_output.Capacity()) {}
 
         ~VarkitOutputHandler() {
 #pragma omp critical(varkit_output)
