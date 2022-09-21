@@ -13,6 +13,7 @@
 #include "KmerProcessor.h"
 #include "AnchorFinder.h"
 #include "AlignmentStrategy.h"
+#include "gzstream/gzstream.h"
 
 namespace protal {
     static void Run(int argc, char *argv[]) {
@@ -78,9 +79,15 @@ namespace protal {
             if (options.PairedMode()) {
                 std::cout << "Paired-end reads" << std::endl;
 
-                std::ifstream is1 {options.GetFirstFile(), std::ios::in};
-                std::ifstream is2 {options.GetSecondFile(), std::ios::in};
-                SeqReaderPE reader{is1, is2};
+
+//                std::ifstream is1 {options.GetFirstFile(), std::ios::in};
+//                std::ifstream is2 {options.GetSecondFile(), std::ios::in};
+
+                igzstream gzis1 { options.GetFirstFile().c_str() };
+                igzstream gzis2 { options.GetSecondFile().c_str() };
+
+                SeqReaderPE reader{gzis1, gzis2};
+
 
                 auto protal_stats = protal::classify::RunPairedEnd<
                         SimpleKmerHandler<ClosedSyncmer>,
@@ -92,8 +99,8 @@ namespace protal {
 
                 protal_stats.WriteStats();
 
-                is1.close();
-                is2.close();
+                gzis1.close();
+                gzis2.close();
 
             } else {
                 std::cout << "Single-end reads" << std::endl;
