@@ -19,3 +19,14 @@ add_library(gzstream_lib
 
 set_target_properties(gzstream_lib PROPERTIES LINKER_LANGUAGE CXX)
 
+target_link_directories(gzstream_lib
+        PUBLIC
+        ${PROJECT_SOURCE_DIR})
+
+target_include_directories(gzstream_lib
+        PUBLIC
+        ${PROJECT_SOURCE_DIR}/)
+
+target_link_libraries(gzstream_lib
+        LINK_PUBLIC
+        ZLIB::ZLIB)

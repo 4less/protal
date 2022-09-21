@@ -94,6 +94,10 @@ namespace protal {
                 auto cigar_ani = WFA2Wrapper::CigarANI(m_alignment_result.Cigar());
                 if (cigar_ani > 0.93) {
                     results.emplace_back(m_alignment_result);
+//
+//                    std::cout << "CigarANI: " << cigar_ani << std::endl;
+//                    m_aligner.PrintAlignment();
+//                    Utils::Input();
                 } else {
 //                    int distance = (static_cast<int>(anchor.b.genepos) - anchor.a.genepos) - (static_cast<int>(anchor.b.readpos) - anchor.a.readpos);
 //                    std::cout << "_______________________" << std::endl;

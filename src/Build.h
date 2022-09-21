@@ -39,13 +39,13 @@ namespace protal::build {
 
                 // Extract variables from kmi_global
                 KmerHandler kmer_handler(kmer_handler_global);
-                SeqReader reader;
+                SeqReader reader{ is };
                 Statistics thread_statistics;
                 thread_statistics.thread_num = omp_get_thread_num();
 
                 KmerList kmers;
 
-                while (reader(is, record)) {
+                while (reader(record)) {
                     thread_statistics.reads++;
 
                     // Retrieve kmers
@@ -90,7 +90,7 @@ namespace protal::build {
 
         // Extract variables from kmi_global
         KmerHandler kmer_handler(kmer_handler_global);
-        SeqReader reader;
+        SeqReader reader { is };
         size_t kmer = 0;
         Statistics thread_statistics;
         thread_statistics.thread_num = omp_get_thread_num();
@@ -101,7 +101,7 @@ namespace protal::build {
 
         KmerList kmers;
 
-        while (reader(is, record)) {
+        while (reader(record)) {
             kmer_handler.SetSequence(std::string_view(record.sequence));
 
             auto [taxonomic_id, gene_id] = KmerUtils::ExtractHeaderInformation(record.header);

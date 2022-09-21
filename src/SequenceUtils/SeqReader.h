@@ -17,7 +17,14 @@ namespace protal {
         bool m_valid_fragment = false;
         bool m_valid_block = true;
 
+        std::istream& m_is;
+
     public:
+        SeqReader(std::istream& is) :
+                m_is(is) {};
+
+        SeqReader(SeqReader const& other) :
+                m_is(other.m_is) {};
 
         inline void LoadBlockOMP(std::istream& is) {
 #pragma omp critical(reader)
@@ -26,11 +33,11 @@ namespace protal {
             }
         }
 
-        bool operator() (std::istream &is, FastxRecord &record) {
+        bool operator() (FastxRecord &record) {
             m_valid_fragment = m_reader.NextSequence(record);
             if (m_valid_fragment) return true;
 
-            LoadBlockOMP(is);
+            LoadBlockOMP(m_is);
             if (!m_valid_block) return false;
 
             m_valid_fragment = m_reader.NextSequence(record);

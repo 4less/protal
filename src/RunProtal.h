@@ -82,10 +82,10 @@ namespace protal {
 
 //                std::ifstream is1 {options.GetFirstFile(), std::ios::in};
 //                std::ifstream is2 {options.GetSecondFile(), std::ios::in};
+//                SeqReaderPE reader{is1, is2};
 
                 igzstream gzis1 { options.GetFirstFile().c_str() };
                 igzstream gzis2 { options.GetSecondFile().c_str() };
-
                 SeqReaderPE reader{gzis1, gzis2};
 
 
@@ -99,19 +99,27 @@ namespace protal {
 
                 protal_stats.WriteStats();
 
+//                is1.close();
+//                is2.close();
                 gzis1.close();
                 gzis2.close();
 
             } else {
                 std::cout << "Single-end reads" << std::endl;
+
+//                std::ifstream is {options.GetFirstFile(), std::ios::in};
+                igzstream is { options.GetFirstFile().c_str() };
+                SeqReader reader{ is };
+
                 auto protal_stats = protal::classify::Run<
                         SimpleKmerHandler<ClosedSyncmer>,
                         AnchorFinder,
                         SimpleAlignmentHandler,
                         OutputHandler,
                         DEBUG_NONE>(
-                        options.GetFirstFile(), options, anchor_finder, alignment_handler, output_handler, iterator);
+                        reader, options.GetFirstFile(), options, anchor_finder, alignment_handler, output_handler, iterator);
 
+                is.close();
                 protal_stats.WriteStats();
             }
 

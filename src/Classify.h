@@ -20,7 +20,7 @@ namespace protal::classify {
 
     template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug>
     requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
-    static Statistics Run(std::string const& read_se_path, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global) {//, GenomeLoader& loader, Seedmap& map) {
+    static Statistics Run(SeqReader& reader_global, std::string const& read_se_path, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global) {//, GenomeLoader& loader, Seedmap& map) {
         std::cout << "Run classify " << read_se_path << std::endl;
 
         // Shared
@@ -34,7 +34,7 @@ namespace protal::classify {
 
         std::ofstream varkit_output(options.GetOutputFile());
 
-#pragma omp parallel default(none) shared(std::cout, varkit_output, options, is, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)//, loader, map)
+#pragma omp parallel default(none) shared(std::cout, varkit_output, options, is, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global, reader_global)//, loader, map)
         {
             // Private variables
             FastxRecord record;
@@ -47,7 +47,7 @@ namespace protal::classify {
             AlignmentHandler alignment_handler(alignment_handler_global);
 
             // IO
-            SeqReader reader;
+            SeqReader reader{ reader_global };
             Statistics thread_statistics;
             thread_statistics.thread_num = omp_get_thread_num();
 
@@ -56,7 +56,7 @@ namespace protal::classify {
             AlignmentAnchorList anchors;
             AlignmentResultList alignment_results;
 
-            while (reader(is, record)) {
+            while (reader(record)) {
                 // Implement logger
                 if constexpr (debug == DEBUG_VERBOSE) {
                     std::cout << "Record: " << record.id << std::endl;
@@ -99,7 +99,6 @@ namespace protal::classify {
                 statistics.Join(thread_statistics);
             }
         }
-        is.close();
 
         return statistics;
     }

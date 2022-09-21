@@ -1,7 +1,7 @@
 project(protal_lib)
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_EXE_LINKER_FLAGS "-lwfa -lgzstream -lz")
+set(CMAKE_EXE_LINKER_FLAGS "-lwfa -lz")
 set(CMAKE_CXX_FLAGS_DEBUG "-pthread -ggdb -g -std=c++2a -fopenmp -Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-std=c++20 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas") #-march=native
 
@@ -134,12 +134,14 @@ target_link_libraries(protal_lib
         ZLIB::ZLIB
         stdc++fs
         wfa_lib
-        fmt_lib
         gzstream_lib)
+        #fmt_lib
 
 
 add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/wfa2-lib/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/wfa)
-add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/fmt/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/fmt)
+#add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/fmt/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/fmt)
 add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/gzstream/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/gzstream)
+
+
 #target_include_directories(protal_lib PUBLIC ${CWCSV_INCLUDE_DIR})
 #target_include_directories(${PROJECT_NAME} PUBLIC ${CWCSV_INCLUDE_DIR})
