@@ -28,6 +28,20 @@ namespace protal {
         LookupList m_anchor_left_2;
         LookupList m_anchor_right_2;
 
+        SeedList m_seeds_tmp;
+        SeedList m_all_seeds;
+
+        inline bool FindSeeds(KmerList &kmer_list) {
+            for (auto pair : kmer_list) {
+                auto [mmer, pos] = pair;
+                m_kmer_lookup.Get(m_seeds_tmp, mmer, pos);
+                if (!m_seeds_tmp.empty()) {
+                    m_
+                }
+            }
+            return false;
+        }
+
         inline void SearchAnchor(LookupList &anchor_list, KmerList &kmer_list, bool from_left) {
             if (from_left) {
                 for (; m_idx_from_left < kmer_list.size(); m_idx_from_left++) {
