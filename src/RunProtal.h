@@ -59,7 +59,8 @@ namespace protal {
                 genomes.LoadAllGenomes();
             }
 
-            using AnchorFinder = SimpleAnchorFinder<KmerLookupSM>;
+//            using AnchorFinder = SimpleAnchorFinder<KmerLookupSM>;
+            using AnchorFinder = HashMapAnchorFinder<KmerLookupSM>;
 //            using AnchorFinder = NaiveAnchorFinder<KmerLookupSM>;
 
             using OutputHandler = VarkitOutputHandler;
@@ -107,8 +108,8 @@ namespace protal {
             } else {
                 std::cout << "Single-end reads" << std::endl;
 
-//                std::ifstream is {options.GetFirstFile(), std::ios::in};
-                igzstream is { options.GetFirstFile().c_str() };
+                std::ifstream is {options.GetFirstFile(), std::ios::in};
+//                igzstream is { options.GetFirstFile().c_str() };
                 SeqReader reader{ is };
 
                 auto protal_stats = protal::classify::Run<

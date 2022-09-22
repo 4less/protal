@@ -53,7 +53,10 @@ namespace protal {
             size_t read_len = sequence.length();
             bool reversed = false;
 
+            size_t max_alignments = 1;
             for (auto& anchor : anchors) {
+                if (max_alignments-- == 0) break;
+
                 if (IsReverse(anchor.a, anchor.b)) {
                     reversed = true;
                     ReverseAnchorPairReadPos(anchor.a, anchor.b, read_len);

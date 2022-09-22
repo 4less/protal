@@ -138,7 +138,6 @@ namespace protal{
         };
 
         ~Seedmap() {
-            std::cout << "Destructor seedmap" << std::endl;
             delete[] m_keymap;
             delete[] m_map;
         }

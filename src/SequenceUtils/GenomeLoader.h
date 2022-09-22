@@ -150,7 +150,6 @@ namespace protal {
         };
 
         ~GenomeLoader() {
-            std::cout << "Destructor genome loader" << std::endl;
             m_is.close();
         }
 

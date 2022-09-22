@@ -81,6 +81,7 @@ namespace protal::classify {
 
 
                 // Calculate Anchors
+//                std::cout << record.id << std::endl;
                 anchor_finder(kmers, anchors);
                 thread_statistics.total_anchors += anchors.size();
 
@@ -95,6 +96,13 @@ namespace protal::classify {
 
 #pragma omp critical(statistics)
             {
+                std::cout << std::string(30, '-');
+                std::cout << "Thread summary: " << omp_get_thread_num() << std::endl;
+                std::cout << "Anchor finder dummy: " << anchor_finder.dummy << std::endl;
+                std::cout << "Utilized seeds: " << anchor_finder.utilized_anchors << std::endl;
+                anchor_finder.m_bm_seeding.PrintResults();
+                anchor_finder.m_bm_processing.PrintResults();
+                anchor_finder.m_bm_pairing.PrintResults();
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
             }
