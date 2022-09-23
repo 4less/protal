@@ -16,7 +16,7 @@ namespace protal {
         WFA2Wrapper m_aligner;
         AlignmentResult m_alignment_result;
         GenomeLoader& m_genome_loader;
-        size_t m_kmer_size = 0;
+        size_t m_kmer_size = 15;
 
 
         static bool IsReverse(LookupResult const& first_anchor, LookupResult const& second_anchor) {
@@ -47,6 +47,8 @@ namespace protal {
         }
 
         void operator() (AlignmentAnchorList& anchors, AlignmentResultList& results, std::string& sequence) {
+
+            constexpr bool alignment_verbose = true;
 
             auto& fwd = sequence;
             auto rev = KmerUtils::ReverseComplement(fwd);
@@ -84,8 +86,6 @@ namespace protal {
 
                 size_t overlap = std::min(gene.Sequence().length() - gene_start, read_len - read_start);
 
-
-
                 total_alignments++;
                 std::string query = std::string(read + read_start, overlap);
                 std::string reference = gene.Sequence().substr(gene_start, overlap);
@@ -98,12 +98,30 @@ namespace protal {
                 bm_alignment.Stop();
 
                 auto cigar_ani = WFA2Wrapper::CigarANI(m_aligner.GetAligner().getAlignmentCigar());
+
+                if constexpr(alignment_verbose) {
 #pragma omp critical (alignment_debug)
-                {
-                    std::cerr << "Alignment\t" << bm_local.GetDuration(Time::microseconds);
-                    std::cerr << '\t' << query.length() << '\t' << reference.length() << '\t';
-                    std::cerr << cigar_ani << '\n';
+                    {
+                        std::cerr << "Alignment\t" << bm_local.GetDuration(Time::microseconds);
+                        std::cerr << '\t' << query.length() << '\t' << reference.length() << '\t';
+                        std::cerr << cigar_ani << '\t' << anchor.hit_anchor_count << '\n';
+
+//                    double min_ani = static_cast<double>(anchor.hit_anchor_count)/reference.length();
+//                    if (cigar_ani < min_ani) {
+//                        std::cout << "Reversed: " << reversed << std::endl;
+//                        std::cout << "Kmersize: " << m_kmer_size << std::endl;
+//                        std::cout << "Gene start: " << gene_start << " - len: " << overlap << std::endl;
+//                        std::cout << anchor.a.ToString() << " " << anchor.b.ToString() << std::endl;
+//                        ReverseAnchorPairReadPos(anchor.a, anchor.b, read_len);
+//                        std::cout << "Reversed: ";
+//                        std::cout << anchor.a.ToString() << " " << anchor.b.ToString() << std::endl;
+//                        std::cout << "min ani: " << min_ani << std::endl;
+//                        m_aligner.PrintAlignment();
+//                        Utils::Input();
+//                    }
+                    }
                 }
+
                 m_alignment_result.Set(anchor.a.taxid, anchor.b.geneid, abs_pos, !reversed);
                 m_alignment_result.Set(m_aligner.GetAligner().getAlignmentScore(), m_aligner.GetAligner().getAlignmentCigar());
 

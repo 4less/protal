@@ -31,8 +31,14 @@ namespace protal {
 
         using SeedSeedList = std::vector<SeedList>;
         SeedList m_all_seeds;
+
+        SeedList m_seed_tmp_take;
+        SeedList m_seed_tmp_other;
+
         SeedList m_best_seed;
         std::vector<std::pair<int32_t,int32_t>> m_seed_size;
+
+        size_t m_k = 15;
 
 
         tsl::sparse_map<MapKey,int32_t, MapKeyHash> m_map;
@@ -72,6 +78,87 @@ namespace protal {
             m_best_seed.clear();
         }
 
+        using OffsetPair = std::pair<int, int>;
+
+        size_t AnchorBaseCoverage(size_t k, SeedList &seeds) {
+            size_t base_cov = 0;
+            size_t last_seed_end = 0;
+            size_t seed_start = 0;
+            size_t seed_end = 0;
+            for (auto& seed : seeds) {
+                seed_start = seed.readpos;
+                seed_end = seed.readpos + k;
+                base_cov += seed_end - std::max(seed_start, last_seed_end);
+                last_seed_end = seed_end;
+            }
+            return base_cov;
+        }
+
+        static bool OffsetPairMatch(OffsetPair const& a, OffsetPair const& b) {
+            return a.first == b.first || a.second == b.second;
+        }
+
+//        static bool OneOutOfTwoInRange(OffsetPair const& a, OffsetPair const& b) {
+//            return a.first == b.first || a.second == b.second;
+//        }
+
+        static std::string OffsetPairToString(OffsetPair const& a) {
+            return "[" + std::to_string(a.first) + "," + std::to_string(a.second) + "]";
+        }
+
+        static OffsetPair Offset(Seed const& s) {
+            return OffsetPair { static_cast<int>(s.genepos) + s.readpos, static_cast<int>(s.genepos) - s.readpos };
+        }
+
+        Anchor ExtractAnchor(SeedList &seeds) {
+            auto& first = seeds.front();
+            auto& second = seeds.back();
+            size_t base_cov = AnchorBaseCoverage(m_k, seeds);
+            if (first.genepos < second.genepos) {
+                return AlignmentAnchor(first, second, base_cov);
+            } else {
+                return AlignmentAnchor(second, first, base_cov);
+            }
+        }
+
+        void FindAnchorsSingleRef(SeedList &seeds, AlignmentAnchorList &anchors) {
+            anchors.clear();
+
+
+            while (seeds.size() > 1) {
+                auto& init_seed = seeds[0];
+                auto init_offset = Offset(init_seed);
+
+                for (auto i = 1; i < seeds.size(); i++) {
+                    auto& seed = seeds[i];
+                    auto seed_offset = Offset(seed);
+                    if (OffsetPairMatch(init_offset, seed_offset)) {
+                        m_seed_tmp_take.emplace_back(seed);
+                    } else {
+                        m_seed_tmp_other.emplace_back(seed);
+                    }
+                }
+                if (m_seed_tmp_take.size() > 1) {
+                    anchors.template emplace_back(ExtractAnchor(m_seed_tmp_take));
+                }
+
+
+//                if (!m_seed_tmp_other.empty()) {
+//                    std::cout << std::string(40, '-') << " first" << std::endl;
+//                    std::cout << init_seed.ToString() << " " << OffsetPairToString(Offset(init_seed)) << std::endl;
+//                    std::cout << std::string(40, '-') << " take" << std::endl;
+//                    for (auto &seed: m_seed_tmp_take) std::cout << seed.ToString() << " " << OffsetPairToString(Offset(seed)) << std::endl;
+//                    std::cout << std::string(40, '-') << " other" << std::endl;
+//                    for (auto &seed: m_seed_tmp_other) std::cout << seed.ToString() << " " << OffsetPairToString(Offset(seed)) << std::endl;
+//                    Utils::Input();
+//                }
+
+                seeds.clear();
+                m_seed_tmp_take.clear();
+                std::swap(m_seed_tmp_other, seeds);
+            }
+        }
+
     public:
         size_t dummy = 0;
         size_t utilized_anchors = 0;
@@ -109,24 +196,19 @@ namespace protal {
                 }
             }
 
+//            std::cout << std::string(69, '-') << std::endl;
             for (auto& seed : m_all_seeds) {
                 auto key = GetKey(seed);
                 if (best.first == key.first && best.second == key.second) {
                     m_best_seed.emplace_back(seed);
+//                    std::cout << seed.ToString() << std::endl;
                 }
             }
             m_bm_pairing.Stop();
 
             // Insert best seed set as anchor
-            if (m_best_seed.size() > 1) {
-                auto& first = m_best_seed.front();
-                auto& second = m_best_seed.back();
-                if (first.genepos < second.genepos) {
-                    anchors.emplace_back( AlignmentAnchor(first, second, m_best_seed.size()) );
-                } else {
-                    anchors.emplace_back( AlignmentAnchor(second, first, m_best_seed.size()) );
-                }
-            }
+
+            FindAnchorsSingleRef(m_best_seed, anchors);
         }
     };
 
