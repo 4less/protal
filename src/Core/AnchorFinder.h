@@ -10,6 +10,195 @@
 
 namespace protal {
 
+    template<typename KmerLookup>
+    requires KmerLookupConcept<KmerLookup>
+    class ListAnchorFinder {
+        KmerLookup m_kmer_lookup;
+
+        SeedList m_total_seeds;
+
+        size_t m_advance_after_find = 3;
+        size_t m_max_seeds = 8;
+        size_t m_seedlist_size_max = 128;
+        size_t m_k = 15;
+
+        // Seed list. potential anchors
+        SeedList m_seed_list;
+        AnchorList m_anchors;
+        std::vector<size_t> m_sort_indices;
+
+        size_t m_idx_from_left = 0;
+        size_t m_idx_from_right = 0;
+        bool m_from_left = true;
+
+//        inline bool FindSeeds(LookupList &seed_list, KmerList &kmer_list, size_t &index) {
+//            size_t init_size = seed_list.size();
+//            for (; index < kmer_list.size(); index++) {
+//                auto [mmer, pos] = kmer_list[index];
+//                m_kmer_lookup.Get(seed_list, mmer, pos);
+//                if (seed_list.size() > init_size) {
+//                    return true;
+//                }
+//            }
+//            return false;
+//        }
+
+        inline bool FindSeeds(SeedList &seed_list, KmerList &kmer_list, bool from_left) {
+            size_t init_size = seed_list.size();
+            if (from_left) {
+                for (; (m_idx_from_right + m_idx_from_left) < kmer_list.size(); m_idx_from_left++) {
+                    auto [mmer, pos] = kmer_list[m_idx_from_left];
+                    m_kmer_lookup.Get(seed_list, mmer, pos);
+
+                    if (seed_list.size() > init_size) {
+                        m_idx_from_left += m_advance_after_find;
+                        return true;
+                    }
+                }
+            } else {
+                for (; m_idx_from_right < kmer_list.size(); m_idx_from_right++) {
+                    auto [mmer, pos] = kmer_list[kmer_list.size() - m_idx_from_right - 1];
+
+                    m_kmer_lookup.Get(seed_list, mmer, pos);
+                    if (seed_list.size() > init_size) {
+                        m_idx_from_right += m_advance_after_find;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+
+        size_t AnchorBaseCoverage(size_t k, SeedList &seeds, size_t start, size_t end) {
+            size_t base_cov = 0;
+            size_t last_seed_end = 0;
+            size_t seed_start = 0;
+            size_t seed_end = 0;
+            for (auto& i = start; i < end; i++) {
+                auto& seed = seeds[i];
+                seed_start = seed.readpos;
+                seed_end = seed.readpos + k;
+                base_cov += seed_end - std::max(seed_start, last_seed_end);
+                last_seed_end = seed_end;
+            }
+            return base_cov;
+        }
+
+        inline bool FindPairs(SeedList &seeds, AnchorList &anchors) {
+            if (seeds.empty()) return false;
+//            std::cout << std::string(50, '-') << std::endl;
+//            std::cout << "Find pairs: " << seeds.size() << std::endl;
+//            for (auto& lur : seeds) std::cout << lur.ToString() << std::endl;
+//            std::cout << std::string(50, '-') << std::endl;
+
+            bool found_pair = false;
+            for (auto i = 0; i < seeds.size()-1; i++) {
+                auto& seed = seeds[i];
+                auto& next_seed = seeds[i+1];
+
+//                size_t last_size = 0;
+
+                if (seed == next_seed) {
+                    found_pair = true;
+                    size_t group_size = 2;
+                    while (i+group_size < seeds.size() && seeds[i+group_size] == seed) group_size++;
+                    auto& first = seeds[i];
+                    auto& last = seeds[i+group_size-1];
+                    size_t base_cov = AnchorBaseCoverage(m_k, seeds, i, i+group_size);
+                    if (first.genepos < last.genepos) {
+                        anchors.emplace_back( AlignmentAnchor(first, last, base_cov) );
+                    } else {
+                        anchors.emplace_back( AlignmentAnchor(last, first, base_cov) );
+                    }
+                    i += group_size-1;
+                }
+            }
+            return found_pair;
+        }
+
+        inline void MergeSort(SeedList &list, std::vector<size_t> &indices) {
+            size_t curr_size;
+            size_t left_start;
+            size_t n = indices.size();
+//            std::cout << "n: " << n  << " size of list : " << list.size() << std::endl;
+            for (curr_size=1; curr_size <= n - 1; curr_size *= 2)
+            {
+//                std::cout << "round size: " << curr_size << std::endl;
+                // Pick starting point of different subarrays of current size
+                for (left_start = 0; left_start < n - 1; left_start += 2*curr_size)
+                {
+                    // Find ending point of left subarray. mid+1 is starting
+                    // point of right
+                    int mid = std::min(left_start + curr_size - 1, n - 1);
+
+                    int right_end = min(left_start + 2*curr_size - 1, n-1);
+
+                    // Merge Subarrays arr[left_start...mid] & arr[mid+1...right_end]
+//                    std::inplace_merge();
+//                    merge(arr, left_start, mid, right_end);
+//                    std::cout << left_start << " - " << mid << " - " << right_end << std::endl;
+
+//                    std::cout << (left_start == 0 ? 0 : indices[left_start - 1]) << " - " << indices[mid] << " - " << indices[right_end] << std::endl;
+
+                    auto start_it = list.begin() + (left_start == 0 ? 0 : indices[left_start - 1]);
+                    auto mid_it = list.begin() + indices[mid];
+                    auto end_it = list.begin() + indices[right_end];
+
+                    std::inplace_merge(start_it, mid_it, end_it, Seed::SortByReadComparator);
+                }
+            }
+        }
+
+    public:
+        ListAnchorFinder(KmerLookup& lookup, size_t seed_num, size_t advance_by) :
+                m_kmer_lookup(lookup),
+                m_max_seeds(seed_num),
+                m_advance_after_find(advance_by) {
+        };
+
+        ListAnchorFinder(ListAnchorFinder const& other) :
+                m_kmer_lookup(other.m_kmer_lookup),
+                m_max_seeds(other.m_max_seeds),
+                m_advance_after_find(other.m_advance_after_find) {};
+
+        void operator () (KmerList& kmer_list, AlignmentAnchorList& anchors) {
+            anchors.clear();
+            m_seed_list.clear();
+            m_sort_indices.clear();
+            m_idx_from_left = 0;
+            m_idx_from_right = 0;
+            m_from_left = true;
+
+            size_t index = 0;
+            size_t found_seeds = 0;
+
+            size_t old_size = 0;
+            while (FindSeeds(m_seed_list, kmer_list, m_from_left)) {
+                m_sort_indices.emplace_back(m_seed_list.size());
+                if (++found_seeds >= m_max_seeds || (found_seeds > 1 && m_seed_list.size() > m_seedlist_size_max)) {
+                    break;
+                }
+                index += m_advance_after_find;
+                m_from_left = !m_from_left;
+            };
+//            std::cout << "index (" << index << "/" << kmer_list.size() << ") found: " << found_seeds << std::endl;
+
+            if (m_seed_list.empty()) return;
+
+//            std::cout << "Seed list size: " << m_seed_list.size() << std::endl;
+
+            constexpr bool merge_sort = false;
+            if constexpr(merge_sort) {
+                MergeSort(m_seed_list, m_sort_indices);
+            } else {
+                std::sort(m_seed_list.begin(), m_seed_list.end(), Seed::SortByReadComparator);
+            }
+
+            auto found = FindPairs(m_seed_list, anchors);
+        }
+    };
+
     using MapKey = std::pair<int32_t,int32_t>;
     struct MapKeyComp {
         bool operator() (MapKey const& a, MapKey const& b) {
