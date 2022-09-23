@@ -40,6 +40,17 @@ namespace protal {
             }
         }
 
+//        inline void FindSeeds() {
+//            while (FindSeeds(m_seed_list, kmer_list, m_from_left)) {
+//                m_sort_indices.emplace_back(m_seed_list.size());
+//                if (++found_seeds >= m_max_seeds || (found_seeds > 1 && m_seed_list.size() > m_seedlist_size_max)) {
+//                    break;
+//                }
+//                index += m_advance_after_find;
+//                m_from_left = !m_from_left;
+//            };
+//        }
+
         size_t AnchorBaseCoverage(size_t k, SeedList &seeds, size_t start, size_t end) {
             size_t base_cov = 0;
             size_t last_seed_end = 0;
