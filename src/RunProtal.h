@@ -60,7 +60,8 @@ namespace protal {
             }
 
 //            using AnchorFinder = SimpleAnchorFinder<KmerLookupSM>;
-            using AnchorFinder = HashMapAnchorFinder<KmerLookupSM>;
+//            using AnchorFinder = HashMapAnchorFinder<KmerLookupSM>;
+            using AnchorFinder = ListAnchorFinder<KmerLookupSM>;
 //            using AnchorFinder = NaiveAnchorFinder<KmerLookupSM>;
 
             using OutputHandler = VarkitOutputHandler;

@@ -16,16 +16,20 @@ namespace protal {
         KmerLookup m_kmer_lookup;
 
         SeedList m_all_seeds;
+        SeedList m_seed_tmp;
         SeedList m_seed_tmp_take;
         SeedList m_seed_tmp_other;
 
         std::vector<std::pair<int32_t,int32_t>> m_seed_size;
         std::vector<size_t> m_sort_indices;
 
-        size_t m_advance_after_find = 3;
+        size_t m_advance_after_find = 1;
+//        size_t m_advance_after_find = 3;
         size_t m_max_seeds = 8;
         size_t m_seedlist_size_max = 128;
         size_t m_k = 15;
+
+        bool m_from_left = true;
 
 
         inline void FindSeeds(KmerList &kmer_list) {
@@ -40,16 +44,28 @@ namespace protal {
             }
         }
 
-//        inline void FindSeeds() {
-//            while (FindSeeds(m_seed_list, kmer_list, m_from_left)) {
-//                m_sort_indices.emplace_back(m_seed_list.size());
+        inline bool FindSeeds(LookupList &anchor_list, KmerList &kmer_list, std::vector<size_t> &indices, size_t &index) {
+            anchor_list.clear();
+            for (; index < indices.size(); index++) {
+                auto [mmer, pos] = kmer_list[indices[index]];
+                m_kmer_lookup.Get(anchor_list, mmer, pos);
+                if (!anchor_list.empty()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        inline void FindSeeds(KmerList &kmer_list, size_t &index) {
+            while (FindSeeds(m_all_seeds, kmer_list, m_from_left)) {
+                m_sort_indices.emplace_back(m_all_seeds.size());
 //                if (++found_seeds >= m_max_seeds || (found_seeds > 1 && m_seed_list.size() > m_seedlist_size_max)) {
 //                    break;
 //                }
-//                index += m_advance_after_find;
-//                m_from_left = !m_from_left;
-//            };
-//        }
+                index += m_advance_after_find;
+                m_from_left = !m_from_left;
+            };
+        }
 
         size_t AnchorBaseCoverage(size_t k, SeedList &seeds, size_t start, size_t end) {
             size_t base_cov = 0;
@@ -66,36 +82,93 @@ namespace protal {
             return base_cov;
         }
 
-        inline bool FindPairs(SeedList &seeds, AnchorList &anchors) {
-            if (seeds.empty()) return false;
+        using OffsetPair = std::pair<int, int>;
 
-            bool found_pair = false;
+        size_t AnchorBaseCoverage(size_t k, SeedList &seeds) {
+            size_t base_cov = 0;
+            size_t last_seed_end = 0;
+            size_t seed_start = 0;
+            size_t seed_end = 0;
+            for (auto& seed : seeds) {
+                seed_start = seed.readpos;
+                seed_end = seed.readpos + k;
+                base_cov += seed_end - std::max(seed_start, last_seed_end);
+                last_seed_end = seed_end;
+            }
+            return base_cov;
+        }
+
+        static bool OffsetPairMatch(OffsetPair const& a, OffsetPair const& b) {
+            return a.first == b.first || a.second == b.second;
+        }
+
+        static std::string OffsetPairToString(OffsetPair const& a) {
+            return "[" + std::to_string(a.first) + "," + std::to_string(a.second) + "]";
+        }
+
+        static OffsetPair Offset(Seed const& s) {
+            return OffsetPair { static_cast<int>(s.genepos) + s.readpos, static_cast<int>(s.genepos) - s.readpos };
+        }
+
+        Anchor ExtractAnchor(SeedList &seeds) {
+            auto& first = seeds.front();
+            auto& second = seeds.back();
+            size_t base_cov = AnchorBaseCoverage(m_k, seeds);
+            if (first.genepos < second.genepos) {
+                return AlignmentAnchor(first, second, base_cov);
+            } else {
+                return AlignmentAnchor(second, first, base_cov);
+            }
+        }
+
+        void FindAnchorsSingleRef(SeedList &seeds, AlignmentAnchorList &anchors) {
+            anchors.clear();
+
+            while (seeds.size() > 1) {
+                auto& init_seed = seeds[0];
+                auto init_offset = Offset(init_seed);
+
+                for (auto i = 1; i < seeds.size(); i++) {
+                    auto& seed = seeds[i];
+                    auto seed_offset = Offset(seed);
+                    if (OffsetPairMatch(init_offset, seed_offset)) {
+                        m_seed_tmp_take.emplace_back(seed);
+                    } else {
+                        m_seed_tmp_other.emplace_back(seed);
+                    }
+                }
+                if (m_seed_tmp_take.size() > 1) {
+                    anchors.template emplace_back(ExtractAnchor(m_seed_tmp_take));
+                }
+
+                seeds.clear();
+                m_seed_tmp_take.clear();
+                std::swap(m_seed_tmp_other, seeds);
+            }
+        }
+
+        inline void FindPairs(SeedList &seeds, AlignmentAnchorList &anchors) {
+            if (seeds.empty()) return;
+
             for (auto i = 0; i < seeds.size()-1; i++) {
                 auto& seed = seeds[i];
                 auto& next_seed = seeds[i+1];
 
                 if (seed == next_seed) {
-                    found_pair = true;
                     size_t group_size = 2;
                     while (i+group_size < seeds.size() && seeds[i+group_size] == seed) group_size++;
 
                     //TODO: do something with group
-                    // Insert best seed set as anchor
-//                    FindAnchorsSingleRef(m_best_seed, anchors);
-                    //todo end
-
-                    auto& first = seeds[i];
-                    auto& last = seeds[i+group_size-1];
-                    size_t base_cov = AnchorBaseCoverage(m_k, seeds, i, i+group_size);
-                    if (first.genepos < last.genepos) {
-                        anchors.emplace_back( AlignmentAnchor(first, last, base_cov) );
-                    } else {
-                        anchors.emplace_back( AlignmentAnchor(last, first, base_cov) );
-                    }
-                    i += group_size-1;
+                    auto start_it = m_all_seeds.begin() + i;
+                    auto end_it = start_it + group_size;
+                    m_seed_tmp.clear();
+                    m_seed_tmp.insert(m_seed_tmp.end(),
+                                      std::make_move_iterator(start_it),
+                                      std::make_move_iterator(end_it));
+                    FindAnchorsSingleRef(m_seed_tmp, anchors);
+                    i += group_size - 1;
                 }
             }
-            return found_pair;
         }
 
         inline void MergeSort(SeedList &list, std::vector<size_t> &indices) {
@@ -133,16 +206,20 @@ namespace protal {
             // Assess what time seeding takes.
             m_all_seeds.clear();
             m_seed_size.clear();
+            m_sort_indices.clear();
+            m_from_left = true;
         }
 
     public:
+        size_t dummy = 0;
+        size_t utilized_anchors = 0;
         Benchmark m_bm_seeding{"Seeding"};
         Benchmark m_bm_processing{"Process Seeds"};
         Benchmark m_bm_pairing{"Pairing"};
 
-        ListAnchorFinder(KmerLookup& lookup, size_t seed_num, size_t advance_by) :
+        ListAnchorFinder(KmerLookup& lookup, size_t max_seeds=128, size_t advance_by=3) :
                 m_kmer_lookup(lookup),
-                m_max_seeds(seed_num),
+                m_max_seeds(max_seeds),
                 m_advance_after_find(advance_by) {
         };
 
@@ -165,7 +242,7 @@ namespace protal {
             m_bm_processing.Stop();
 
             m_bm_pairing.Start();
-            auto found = FindPairs(m_all_seeds, anchors);
+            FindPairs(m_all_seeds, anchors);
             m_bm_pairing.Stop();
         }
     };
