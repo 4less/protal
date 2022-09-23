@@ -20,6 +20,7 @@ namespace protal {
         SeedList m_seed_tmp_other;
 
         std::vector<std::pair<int32_t,int32_t>> m_seed_size;
+        std::vector<size_t> m_sort_indices;
 
         size_t m_advance_after_find = 3;
         size_t m_max_seeds = 8;
@@ -124,6 +125,10 @@ namespace protal {
         }
 
     public:
+        Benchmark m_bm_seeding{"Seeding"};
+        Benchmark m_bm_processing{"Process Seeds"};
+        Benchmark m_bm_pairing{"Pairing"};
+
         ListAnchorFinder(KmerLookup& lookup, size_t seed_num, size_t advance_by) :
                 m_kmer_lookup(lookup),
                 m_max_seeds(seed_num),
@@ -145,18 +150,12 @@ namespace protal {
 
 
             m_bm_processing.Start();
-
+            Sort(m_all_seeds);
             m_bm_processing.Stop();
 
-
             m_bm_pairing.Start();
-
+            auto found = FindPairs(m_all_seeds, anchors);
             m_bm_pairing.Stop();
-
-
-
-
-            auto found = FindPairs(m_seed_list, anchors);
         }
     };
 
