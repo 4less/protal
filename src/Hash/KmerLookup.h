@@ -83,6 +83,19 @@ namespace protal {
             return this->taxid == other.taxid && this->geneid == other.geneid;
         }
 
+        static bool SortByReadComparator(LookupResult const& a, LookupResult const& b) {
+            if (a.taxid != b.taxid) {
+                return a.taxid < b.taxid;
+            }
+            if (a.geneid != b.geneid) {
+                return a.geneid < b.geneid;
+            }
+            if (a.readpos != b.readpos) {
+                return a.readpos < b.readpos;
+            }
+            return false;
+        }
+
         std::string ToString() const {
             std::string str;
             str += "[LUR: ";
