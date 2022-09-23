@@ -36,6 +36,8 @@ namespace protal {
         size_t total_alignments = 0;
         size_t alignments_ani_lower93 = 0;
         size_t dummy = 0;
+        Benchmark bm_alignment{ "Alignment" };
+
 
         SimpleAlignmentHandler(GenomeLoader& genome_loader, WFA2Wrapper& aligner, size_t kmer_size) :
                 m_genome_loader(genome_loader),
@@ -89,12 +91,23 @@ namespace protal {
                 std::string reference = gene.Sequence().substr(gene_start, overlap);
                 dummy += query.length();
 
+                bm_alignment.Start();
+                Benchmark bm_local{"alignment"};
                 m_aligner.Alignment(query, reference);
+                bm_local.Stop();
+                bm_alignment.Stop();
 
+                auto cigar_ani = WFA2Wrapper::CigarANI(m_aligner.GetAligner().getAlignmentCigar());
+#pragma omp critical (alignment_debug)
+                {
+                    std::cerr << "Alignment\t" << bm_local.GetDuration(Time::microseconds);
+                    std::cerr << '\t' << query.length() << '\t' << reference.length() << '\t';
+                    std::cerr << cigar_ani << '\n';
+                }
                 m_alignment_result.Set(anchor.a.taxid, anchor.b.geneid, abs_pos, !reversed);
                 m_alignment_result.Set(m_aligner.GetAligner().getAlignmentScore(), m_aligner.GetAligner().getAlignmentCigar());
 
-                auto cigar_ani = WFA2Wrapper::CigarANI(m_alignment_result.Cigar());
+
                 if (cigar_ani > 0.93) {
                     results.emplace_back(m_alignment_result);
 //

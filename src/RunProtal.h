@@ -41,7 +41,6 @@ namespace protal {
             Benchmark bm_load_index("Load Index");
             // Load Index
             Seedmap map;
-            std::cout << options.GetIndexFile() << std::endl;
             std::ifstream idx_in(options.GetIndexFile(), std::ios::binary);
             map.Load(idx_in);
             idx_in.close();
@@ -55,8 +54,9 @@ namespace protal {
             WFA2Wrapper aligner(4, 6, 2);
 
             if (options.PreloadGenomes()) {
-                std::cout << "Preload genomes" << std::endl;
+                Benchmark bm_preload_genomes("Preload genomes");
                 genomes.LoadAllGenomes();
+                bm_preload_genomes.PrintResults();
             }
 
 //            using AnchorFinder = SimpleAnchorFinder<KmerLookupSM>;
@@ -78,9 +78,6 @@ namespace protal {
 
             Benchmark bm_classify("Run classify");
             if (options.PairedMode()) {
-                std::cout << "Paired-end reads" << std::endl;
-
-
 //                std::ifstream is1 {options.GetFirstFile(), std::ios::in};
 //                std::ifstream is2 {options.GetSecondFile(), std::ios::in};
 //                SeqReaderPE reader{is1, is2};
@@ -106,8 +103,6 @@ namespace protal {
                 gzis2.close();
 
             } else {
-                std::cout << "Single-end reads" << std::endl;
-
                 std::ifstream is {options.GetFirstFile(), std::ios::in};
 //                igzstream is { options.GetFirstFile().c_str() };
                 SeqReader reader{ is };

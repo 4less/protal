@@ -21,7 +21,6 @@ namespace protal::classify {
     template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug>
     requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
     static Statistics Run(SeqReader& reader_global, std::string const& read_se_path, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global) {//, GenomeLoader& loader, Seedmap& map) {
-        std::cout << "Run classify " << read_se_path << std::endl;
 
         // Shared
         std::ifstream is(read_se_path, std::ios::in);
@@ -56,6 +55,8 @@ namespace protal::classify {
             AlignmentAnchorList anchors;
             AlignmentResultList alignment_results;
 
+            Benchmark bm_alignment{"Alignment handler"};
+
             while (reader(record)) {
                 // Implement logger
                 if constexpr (debug == DEBUG_VERBOSE) {
@@ -86,7 +87,9 @@ namespace protal::classify {
                 thread_statistics.total_anchors += anchors.size();
 
                 // Do Alignment
+                bm_alignment.Start();
                 alignment_handler(anchors, alignment_results, record.sequence);
+                bm_alignment.Stop();
 
                 thread_statistics.total_alignments += alignment_results.size();
 
@@ -103,6 +106,8 @@ namespace protal::classify {
                 anchor_finder.m_bm_seeding.PrintResults();
                 anchor_finder.m_bm_processing.PrintResults();
                 anchor_finder.m_bm_pairing.PrintResults();
+                bm_alignment.PrintResults();
+                alignment_handler.bm_alignment.PrintResults();
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
             }
@@ -152,6 +157,8 @@ namespace protal::classify {
             AlignmentAnchorList anchors2;
             AlignmentResultList alignment_results2;
 
+            Benchmark bm_alignment{"Alignment handler"};
+
             while (reader(record1, record2)) {
                 thread_statistics.reads++;
 
@@ -190,8 +197,10 @@ namespace protal::classify {
                 thread_statistics.total_anchors += anchors2.size();
 
                 // Do Alignment
+                bm_alignment.Start();
                 alignment_handler(anchors1, alignment_results1, record1.sequence);
                 alignment_handler(anchors2, alignment_results2, record2.sequence);
+                bm_alignment.Stop();
 
                 thread_statistics.total_alignments += alignment_results1.size();
                 thread_statistics.total_alignments += alignment_results2.size();
@@ -213,6 +222,15 @@ namespace protal::classify {
 
 #pragma omp critical(statistics)
             {
+                std::cout << std::string(30, '-');
+                std::cout << "Thread summary: " << omp_get_thread_num() << std::endl;
+                std::cout << "Anchor finder dummy: " << anchor_finder.dummy << std::endl;
+                std::cout << "Utilized seeds: " << anchor_finder.utilized_anchors << std::endl;
+                anchor_finder.m_bm_seeding.PrintResults();
+                anchor_finder.m_bm_processing.PrintResults();
+                anchor_finder.m_bm_pairing.PrintResults();
+                bm_alignment.PrintResults();
+                alignment_handler.bm_alignment.PrintResults();
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
             }

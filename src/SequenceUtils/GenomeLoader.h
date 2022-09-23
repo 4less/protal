@@ -183,7 +183,6 @@ namespace protal {
         }
 
         void LoadPositionMap(std::string file_path) {
-            std::cout << "File " << file_path << std::endl;
             std::ifstream is(file_path, std::ios::in);
             std::string line;
 

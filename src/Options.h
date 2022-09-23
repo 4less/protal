@@ -63,10 +63,22 @@ namespace protal {
         std::string ToString() const {
             std::string result_str = "";
 
-            result_str += "build:         " + std::to_string(m_build) + '\n';
-            result_str += "threads:       " + std::to_string(m_threads) + '\n';
-            result_str += "db path:       " + m_database_path + '\n';
-            result_str += "sequence file: " + m_sequence_file;
+            result_str += "------ General ------\n";
+            result_str += "build:           " + std::to_string(m_build) + '\n';
+            result_str += "threads:         " + std::to_string(m_threads) + '\n';
+            result_str += "-------- I/O --------\n";
+            result_str += "first:           " + m_first + '\n';
+            result_str += "second:          " + m_second + '\n';
+            result_str += "db path:         " + m_database_path + '\n';
+            result_str += "sequence file:   " + m_sequence_file + '\n';
+            result_str += "output file:     " + m_output_file + '\n';
+            result_str += "preload genomes: " + std::to_string(m_preload_genomes) + '\n';
+//            result_str += "----- Alignment -----\n";
+//            result_str += "take top:        " + std::to_string(m_take_top) + '\n';
+//            result_str += "seed num:        " + std::to_string(m_seed_num) + '\n';
+//            result_str += "advance by:      " + std::to_string(m_advance_by) + '\n';
+            result_str += "---------------------\n";
+
             return result_str;
         }
 
