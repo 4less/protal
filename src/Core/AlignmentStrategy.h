@@ -48,7 +48,7 @@ namespace protal {
 
         void operator() (AlignmentAnchorList& anchors, AlignmentResultList& results, std::string& sequence) {
 
-            constexpr bool alignment_verbose = true;
+            constexpr bool alignment_verbose = false;
 
             auto& fwd = sequence;
             auto rev = KmerUtils::ReverseComplement(fwd);
@@ -57,9 +57,14 @@ namespace protal {
             size_t read_len = sequence.length();
             bool reversed = false;
 
-            size_t max_alignments = 1;
+            std::sort(anchors.begin(), anchors.end(), [](AlignmentAnchor const& a, AlignmentAnchor const& b) {
+                return a.hit_anchor_count > b.hit_anchor_count;
+            });
+
+            size_t take_top = 3;
             for (auto& anchor : anchors) {
-                if (max_alignments-- == 0) break;
+
+                if (take_top-- == 0) break;
 
                 if (IsReverse(anchor.a, anchor.b)) {
                     reversed = true;

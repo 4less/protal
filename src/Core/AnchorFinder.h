@@ -122,8 +122,6 @@ namespace protal {
         }
 
         void FindAnchorsSingleRef(SeedList &seeds, AlignmentAnchorList &anchors) {
-            anchors.clear();
-
             while (seeds.size() > 1) {
                 auto& init_seed = seeds[0];
                 auto init_offset = Offset(init_seed);
