@@ -16,6 +16,7 @@ add_library(protal_lib
         Utils/Utils.h
         Utils/ProgressBar.h
         Utils/xxhash64.h
+        Utils/BinaryClassifierEvaluator.h
         SequenceUtils/SeqReader.h
         SequenceUtils/KmerIterator.h
         SequenceUtils/KmerProcessor.h
@@ -30,6 +31,7 @@ add_library(protal_lib
         SequenceUtils/GenomeLoader.h
         IO/AlignmentOutputHandler.h
         Alignment/WFA2Wrapper.h
+        Core/CoreBenchmark.h
         IO/FastxReader.h
         IO/FastxReader.cpp
         IO/SamHandler.h
