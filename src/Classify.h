@@ -59,7 +59,9 @@ namespace protal::classify {
 
             while (reader(record)) {
                 // Implement logger
-                if constexpr (debug == DEBUG_VERBOSE) {
+                if constexpr (debug == DEBUG_BENCHMARK) {
+                    size_t tax_id_truth;
+                    size_t gene_id_truth;
                     std::cout << "Record: " << record.id << std::endl;
                 }
 

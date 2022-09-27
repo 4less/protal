@@ -8,7 +8,8 @@ namespace protal {
     enum DebugLevel {
         DEBUG_NONE,
         DEBUG_VERBOSE,
-        DEBUG_EXTRAVERBOSE
+        DEBUG_EXTRAVERBOSE,
+        DEBUG_BENCHMARK
     };
 
     // Pair k-mer, readpos
