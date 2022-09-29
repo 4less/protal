@@ -81,11 +81,10 @@ namespace protal {
             if (options.PairedMode()) {
 //                std::ifstream is1 {options.GetFirstFile(), std::ios::in};
 //                std::ifstream is2 {options.GetSecondFile(), std::ios::in};
-//                SeqReaderPE reader{is1, is2};
 
-                igzstream gzis1 { options.GetFirstFile().c_str() };
-                igzstream gzis2 { options.GetSecondFile().c_str() };
-                SeqReaderPE reader{gzis1, gzis2};
+                igzstream is1 { options.GetFirstFile().c_str() };
+                igzstream is2 { options.GetSecondFile().c_str() };
+                SeqReaderPE reader{is1, is2};
 
 
                 auto protal_stats = protal::classify::RunPairedEnd<
@@ -98,14 +97,12 @@ namespace protal {
 
                 protal_stats.WriteStats();
 
-//                is1.close();
-//                is2.close();
-                gzis1.close();
-                gzis2.close();
+                is1.close();
+                is2.close();
 
             } else {
-                std::ifstream is {options.GetFirstFile(), std::ios::in};
-//                igzstream is { options.GetFirstFile().c_str() };
+//                std::ifstream is {options.GetFirstFile(), std::ios::in};
+                igzstream is { options.GetFirstFile().c_str() };
                 SeqReader reader{ is };
 
                 auto protal_stats = protal::classify::Run<

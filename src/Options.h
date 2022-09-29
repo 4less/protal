@@ -26,6 +26,7 @@ namespace protal {
                 ("1,first", "Comma separated list of reads. If paired-end, also specify second end.", cxxopts::value<std::string>()->default_value(""))
                 ("2,second", "Comma separated list of reads. must have <-1/--first> specified.", cxxopts::value<std::string>()->default_value(""))
                 ("h,help", "Print help.")
+                ("q,align_top", "Align the top <align_top> anchors.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_THREADS)))
                 ("p,preload_genomes", "Preload complete reference library (can be very memory intensive) instead of dynamic loading. This improves performance. [default off]")
                 ("reference", "", cxxopts::value<std::string>()->default_value(""));
 

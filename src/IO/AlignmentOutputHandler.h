@@ -57,6 +57,10 @@ namespace protal {
             return m_cigar;
         }
 
+        std::string Cigar() const {
+            return m_cigar;
+        }
+
         uint32_t Taxid() const {
             return m_taxid;
         }
@@ -76,6 +80,7 @@ namespace protal {
         int AlignmentScore() const {
             return m_alignment_score;
         }
+
 
         void Set(int score, std::string& cigar) {
             m_cigar = cigar;
@@ -98,6 +103,17 @@ namespace protal {
         void Reset() {
             m_alignment_score = DEFAULT_ALIGNMENT_SCORE;
             m_cigar.clear();
+        }
+
+        std::string ToString() {
+            std::string str = "";
+            str += std::to_string(AlignmentScore()) + '\t';
+            str += Cigar() + '\t';
+            str += std::to_string(Taxid()) + '\t';
+            str += std::to_string(GeneId()) + '\t';
+            str += std::to_string(GenePos()) + '\t';
+            str += std::to_string(Forward());
+            return str;
         }
     };
 

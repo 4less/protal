@@ -73,6 +73,7 @@ WFAligner::AlignmentStatus WFAligner::alignEnd2EndLambda(
   // Align (using custom matching function)
   return (WFAligner::AlignmentStatus) wavefront_align(wfAligner,NULL,patternLength,NULL,textLength);
 }
+
 WFAligner::AlignmentStatus WFAligner::alignEnd2End(
     const char* const pattern,
     const int patternLength,

@@ -15,12 +15,19 @@
 #include "Hash/KmerLookup.h"
 #include "GenomeLoader.h"
 #include "AlignmentOutputHandler.h"
+#include "CoreBenchmark.h"
 
 namespace protal::classify {
 
     template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug>
     requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
     static Statistics Run(SeqReader& reader_global, std::string const& read_se_path, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global) {//, GenomeLoader& loader, Seedmap& map) {
+
+        std::cout << "CLASSIFY " << std::endl;
+        constexpr bool benchmark = true;
+
+        // make dependent on benchmark.
+        CoreBenchmark core_benchmark;
 
         // Shared
         std::ifstream is(read_se_path, std::ios::in);
@@ -33,10 +40,11 @@ namespace protal::classify {
 
         std::ofstream varkit_output(options.GetOutputFile());
 
-#pragma omp parallel default(none) shared(std::cout, varkit_output, options, is, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global, reader_global)//, loader, map)
+#pragma omp parallel default(none) shared(std::cout, core_benchmark, varkit_output, options, is, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global, reader_global)//, loader, map)
         {
             // Private variables
             FastxRecord record;
+
 
             OutputHandler output_handler(output_handler_global);
 
@@ -48,6 +56,7 @@ namespace protal::classify {
             // IO
             SeqReader reader{ reader_global };
             Statistics thread_statistics;
+            CoreBenchmark thread_core_benchmark;
             thread_statistics.thread_num = omp_get_thread_num();
 
             // Intermediate storage objects
@@ -59,11 +68,7 @@ namespace protal::classify {
 
             while (reader(record)) {
                 // Implement logger
-                if constexpr (debug == DEBUG_BENCHMARK) {
-                    size_t tax_id_truth;
-                    size_t gene_id_truth;
-                    std::cout << "Record: " << record.id << std::endl;
-                }
+
 
                 thread_statistics.reads++;
 
@@ -97,6 +102,13 @@ namespace protal::classify {
 
                 // Output alignments
                 output_handler(alignment_results, record);
+
+                if constexpr (benchmark || debug == DEBUG_BENCHMARK) {
+                    auto [tax_id_truth, gene_id_truth] = CoreBenchmark::ExtractTruthFromHeader(record.id);
+
+                    thread_core_benchmark.AddAnchors(anchors, tax_id_truth, gene_id_truth);
+                    thread_core_benchmark.AddAlignmentResults(anchors, alignment_results, tax_id_truth, gene_id_truth);
+                }
             }
 
 #pragma omp critical(statistics)
@@ -112,8 +124,11 @@ namespace protal::classify {
                 alignment_handler.bm_alignment.PrintResults();
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
+                core_benchmark.Join(thread_core_benchmark);
             }
         }
+
+        core_benchmark.Print();
 
         return statistics;
     }

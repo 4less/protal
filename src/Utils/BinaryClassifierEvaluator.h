@@ -21,27 +21,27 @@ struct BinaryClassifierEvaluator {
     }
 
     double Sensitivity() {
-        if (tp + fn == 0) return 0;
+        if (tp + fn == 0) return -1;
         return (double) tp/(tp + fn);
     }
 
     double Specificity() {
-        if (tn + fp == 0) return 0;
+        if (tn + fp == 0) return -1;
         return (double) tn/(tn + fp);
     }
 
     double Precision() {
-        if (tp + fp == 0) return 0;
+        if (tp + fp == 0) return -1;
         return (double) tp/(tp + fp);
     }
 
     double Accuracy() {
-        if (tp + fp + tn + fn == 0) return 0;
+        if (tp + fp + tn + fn == 0) return -1;
         return (double) (tp + tn)/(tp + tn + fp + fn);
     }
 
     double F1() {
-        if (tp + fp + tn + fn == 0) return 0;
+        if (tp + fp + tn + fn == 0) return -1;
         return (double) 2*tp/(2 * tp + fp + fn);
     }
 

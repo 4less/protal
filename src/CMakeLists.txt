@@ -31,6 +31,7 @@ add_library(protal_lib
         SequenceUtils/GenomeLoader.h
         IO/AlignmentOutputHandler.h
         Alignment/WFA2Wrapper.h
+        Alignment/FastAlignment.h
         Core/CoreBenchmark.h
         IO/FastxReader.h
         IO/FastxReader.cpp

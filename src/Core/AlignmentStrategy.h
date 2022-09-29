@@ -9,6 +9,7 @@
 #include "GenomeLoader.h"
 #include "SeedingStrategy.h"
 #include "KmerUtils.h"
+#include "FastAlignment.h"
 
 namespace protal {
     class SimpleAlignmentHandler {
@@ -61,10 +62,11 @@ namespace protal {
                 return a.hit_anchor_count > b.hit_anchor_count;
             });
 
-            size_t take_top = 3;
-            for (auto& anchor : anchors) {
+            int take_top = 3;
+//            int take_top = 10;
+            int last_score = 0;
 
-                if (take_top-- == 0) break;
+            for (auto& anchor : anchors) {
 
                 if (IsReverse(anchor.a, anchor.b)) {
                     reversed = true;
@@ -82,9 +84,9 @@ namespace protal {
                 auto& genome = m_genome_loader.GetGenome(anchor.a.taxid);
                 auto& gene = genome.GetGeneOMP(anchor.a.geneid);
 
-
                 int abs_pos = anchor.a.genepos - anchor.a.readpos;
                 dummy += abs_pos;
+
 
                 size_t read_start = abs_pos < 0 ? -abs_pos : 0;
                 size_t gene_start = std::max(abs_pos, 0);
@@ -96,59 +98,74 @@ namespace protal {
                 std::string reference = gene.Sequence().substr(gene_start, overlap);
                 dummy += query.length();
 
+
+
+                double cigar_ani = 0;
+                std::string cigar = "";
+                int score = -1000;
+
+                bool approximate_alignment = anchor_distance_deviation == 0;
+//                bool approximate_alignment = true;
+
                 bm_alignment.Start();
-                Benchmark bm_local{"alignment"};
-                m_aligner.Alignment(query, reference);
-                bm_local.Stop();
-                bm_alignment.Stop();
-
-                auto cigar_ani = WFA2Wrapper::CigarANI(m_aligner.GetAligner().getAlignmentCigar());
-
-                if constexpr(alignment_verbose) {
-#pragma omp critical (alignment_debug)
-                    {
-                        std::cerr << "Alignment\t" << bm_local.GetDuration(Time::microseconds);
-                        std::cerr << '\t' << query.length() << '\t' << reference.length() << '\t';
-                        std::cerr << cigar_ani << '\t' << anchor.hit_anchor_count << '\n';
-
-//                    double min_ani = static_cast<double>(anchor.hit_anchor_count)/reference.length();
-//                    if (cigar_ani < min_ani) {
-//                        std::cout << "Reversed: " << reversed << std::endl;
-//                        std::cout << "Kmersize: " << m_kmer_size << std::endl;
-//                        std::cout << "Gene start: " << gene_start << " - len: " << overlap << std::endl;
-//                        std::cout << anchor.a.ToString() << " " << anchor.b.ToString() << std::endl;
-//                        ReverseAnchorPairReadPos(anchor.a, anchor.b, read_len);
-//                        std::cout << "Reversed: ";
-//                        std::cout << anchor.a.ToString() << " " << anchor.b.ToString() << std::endl;
-//                        std::cout << "min ani: " << min_ani << std::endl;
-//                        m_aligner.PrintAlignment();
+                if (approximate_alignment) {
+                    auto [ascore, acigar] = FastAligner::FastAlign(query, reference);
+                    cigar_ani = WFA2Wrapper::CigarANI(acigar);
+                    cigar = acigar;
+                    score = ascore;
+//
+//                    std::cout << "------------------------------------------" << std::endl;
+//                    std::cout << anchor.a.ToString() << std::endl;
+//                    std::cout << anchor.b.ToString() << std::endl;
+//
+//                    auto start = anchor.a.genepos;
+//                    auto end = anchor.b.genepos;
+//
+//
+//                    m_aligner.PrintAlignment();
+//                    std::cout << "-----------------" << std::endl;
+//                    std::cout << "Score: " << ascore << std::endl;
+//                    std::cout << "Cigar: " << acigar << std::endl;
+//                    std::cout << "-----------------" << std::endl;
+//                    std::cout << cigar_ani << " vs " << cigar_ani2 << std::endl;
+//
+//                    if ((cigar_ani >= 0.93 || cigar_ani2 >= 0.93) && cigar != m_aligner.GetAligner().getAlignmentCigar()) {
 //                        Utils::Input();
 //                    }
+                } else {
+                    Benchmark bm_local{"alignment"};
+                    m_aligner.Alignment(query, reference);
+                    bm_local.Stop();
+
+                    cigar_ani = WFA2Wrapper::CigarANI(m_aligner.GetAligner().getAlignmentCigar());
+//                    std::cout << "anchor_distance_deviation: " << anchor_distance_deviation << std::endl;
+
+                    cigar = m_aligner.GetAligner().getAlignmentCigar();
+                    score = m_aligner.GetAligner().getAlignmentScore();
+
+                    if constexpr(alignment_verbose) {
+#pragma omp critical (alignment_debug)
+                        {
+                            std::cerr << "Alignment\t" << bm_local.GetDuration(Time::microseconds);
+                            std::cerr << '\t' << query.length() << '\t' << reference.length() << '\t';
+                            std::cerr << cigar_ani << '\t' << anchor.hit_anchor_count << '\n';
+                        }
                     }
                 }
+                bm_alignment.Stop();
+
 
                 m_alignment_result.Set(anchor.a.taxid, anchor.b.geneid, abs_pos, !reversed);
-                m_alignment_result.Set(m_aligner.GetAligner().getAlignmentScore(), m_aligner.GetAligner().getAlignmentCigar());
+                m_alignment_result.Set(score, cigar);
 
 
-                if (cigar_ani > 0.93) {
-                    results.emplace_back(m_alignment_result);
-//
-//                    std::cout << "CigarANI: " << cigar_ani << std::endl;
-//                    m_aligner.PrintAlignment();
-//                    Utils::Input();
-                } else {
-//                    int distance = (static_cast<int>(anchor.b.genepos) - anchor.a.genepos) - (static_cast<int>(anchor.b.readpos) - anchor.a.readpos);
-//                    std::cout << "_______________________" << std::endl;
-//                    std::cout << "Anchors: " << anchors.size() << '\t' << cigar_ani << '\t' << distance << "\trev? " << reversed << "\t\t" << anchor.a.ToString() << '\t' << anchor.b.ToString() << std::endl;
-//                    std::cout << "___________Other anchors____________" << std::endl;
-//                    for (auto& anchor : anchors) {
-//                        std::cout << anchor.a.ToString() << " " << anchor.b.ToString() << std::endl;
-//                    }
-//                    std::cout << "____________Alignment___________" << std::endl;
-//                    m_aligner.PrintAlignment();
-                    alignments_ani_lower93++;
+                results.emplace_back(m_alignment_result);
+
+
+                if (--take_top <= 0) {// && score < last_score) {
+                    break;
                 }
+                last_score = score;
             }
         }
     };
