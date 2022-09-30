@@ -32,14 +32,14 @@ namespace protal {
         bool m_from_left = true;
 
 
-        inline void FindSeeds(KmerList &kmer_list) {
+        inline void FindSeeds(KmerList &kmer_list, SeedList& seeds) {
             size_t prev_size = 0;
             for (auto pair : kmer_list) {
                 auto [mmer, pos] = pair;
-                m_kmer_lookup.Get(m_all_seeds, mmer, pos);
+                m_kmer_lookup.Get(seeds, mmer, pos);
                 if (m_all_seeds.size() != prev_size) {
-                    m_seed_size.emplace_back(std::pair<int32_t,int32_t>( pos, m_all_seeds.size() - prev_size ));
-                    prev_size = m_all_seeds.size();
+                    m_seed_size.emplace_back(std::pair<int32_t,int32_t>( pos, seeds.size() - prev_size ));
+                    prev_size = seeds.size();
                 }
             }
         }
@@ -233,7 +233,6 @@ namespace protal {
             m_bm_seeding.Start();
             FindSeeds(kmer_list);
             m_bm_seeding.Stop();
-
 
             m_bm_processing.Start();
             Sort(m_all_seeds);

@@ -10,6 +10,8 @@
 
 namespace protal {
     static const size_t DEFAULT_THREADS = 1;
+    static const size_t DEFAULT_ALIGN_TOP = 3;
+    static const size_t DEFAULT_OUTPUT_TOP = 3;
     static const std::string PROTAL_DB_ENV_VARIABLE = "PROTAL_DB_PATH";
 
     static cxxopts::Options CxxOptions() {
@@ -25,8 +27,10 @@ namespace protal {
                 ("o,output_file", "Output alignment file.", cxxopts::value<std::string>())
                 ("1,first", "Comma separated list of reads. If paired-end, also specify second end.", cxxopts::value<std::string>()->default_value(""))
                 ("2,second", "Comma separated list of reads. must have <-1/--first> specified.", cxxopts::value<std::string>()->default_value(""))
+                ("3,output", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names.", cxxopts::value<std::string>()->default_value(""))
                 ("h,help", "Print help.")
-                ("q,align_top", "Align the top <align_top> anchors.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_THREADS)))
+                ("c,align_top", "After seeding, anchor are sorted by quality passed to alignment. <take_top> specifies how many anchors should be aligned starting with the most promising anchor.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_ALIGN_TOP)))
+                ("e,output_top", "After alignment, alignments are sorted by score. <output_top> specifies how many alignments should be reported starting with the highest scoring alignment.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_OUTPUT_TOP)))
                 ("p,preload_genomes", "Preload complete reference library (can be very memory intensive) instead of dynamic loading. This improves performance. [default off]")
                 ("reference", "", cxxopts::value<std::string>()->default_value(""));
 

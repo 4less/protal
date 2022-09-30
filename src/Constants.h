@@ -28,6 +28,9 @@ namespace protal {
     struct AlignmentResult;
     using AlignmentResultList = std::vector<AlignmentResult>;
 
+    struct Sample;
+    using SampleList = std::vector<Sample>;
+
     template <typename T>
     concept KmerIteratorConcept =
     requires(T t, size_t s, char* cs, KmerList klist) {
