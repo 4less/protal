@@ -231,7 +231,7 @@ namespace protal {
             Reset();
 
             m_bm_seeding.Start();
-            FindSeeds(kmer_list);
+            FindSeeds(kmer_list, m_all_seeds);
             m_bm_seeding.Stop();
 
             m_bm_processing.Start();
