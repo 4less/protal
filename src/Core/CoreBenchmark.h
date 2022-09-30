@@ -14,6 +14,7 @@
 namespace protal {
     using BCE = BinaryClassifierEvaluator;
     class CoreBenchmark {
+        BCE m_seed_bce;
         BCE m_anchor_bce;
         BCE m_alignment_bce;
         BCE m_best_alignment_bce;
@@ -21,7 +22,7 @@ namespace protal {
         size_t m_anchor_fp_no_hit = 0;
 
     public:
-        static std::pair<uint32_t, uint32_t> ExtractTruthFromHeader(std::string& header) {
+        static std::pair<uint32_t, uint32_t> HeaderToTruth(std::string const& header) {
             if (header.empty()) {
                 std::cerr << "Tried to extract taxonomic id and gene id from empty header" << std::endl;
             }
@@ -52,7 +53,18 @@ namespace protal {
             return { taxid, geneid };
         }
 
-        void AddAnchors(AlignmentAnchorList& anchors, size_t true_taxid, size_t true_geneid) {
+        void AddSeeds(SeedList const& seeds, size_t true_taxid, size_t true_geneid) {
+            for (auto& seed : seeds) {
+                if (seed.taxid == true_taxid && seed.geneid == true_geneid) {
+                    m_anchor_bce.tp++;
+                    return;
+                }
+            }
+
+            m_seed_bce.fn++;
+        };
+
+        void AddAnchors(AlignmentAnchorList const& anchors, size_t true_taxid, size_t true_geneid) {
             for (auto& anchor : anchors) {
                 if (anchor.a.taxid == true_taxid && anchor.a.geneid == true_geneid) {
                     m_anchor_bce.tp++;
@@ -65,32 +77,12 @@ namespace protal {
             m_anchor_bce.fn++;
         };
 
-        void AddAlignmentResults(AlignmentAnchorList &anchors, AlignmentResultList& alignments, size_t true_taxid, size_t true_geneid) {
+        void AddAlignmentResults(AlignmentResultList const& alignments, size_t true_taxid, size_t true_geneid) {
             for (auto& alignment : alignments) {
                 if (alignment.Taxid() == true_taxid && alignment.GeneId() == true_geneid) {
                     m_alignment_bce.tp++;
                     return;
                 }
-            }
-
-            if (!anchors.empty() && false) {
-                std::cout << std::string(50, '-') << " False negative:" << std::endl;
-                std::cout << " True taxon: " << true_taxid << " gene: " << true_geneid << std::endl;
-                for (auto &alignment: alignments) {
-                    std::cout << alignment.ToString() << std::endl;
-                }
-                std::cout << "\nAnchors:" << std::endl;
-                for (auto &anchor: anchors) {
-                    std::cout << anchor.a.ToString() << " " << anchor.b.ToString() << " " << anchor.hit_anchor_count
-                              << std::endl;
-                }
-                std::cout << "\nAlignments:" << std::endl;
-                for (auto &alignment: alignments) {
-                    std::cout << alignment.ToString() << std::endl;
-                }
-
-                std::cout << "alignments " << alignments.size() << " / " << anchors.size() << " anchors" << std::endl;
-                std::cout << std::string(50, '-') << " END" << std::endl;
             }
             m_alignment_bce.fn++;
         };
@@ -112,6 +104,16 @@ namespace protal {
             m_alignment_bce.Join(other.m_alignment_bce);
             m_best_alignment_bce.Join(other.m_best_alignment_bce);
             m_anchor_fp_no_hit += other.m_anchor_fp_no_hit;
+        }
+
+        void operator() (SeedList const& seeds, AlignmentAnchorList const& anchors, AlignmentResultList const& alignments, std::string const& header) {
+            auto [tax_id_truth, gene_id_truth] = CoreBenchmark::HeaderToTruth(header);
+
+            AddSeeds(seeds, tax_id_truth, gene_id_truth);
+            AddAnchors(anchors, tax_id_truth, gene_id_truth);
+            AddAlignmentResults(alignments, tax_id_truth, gene_id_truth);
+            AddSeeds(seeds, tax_id_truth, gene_id_truth);
+
         }
 
         void Print() {

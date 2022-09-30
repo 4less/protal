@@ -19,15 +19,10 @@
 
 namespace protal::classify {
 
-    template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug>
+    template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug, typename AlignmentBenchmark=NoBenchmark>
     requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
-    static Statistics Run(SeqReader& reader_global, std::string const& read_se_path, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global) {//, GenomeLoader& loader, Seedmap& map) {
-
-        std::cout << "CLASSIFY " << std::endl;
-        constexpr bool benchmark = true;
-
-        // make dependent on benchmark.
-        CoreBenchmark core_benchmark;
+    static Statistics Run(SeqReader& reader_global, std::string const& read_se_path, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global, AlignmentBenchmark benchmark_global={}) {
+        constexpr bool benchmark_active = !std::is_same<AlignmentBenchmark, NoBenchmark>();
 
         // Shared
         std::ifstream is(read_se_path, std::ios::in);
@@ -40,7 +35,7 @@ namespace protal::classify {
 
         std::ofstream varkit_output(options.GetOutputFile());
 
-#pragma omp parallel default(none) shared(std::cout, core_benchmark, varkit_output, options, is, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global, reader_global)//, loader, map)
+#pragma omp parallel default(none) shared(std::cout, benchmark_global, varkit_output, options, is, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global, reader_global)//, loader, map)
         {
             // Private variables
             FastxRecord record;
@@ -55,12 +50,14 @@ namespace protal::classify {
 
             // IO
             SeqReader reader{ reader_global };
+
             Statistics thread_statistics;
-            CoreBenchmark thread_core_benchmark;
             thread_statistics.thread_num = omp_get_thread_num();
+            AlignmentBenchmark thread_core_benchmark{ benchmark_global };
 
             // Intermediate storage objects
             KmerList kmers;
+            SeedList seeds;
             AlignmentAnchorList anchors;
             AlignmentResultList alignment_results;
 
@@ -90,7 +87,7 @@ namespace protal::classify {
 
                 // Calculate Anchors
 //                std::cout << record.id << std::endl;
-                anchor_finder(kmers, anchors);
+                anchor_finder(kmers, seeds, anchors);
                 thread_statistics.total_anchors += anchors.size();
 
                 // Do Alignment
@@ -103,11 +100,8 @@ namespace protal::classify {
                 // Output alignments
                 output_handler(alignment_results, record);
 
-                if constexpr (benchmark || debug == DEBUG_BENCHMARK) {
-                    auto [tax_id_truth, gene_id_truth] = CoreBenchmark::ExtractTruthFromHeader(record.id);
-
-                    thread_core_benchmark.AddAnchors(anchors, tax_id_truth, gene_id_truth);
-                    thread_core_benchmark.AddAlignmentResults(anchors, alignment_results, tax_id_truth, gene_id_truth);
+                if constexpr (benchmark_active) {
+                    thread_core_benchmark(seeds, anchors, alignment_results, record.id);
                 }
             }
 
@@ -124,11 +118,15 @@ namespace protal::classify {
                 alignment_handler.bm_alignment.PrintResults();
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
-                core_benchmark.Join(thread_core_benchmark);
+                if constexpr (benchmark_active) {
+                    benchmark_global.Join(thread_core_benchmark);
+                }
             }
         }
 
-        core_benchmark.Print();
+        if constexpr (benchmark_active) {
+            benchmark_global.Print();
+        }
 
         return statistics;
     }
@@ -136,9 +134,10 @@ namespace protal::classify {
 
 
 
-    template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug>
+    template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug, typename AlignmentBenchmark=NoBenchmark>
     requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
-    static Statistics RunPairedEnd(SeqReaderPE& reader_global, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global) {//, GenomeLoader& loader, Seedmap& map) {
+    static Statistics RunPairedEnd(SeqReaderPE& reader_global, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global, AlignmentBenchmark benchmark_global={}) {
+        constexpr bool benchmark_active = !std::is_same<AlignmentBenchmark, NoBenchmark>();
 
         size_t dummy = 0;
 
@@ -147,7 +146,7 @@ namespace protal::classify {
 
         Statistics statistics{};
 
-#pragma omp parallel default(none) shared(std::cout, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
+#pragma omp parallel default(none) shared(std::cout, benchmark_global, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
         {
             // Private variables
             FastxRecord record1;
@@ -165,12 +164,15 @@ namespace protal::classify {
             SeqReaderPE reader{reader_global};
             Statistics thread_statistics;
             thread_statistics.thread_num = omp_get_thread_num();
+            AlignmentBenchmark thread_core_benchmark{ benchmark_global };
 
             // Intermediate storage objects
             KmerList kmers1;
+            SeedList seeds1;
             AlignmentAnchorList anchors1;
             AlignmentResultList alignment_results1;
             KmerList kmers2;
+            SeedList seeds2;
             AlignmentAnchorList anchors2;
             AlignmentResultList alignment_results2;
 
@@ -182,6 +184,8 @@ namespace protal::classify {
                 // Clear intermediate storage objects
                 kmers1.clear();
                 kmers2.clear();
+                seeds1.clear();
+                seeds2.clear();
                 anchors1.clear();
                 anchors2.clear();
                 alignment_results1.clear();
@@ -207,8 +211,8 @@ namespace protal::classify {
                 }
 
                 // Calculate Anchors
-                anchor_finder(kmers1, anchors1);
-                anchor_finder(kmers2, anchors2);
+                anchor_finder(kmers1, seeds1, anchors1);
+                anchor_finder(kmers2, seeds2, anchors2);
 
                 thread_statistics.total_anchors += anchors1.size();
                 thread_statistics.total_anchors += anchors2.size();
@@ -225,6 +229,11 @@ namespace protal::classify {
                 // Output alignments
                 output_handler(alignment_results1, record1);
                 output_handler(alignment_results2, record2);
+
+                if constexpr (benchmark_active) {
+                    thread_core_benchmark(seeds1, anchors1, alignment_results1, record1.id);
+                    thread_core_benchmark(seeds2, anchors2, alignment_results2, record2.id);
+                }
 
                 if constexpr(debug == DEBUG_VERBOSE) {
 #pragma omp critical(write)
@@ -251,6 +260,10 @@ namespace protal::classify {
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
             }
+        }
+
+        if constexpr (benchmark_active) {
+            benchmark_global.Print();
         }
 
         return statistics;

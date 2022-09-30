@@ -157,7 +157,7 @@ namespace protal {
                     while (i+group_size < seeds.size() && seeds[i+group_size] == seed) group_size++;
 
                     //TODO: do something with group
-                    auto start_it = m_all_seeds.begin() + i;
+                    auto start_it = seeds.begin() + i;
                     auto end_it = start_it + group_size;
                     m_seed_tmp.clear();
                     m_seed_tmp.insert(m_seed_tmp.end(),
@@ -226,20 +226,20 @@ namespace protal {
                 m_max_seeds(other.m_max_seeds),
                 m_advance_after_find(other.m_advance_after_find) {};
 
-        void operator () (KmerList& kmer_list, AlignmentAnchorList& anchors) {
+        void operator () (KmerList& kmer_list, SeedList& seeds, AlignmentAnchorList& anchors) {
             anchors.clear();
             Reset();
 
             m_bm_seeding.Start();
-            FindSeeds(kmer_list, m_all_seeds);
+            FindSeeds(kmer_list, seeds);
             m_bm_seeding.Stop();
 
             m_bm_processing.Start();
-            Sort(m_all_seeds);
+            Sort(seeds);
             m_bm_processing.Stop();
 
             m_bm_pairing.Start();
-            FindPairs(m_all_seeds, anchors);
+            FindPairs(seeds, anchors);
             m_bm_pairing.Stop();
         }
     };

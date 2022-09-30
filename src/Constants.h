@@ -12,12 +12,19 @@ namespace protal {
         DEBUG_BENCHMARK
     };
 
+    struct NoBenchmark {
+        void Print() {
+            std::cout << "Dummy print" << std::endl;
+        }
+    };
+
     // Pair k-mer, readpos
     using KmerElement = std::pair<size_t, size_t>;
     using KmerList = std::vector<KmerElement>;
 
     struct LookupResult;
     using LookupList = std::vector<LookupResult>;
+    using SeedList = LookupList;
 
     struct AlignmentAnchor;
     using AlignmentAnchorList = std::vector<AlignmentAnchor>;
@@ -83,8 +90,8 @@ namespace protal {
      */
     template <typename T>
     concept AnchorFinderConcept =
-    requires(T t, KmerList k, AlignmentAnchorList a) {
-        { t(k, a) } -> std::same_as<void>;
+    requires(T t, KmerList k, SeedList s, AlignmentAnchorList a) {
+        { t(k, s, a) } -> std::same_as<void>;
     };
 
     /*
