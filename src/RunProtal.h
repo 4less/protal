@@ -16,10 +16,8 @@
 #include "gzstream/gzstream.h"
 
 namespace protal {
-    static void Run(int argc, char *argv[]) {
-        Benchmark bm_total("Run protal");
-
-        auto options = protal::Options::OptionsFromArguments(argc, argv);
+    template<typename AlignmentBenchmark=NoBenchmark>
+    static void RunWrapper(Options& options, AlignmentBenchmark benchmark=NoBenchmark{}) {
 
         std::cout << "Options:\n" << options.ToString() << std::endl;
 
@@ -92,8 +90,9 @@ namespace protal {
                         AnchorFinder,
                         SimpleAlignmentHandler,
                         OutputHandler,
-                        DEBUG_NONE>(
-                        reader, options, anchor_finder, alignment_handler, output_handler, iterator);
+                        DEBUG_NONE,
+                        AlignmentBenchmark>(
+                        reader, options, anchor_finder, alignment_handler, output_handler, iterator, benchmark);
 
                 protal_stats.WriteStats();
 
@@ -110,8 +109,9 @@ namespace protal {
                         AnchorFinder,
                         SimpleAlignmentHandler,
                         OutputHandler,
-                        DEBUG_NONE>(
-                        reader, options.GetFirstFile(), options, anchor_finder, alignment_handler, output_handler, iterator);
+                        DEBUG_NONE,
+                        AlignmentBenchmark>(
+                        reader, options, anchor_finder, alignment_handler, output_handler, iterator, benchmark);
 
                 is.close();
                 protal_stats.WriteStats();
@@ -125,6 +125,27 @@ namespace protal {
             bm_classify.PrintResults();
 
             std::cout << "Loaded genomes: " << genomes.GetLoadedGenomeCount() << std::endl;
+        }
+    }
+
+    static void Run(int argc, char *argv[]) {
+        Benchmark bm_total("Run protal");
+
+        using AlignmentBenchmark = CoreBenchmark;
+
+        auto options = protal::Options::OptionsFromArguments(argc, argv);
+
+        if (options.Help()) {
+            options.PrintHelp();
+            exit(0);
+        }
+
+        // Untangle Template options that ed to be written out specifically.
+        if (options.BenchmarkAlignment()) {
+            AlignmentBenchmark alignment_benchmark{};
+            RunWrapper(options, alignment_benchmark);
+        } else {
+            RunWrapper(options);
         }
 
         bm_total.PrintResults();

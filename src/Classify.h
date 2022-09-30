@@ -21,11 +21,10 @@ namespace protal::classify {
 
     template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug, typename AlignmentBenchmark=NoBenchmark>
     requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
-    static Statistics Run(SeqReader& reader_global, std::string const& read_se_path, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global, AlignmentBenchmark benchmark_global={}) {
+    static Statistics Run(SeqReader& reader_global, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global, AlignmentBenchmark benchmark_global={}) {
         constexpr bool benchmark_active = !std::is_same<AlignmentBenchmark, NoBenchmark>();
 
         // Shared
-        std::ifstream is(read_se_path, std::ios::in);
         size_t dummy = 0;
 
         // Set Thread Num
@@ -33,9 +32,7 @@ namespace protal::classify {
 
         Statistics statistics{};
 
-        std::ofstream varkit_output(options.GetOutputFile());
-
-#pragma omp parallel default(none) shared(std::cout, benchmark_global, varkit_output, options, is, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global, reader_global)//, loader, map)
+#pragma omp parallel default(none) shared(std::cout, benchmark_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global, reader_global)//, loader, map)
         {
             // Private variables
             FastxRecord record;
@@ -71,6 +68,7 @@ namespace protal::classify {
 
                 // Clear intermediate storage objects
                 kmers.clear();
+                seeds.clear();
                 anchors.clear();
                 alignment_results.clear();
 
