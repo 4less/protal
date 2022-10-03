@@ -18,6 +18,7 @@ namespace protal {
         BCE m_anchor_bce{"Anchors"};
         BCE m_alignment_bce{"Alignments"};
         BCE m_best_alignment_bce{"Best_alignment"};
+        BCE m_best_unique_alignment_bce{"Best_unique_alignment"};
 
         size_t m_anchor_fp_no_hit = 0;
 
@@ -78,13 +79,35 @@ namespace protal {
         };
 
         void AddAlignmentResults(AlignmentResultList const& alignments, size_t true_taxid, size_t true_geneid) {
+            if (alignments.empty()) {
+                m_alignment_bce.fn++;
+                m_best_alignment_bce.fn++;
+                m_best_unique_alignment_bce.fn++;
+                return;
+            }
+
+            auto& best_alignment = alignments[0];
+            if (best_alignment.Taxid() == true_taxid && best_alignment.GeneId() == true_geneid) {
+                m_best_alignment_bce.tp++;
+            } else {
+                m_best_alignment_bce.fp++;
+            }
+
+            if (alignments.size() == 1 || (alignments.size() > 1 && alignments[1].AlignmentScore() < best_alignment.AlignmentScore())) {
+
+                if (best_alignment.Taxid() == true_taxid && best_alignment.GeneId() == true_geneid) {
+                    m_best_unique_alignment_bce.tp++;
+                } else {
+                    m_best_unique_alignment_bce.fp++;
+                }
+            }
+
             for (auto& alignment : alignments) {
                 if (alignment.Taxid() == true_taxid && alignment.GeneId() == true_geneid) {
                     m_alignment_bce.tp++;
-                    return;
+                    break;
                 }
             }
-            m_alignment_bce.fn++;
         };
 
         void AddBestAlignmentResult(AlignmentResult& alignment, size_t true_taxid, size_t true_geneid) {
@@ -104,6 +127,7 @@ namespace protal {
             m_anchor_bce.Join(other.m_anchor_bce);
             m_alignment_bce.Join(other.m_alignment_bce);
             m_best_alignment_bce.Join(other.m_best_alignment_bce);
+            m_best_unique_alignment_bce.Join(other.m_best_unique_alignment_bce);
             m_anchor_fp_no_hit += other.m_anchor_fp_no_hit;
         }
 
@@ -121,6 +145,8 @@ namespace protal {
             m_seed_bce.WriteRowStats();
             m_anchor_bce.WriteRowStats();
             m_alignment_bce.WriteRowStats();
+            m_best_alignment_bce.WriteRowStats();
+            m_best_unique_alignment_bce.WriteRowStats();
         }
 
         void Print() {

@@ -170,7 +170,7 @@ namespace protal {
 
             // Sort alignment results
             std::sort(results.begin(), results.end(), [](AlignmentResult const& a, AlignmentResult const& b) {
-                return a.AlignmentScore() < b.AlignmentScore();
+                return a.AlignmentScore() > b.AlignmentScore();
             });
         }
     };
