@@ -13,6 +13,7 @@
 #include <omp.h>
 #include "Constants.h"
 #include "Hash/KmerPutter.h"
+#include "robin_map.h"
 
 namespace protal::build {
 
@@ -29,6 +30,13 @@ namespace protal::build {
         omp_set_num_threads(options.GetThreads());
 
         Statistics statistics;
+
+
+        // TODO Fix multithreaded database building.
+        if (options.GetThreads() > 1) {
+            std::cerr << "Building db with multiple threads is currently broken" << std::endl;
+            exit(8);
+        }
 
         if constexpr(protal::HasFirstPut<KmerPutter>) {
 #pragma omp parallel default(none) shared(std::cout, options, is, dummy, read_count, kmer_handler_global, statistics, putter)
@@ -58,8 +66,9 @@ namespace protal::build {
                     if constexpr(KmerStatisticsConcept<KmerHandler>) {
                         thread_statistics.kmers_total += kmer_handler.TotalKmers();
                     }
+
                     if constexpr(KmerStatisticsConcept<KmerHandler>) {
-                        thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
+                        thread_statistics.kmers_accepted += kmers.size();
                     }
 
                     if constexpr(debug == DEBUG_VERBOSE) {
@@ -72,6 +81,7 @@ namespace protal::build {
 
 #pragma omp critical(statistics)
                 statistics.Join(thread_statistics);
+                std::cout << "minimizers: " << thread_statistics.kmers_accepted << std::endl;
             }
 
             // E.g. if k-mers are counted before they are inserted, call Initialize for put

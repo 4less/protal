@@ -14,7 +14,7 @@
 #include <fstream>
 #include "Utils.h"
 
-namespace protal{
+namespace protal {
     template<uint64_t taxid_bits, uint64_t geneid_bits, uint64_t genepos_bits>
     struct Entry {
         uint64_t value;
@@ -105,31 +105,63 @@ namespace protal{
 
     class Seedmap {
     private:
-        uint8_t* m_keymap = nullptr;
+        using KeyMap_t = uint8_t;
+        KeyMap_t* m_keymap = nullptr;
         uint64_t m_keymask = 0b0000000000000000000000000000000000111111111111111111111111111111;
         size_t keymap_size = 1u << 30u;
         size_t keymap_max = m_keymask;
 
-        uint64_t ctrl_block_key_mask = 0b0000000000000000000000000000000000000000000000000000000000001111;
 
-        size_t ctrl_block_frequency = 16;
-        size_t ctrl_block_frequency_bitshift = 4;
+        // This variable defines how many keys are managed by one control block
+        // Must be power of two
+        size_t ctrl_block_frequency = 16; // Version 1
+//        size_t ctrl_block_frequency = 8; // Version 2
 
+        // bitshift to find which control block a key is in.
+        size_t ctrl_block_frequency_bitshift = log2(ctrl_block_frequency);
+
+        uint64_t ctrl_block_key_mask = (1 << ctrl_block_frequency_bitshift) - 1;
+
+
+
+        size_t max_key_ubiquity = (1 << 8) / ctrl_block_frequency;
+
+//        size_t ctrl_block_frequency_bitshift = 4;
+
+        // Bytespace a controlblock takes up
         size_t ctrl_block_size = 4; // Byte
-        size_t ctrl_block_size_shift = 2;
+        size_t ctrl_block_size_shift = log2(ctrl_block_size);
+//        size_t ctrl_block_size_shift = 2;
 
         size_t keymap_size_total = keymap_size + (((keymap_size/ctrl_block_frequency)+1) * ctrl_block_size);
 
+        /*
+         * The number of total value entries per block.
+         * Each block holds indices for <ctrl_block_frequency> keys
+         * and the values for thes keys may not be more than <max_block_size>
+         */
+        size_t max_block_size = (1 << sizeof(KeyMap_t)*8);
 
         size_t values_size= 0;
         Entry<20,20,20>* m_map = nullptr;
 
         uint64_t m_found_counter = 0;
 
+        void Print() {
+            std::cout << "ctrl_block_frequency:             " << ctrl_block_frequency << std::endl;
+            std::cout << "ctrl_block_frequency_bitshift:    " << ctrl_block_frequency_bitshift << std::endl;
+            std::cout << "ctrl_block_size:                  " << ctrl_block_size << std::endl;
+            std::cout << "ctrl_block_size_shift:            " << ctrl_block_size_shift << std::endl;
+            std::cout << "ctrl_block_key_mask:              " << ctrl_block_key_mask << std::endl;
+            std::cout << "keymap_size_total:                " << keymap_size_total << std::endl;
+            std::cout << "max_block_size:                   " << max_block_size << std::endl;
+            std::cout << "values_size:                      " << values_size << std::endl;
+        }
+
         Seedmap(Seedmap const& other) = delete;
     public:
-        Seedmap()
-        {
+        Seedmap() {
+            Print();
             m_keymap = new uint8_t[keymap_size_total];
         }
 
@@ -142,15 +174,15 @@ namespace protal{
             delete[] m_map;
         }
 
-        inline uint64_t KeymapIndex(uint64_t key) {
+        inline uint64_t KeymapIndex(uint64_t key) const {
             return key + ((key >> ctrl_block_frequency_bitshift) << ctrl_block_size_shift) + ctrl_block_size;
         }
 
-        inline uint64_t ControlBlockIndex(uint64_t key) {
+        inline uint64_t ControlBlockIndex(uint64_t key) const {
             return ((key >> ctrl_block_frequency_bitshift) << ctrl_block_frequency_bitshift) + ((key >> ctrl_block_frequency_bitshift) << (ctrl_block_size_shift));
         }
 
-        inline uint64_t BlockKey(uint64_t key) {
+        inline uint64_t BlockKey(uint64_t key) const {
             return key & ctrl_block_key_mask;
         }
 
@@ -319,14 +351,14 @@ namespace protal{
 
             if (key_value_start > key_value_end) {
                 PrintBlock(key);
-                std::cout << "Seedmap: 283" << std::endl;
+                std::cout << "Key value start (" << key_value_start << ") can not be larger than key value end (" << key_value_end << ")" << std::endl;
                 exit(9);
             }
 
             for (; !m_map[index].Empty() && index < key_value_end; index++);
 
             if (index == key_value_end) {
-                std::cout << "bucket too large, not present" << std::endl;
+                std::cout << "bucket too large, not present " << key_value_start << " size: " << (key_value_end - key_value_start) << std::endl;
                 return false;
             }
             m_map[index].Put(taxid, geneid, genepos);
@@ -406,7 +438,9 @@ namespace protal{
             for (; !m_map[index].Empty() && index < key_value_end; index++);
 
             if (index == key_value_end) {
-                std::cout << "bucket too large, not present" << std::endl;
+                std::cout << "bucket too large, not present " << key_value_start << " size: " << (key_value_end - key_value_start) << std::endl;
+                std::cout << "block_end_idx:  " << block_end_idx << " size: " << (key_value_end - key_value_start) << std::endl;
+                std::cout << "key_value_block_size: " << key_value_block_size << std::endl;
                 return false;
             }
 #pragma omp critical(put)
@@ -434,7 +468,8 @@ namespace protal{
 
             std::cout << "number ctrl blocks: " << num_ctrl_blocks << std::endl;
 
-            uint64_t max_keyblock_size = 32;
+            uint64_t max_keyblock_size = max_key_ubiquity*2;
+
 
             struct subkey {
                 uint32_t key = 0;
@@ -446,18 +481,28 @@ namespace protal{
                 void Print() {
                     std::cout << "key: " << key << "  count: " << count << std::endl;
                 }
+                std::string ToString() const {
+                    return std::to_string(key) + '\t' + std::to_string(count);
+                }
             };
 
             subkey subkey[ctrl_block_frequency];
             auto subkey_begin = subkey;
             auto subkey_end = subkey + ctrl_block_frequency;
 
-            uint64_t max_block_size = 256;
+            // Understand kmer frequencies better to improve sensitivity of alignment.
+            constexpr int kmer_freq_size = 1 << (sizeof(KeyMap_t) * 8);
+            int kmer_frequencies[kmer_freq_size] = { 0 };
+            size_t count_failed_demand = 0;
+            size_t count_total_stored = 0;
+            size_t count_total_demand = 0;
+
 
             for (auto block = 0; block < num_ctrl_blocks; block++) {
 //                std::cout << "new block" << std::endl;
                 auto block_index = block * (ctrl_block_frequency + ctrl_block_size);
                 auto block_start_index = block_index + ctrl_block_size;
+
 
                 control_ptr = (uint32_t*) (m_keymap + block_index);
                 *control_ptr = global_position;
@@ -467,10 +512,14 @@ namespace protal{
                 for (auto key_pos = 0; key_pos < ctrl_block_frequency; key_pos++) {
                     subkey[key_pos].key = key_pos;
                     subkey[key_pos].count = m_keymap[block_start_index + key_pos];
+
+                    kmer_frequencies[subkey[key_pos].count]++;
+
                     total_count += subkey[key_pos].count;
                 }
                 if (!total_count) continue;
                 // sort by count
+
                 std::sort(subkey_begin, subkey_end, [](const struct subkey &a, const struct subkey &b) {
                     return a.count < b.count;
                 });
@@ -488,6 +537,12 @@ namespace protal{
                         subkey[key_pos].count = 0;
                     }
                 }
+                count_total_demand += total_demand;
+                count_total_stored += current_sum;
+                count_failed_demand += (current_sum < total_demand);
+
+
+
                 // sort by key
 //                std::cout << "----" << std::endl;
 // WHY? Figure out
@@ -556,6 +611,14 @@ namespace protal{
             m_map = new Entry<20, 20, 20>[values_size];
 //            std::string stop;
 //            std::cin >> stop;
+
+            for (auto i = 0; i < kmer_freq_size; i++) {
+                std::cout << i << '\t' << kmer_frequencies[i] << std::endl;
+            }
+            std::cout << "Total stored: " << count_total_stored << std::endl;
+            std::cout << "Total demand: " << count_total_demand << std::endl;
+            std::cout << "Stored " << (100*static_cast<double>(count_total_stored)/static_cast<double>(count_total_demand)) << " of total values." << std::endl;
+            std::cout << "Failed to meet demands? " << count_failed_demand << std::endl;
         }
 
 
