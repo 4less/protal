@@ -26,6 +26,7 @@ add_library(protal_lib
         Hash/compact_map.cpp
         Hash/compact_map_utils.h
         Hash/Seedmap.h
+        Hash/SeedmapFlex.h
         Hash/KmerPutter.h
         Hash/KmerLookup.h
         SequenceUtils/GenomeLoader.h
