@@ -20,6 +20,7 @@ namespace protal {
         string name;
         long time_sum = 0;
         size_t samplings = 0;
+        size_t threads_sampled = 1;
         time_point<high_resolution_clock> start_time;
 
     public:
@@ -63,9 +64,19 @@ namespace protal {
             return 0L;
         }
 
+        void Join(Benchmark const& other) {
+            if (time_sum > 0) threads_sampled++;
+            time_sum += other.time_sum;
+
+        }
+
         void PrintResults() {
             if (time_sum == 0) {
                 Stop();
+            }
+
+            if (threads_sampled > 1) {
+                time_sum /= static_cast<double>(threads_sampled);
             }
 
             uint hours = time_sum / 3600000000;
@@ -81,7 +92,8 @@ namespace protal {
             if (mins) std::cout << mins << "m ";
             if (secs) std::cout << secs << "s ";
             if (msecs) std::cout << msecs << "ms";
-            if (samplings) std::cout << " (" << std::to_string(samplings) << ")";
+            if (samplings > 1) std::cout << " (" << std::to_string(samplings) << ")";
+            if (threads_sampled > 1) std::cout << " mean over " << threads_sampled << " threads";
             std::cout << std::endl;
         }
     };

@@ -9,44 +9,48 @@
 #include <iostream>
 
 struct BinaryClassifierEvaluator {
-    std::string name = "";
+    std::string name {};
 
     size_t tp = 0;
     size_t tn = 0;
     size_t fp = 0;
     size_t fn = 0;
 
+    BinaryClassifierEvaluator() = default;
+    explicit BinaryClassifierEvaluator(std::string name) :
+        name(name) {};
+
     void SetName(std::string name) {
         this->name = name;
     }
 
-    double Sensitivity() {
+    double Sensitivity() const {
         if (tp + fn == 0) return -1;
-        return (double) tp/(tp + fn);
+        return (double) tp/static_cast<double>(tp + fn);
     }
 
-    double Specificity() {
+    double Specificity() const {
         if (tn + fp == 0) return -1;
-        return (double) tn/(tn + fp);
+        return (double) tn/static_cast<double>(tn + fp);
     }
 
-    double Precision() {
+    double Precision() const {
         if (tp + fp == 0) return -1;
-        return (double) tp/(tp + fp);
+        return (double) tp/static_cast<double>(tp + fp);
     }
 
-    double Accuracy() {
+    double Accuracy() const {
         if (tp + fp + tn + fn == 0) return -1;
-        return (double) (tp + tn)/(tp + tn + fp + fn);
+        return (double) (tp + tn)/static_cast<double>(tp + tn + fp + fn);
     }
 
-    double F1() {
+    double F1() const {
         if (tp + fp + tn + fn == 0) return -1;
-        return (double) 2*tp/(2 * tp + fp + fn);
+        return (double) 2*tp/static_cast<double>(2 * tp + fp + fn);
     }
 
 
-    void WriteStats(std::ostream &os=std::cout) {
+    void WriteStats(std::ostream &os=std::cout) const {
         os << "Evaluate binary classifier: " << std::endl;
         os << "tp: " << tp << " fp: " << fp << " tn: " << tn << " fn: " << fn << std::endl;
         os << "Sensitivity:\t\t" << Sensitivity() << std::endl;
@@ -56,7 +60,7 @@ struct BinaryClassifierEvaluator {
         os << "F1:         \t\t" << F1() << std::endl;
     }
 
-    void WriteRowHeader(std::ostream &os=std::cout, std::string name_col="Name")  {
+    static void WriteRowHeader(std::ostream &os=std::cout, std::string name_col="Name") {
         os << name_col << "\tTP\tFP\tTN\tFN\tSensitivity\tSpecificity\tPrecision\tAccuracy\tF1" << std::endl;
     }
 
@@ -67,7 +71,7 @@ struct BinaryClassifierEvaluator {
         this->fn += other.fn;
     }
 
-    void WriteRowStats(std::ostream &os=std::cout) {
+    void WriteRowStats(std::ostream &os=std::cout) const {
         os << name << '\t';
         os << tp << '\t';
         os << fp << '\t';

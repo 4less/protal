@@ -167,6 +167,11 @@ namespace protal {
                 }
                 last_score = score;
             }
+
+            // Sort alignment results
+            std::sort(results.begin(), results.end(), [](AlignmentResult const& a, AlignmentResult const& b) {
+                return a.AlignmentScore() < b.AlignmentScore();
+            });
         }
     };
 }

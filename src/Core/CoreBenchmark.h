@@ -14,10 +14,10 @@
 namespace protal {
     using BCE = BinaryClassifierEvaluator;
     class CoreBenchmark {
-        BCE m_seed_bce;
-        BCE m_anchor_bce;
-        BCE m_alignment_bce;
-        BCE m_best_alignment_bce;
+        BCE m_seed_bce{"Seeds"};
+        BCE m_anchor_bce{"Anchors"};
+        BCE m_alignment_bce{"Alignments"};
+        BCE m_best_alignment_bce{"Best_alignment"};
 
         size_t m_anchor_fp_no_hit = 0;
 
@@ -56,7 +56,7 @@ namespace protal {
         void AddSeeds(SeedList const& seeds, size_t true_taxid, size_t true_geneid) {
             for (auto& seed : seeds) {
                 if (seed.taxid == true_taxid && seed.geneid == true_geneid) {
-                    m_anchor_bce.tp++;
+                    m_seed_bce.tp++;
                     return;
                 }
             }
@@ -100,6 +100,7 @@ namespace protal {
         }
 
         void Join(CoreBenchmark const& other) {
+            m_seed_bce.Join(other.m_seed_bce);
             m_anchor_bce.Join(other.m_anchor_bce);
             m_alignment_bce.Join(other.m_alignment_bce);
             m_best_alignment_bce.Join(other.m_best_alignment_bce);
@@ -112,8 +113,14 @@ namespace protal {
             AddSeeds(seeds, tax_id_truth, gene_id_truth);
             AddAnchors(anchors, tax_id_truth, gene_id_truth);
             AddAlignmentResults(alignments, tax_id_truth, gene_id_truth);
-            AddSeeds(seeds, tax_id_truth, gene_id_truth);
 
+        }
+
+        void WriteRowStats() {
+            m_seed_bce.WriteRowHeader();
+            m_seed_bce.WriteRowStats();
+            m_anchor_bce.WriteRowStats();
+            m_alignment_bce.WriteRowStats();
         }
 
         void Print() {

@@ -31,8 +31,9 @@ namespace protal::classify {
         omp_set_num_threads(options.GetThreads());
 
         Statistics statistics{};
+        Benchmark bm_alignment_global{"Alignment handler"};
 
-#pragma omp parallel default(none) shared(std::cout, benchmark_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global, reader_global)//, loader, map)
+#pragma omp parallel default(none) shared(std::cout, bm_alignment_global, benchmark_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global, reader_global)//, loader, map)
         {
             // Private variables
             FastxRecord record;
@@ -105,17 +106,16 @@ namespace protal::classify {
 
 #pragma omp critical(statistics)
             {
-                std::cout << std::string(30, '-');
-                std::cout << "Thread summary: " << omp_get_thread_num() << std::endl;
-                std::cout << "Anchor finder dummy: " << anchor_finder.dummy << std::endl;
-                std::cout << "Utilized seeds: " << anchor_finder.utilized_anchors << std::endl;
-                anchor_finder.m_bm_seeding.PrintResults();
-                anchor_finder.m_bm_processing.PrintResults();
-                anchor_finder.m_bm_pairing.PrintResults();
-                bm_alignment.PrintResults();
-                alignment_handler.bm_alignment.PrintResults();
+                anchor_finder_global.m_bm_seeding.Join(anchor_finder.m_bm_seeding);
+                anchor_finder_global.m_bm_processing.Join(anchor_finder.m_bm_processing);
+                anchor_finder_global.m_bm_pairing.Join(anchor_finder.m_bm_pairing);
+
+                bm_alignment_global.Join(bm_alignment);
+                alignment_handler_global.bm_alignment.Join(alignment_handler.bm_alignment);
+
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
+
                 if constexpr (benchmark_active) {
                     benchmark_global.Join(thread_core_benchmark);
                 }
@@ -123,13 +123,22 @@ namespace protal::classify {
         }
 
         if constexpr (benchmark_active) {
-            benchmark_global.Print();
+            std::cout << "\n------------Alignment benchmarks------------------" << std::endl;
+            benchmark_global.WriteRowStats();
+            std::cout << "----------------------------------------------------\n" << std::endl;
         }
+
+        std::cout << "---------------Speed benchmarks---------------------" << std::endl;
+        anchor_finder_global.m_bm_seeding.PrintResults();
+        anchor_finder_global.m_bm_processing.PrintResults();
+        anchor_finder_global.m_bm_pairing.PrintResults();
+        bm_alignment_global.PrintResults();
+        alignment_handler_global.bm_alignment.PrintResults();
+        std::cout << "----------------------------------------------------\n" << std::endl;
+
 
         return statistics;
     }
-
-
 
 
     template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug, typename AlignmentBenchmark=NoBenchmark>
@@ -143,8 +152,9 @@ namespace protal::classify {
         omp_set_num_threads(options.GetThreads());
 
         Statistics statistics{};
+        Benchmark bm_alignment_global("Alignment handler");
 
-#pragma omp parallel default(none) shared(std::cout, benchmark_global, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
+#pragma omp parallel default(none) shared(std::cout, bm_alignment_global, benchmark_global, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
         {
             // Private variables
             FastxRecord record1;
@@ -243,26 +253,37 @@ namespace protal::classify {
 
                 }
             }
-
 #pragma omp critical(statistics)
             {
-                std::cout << std::string(30, '-');
-                std::cout << "Thread summary: " << omp_get_thread_num() << std::endl;
-                std::cout << "Anchor finder dummy: " << anchor_finder.dummy << std::endl;
-                std::cout << "Utilized seeds: " << anchor_finder.utilized_anchors << std::endl;
-                anchor_finder.m_bm_seeding.PrintResults();
-                anchor_finder.m_bm_processing.PrintResults();
-                anchor_finder.m_bm_pairing.PrintResults();
-                bm_alignment.PrintResults();
-                alignment_handler.bm_alignment.PrintResults();
+                anchor_finder_global.m_bm_seeding.Join(anchor_finder.m_bm_seeding);
+                anchor_finder_global.m_bm_processing.Join(anchor_finder.m_bm_processing);
+                anchor_finder_global.m_bm_pairing.Join(anchor_finder.m_bm_pairing);
+
+                bm_alignment_global.Join(bm_alignment);
+                alignment_handler_global.bm_alignment.Join(alignment_handler.bm_alignment);
+
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
+
+                if constexpr (benchmark_active) {
+                    benchmark_global.Join(thread_core_benchmark);
+                }
             }
         }
 
         if constexpr (benchmark_active) {
-            benchmark_global.Print();
+            std::cout << "\n------------Alignment benchmarks------------------" << std::endl;
+            benchmark_global.WriteRowStats();
+            std::cout << "----------------------------------------------------\n" << std::endl;
         }
+
+        std::cout << "---------------Speed benchmarks---------------------" << std::endl;
+        anchor_finder_global.m_bm_seeding.PrintResults();
+        anchor_finder_global.m_bm_processing.PrintResults();
+        anchor_finder_global.m_bm_pairing.PrintResults();
+        bm_alignment_global.PrintResults();
+        alignment_handler_global.bm_alignment.PrintResults();
+        std::cout << "----------------------------------------------------\n" << std::endl;
 
         return statistics;
     }
