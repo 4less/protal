@@ -124,6 +124,7 @@ namespace protal {
     class VarkitOutputHandler {
     private:
         std::ostream& m_os;
+        std::ostream& m_snp_os;
         std::ostream& m_sam_os;
 
         BufferedStringOutput m_sam_output;
@@ -135,15 +136,17 @@ namespace protal {
     public:
         size_t alignments = 0;
 
-        VarkitOutputHandler(std::ostream& os, std::ostream& sam_os, size_t varkit_buffer_capacity, size_t sam_buffer_capacity) :
+        VarkitOutputHandler(std::ostream& os, std::ostream& sam_os, std::ostream& snp_os, size_t varkit_buffer_capacity, size_t sam_buffer_capacity) :
                 m_os(os),
                 m_sam_os(sam_os),
+                m_snp_os(snp_os),
                 m_output(varkit_buffer_capacity),
                 m_sam_output(sam_buffer_capacity) {}
 
         VarkitOutputHandler(VarkitOutputHandler const& other) :
                 m_os(other.m_os),
                 m_sam_os(other.m_sam_os),
+                m_snp_os(other.m_snp_os),
                 m_output(other.m_output.Capacity()),
                 m_sam_output(other.m_sam_output.Capacity()) {}
 
@@ -185,6 +188,8 @@ namespace protal {
             WFA2Wrapper::GetAlignmentInfo(m_info, best.Cigar());
 
             ToClassificationLine(m_line, best.Taxid(), best.GeneId(), best.GenePos() + m_info.alignment_start, m_info.alignment_length, 1, m_info.alignment_ani);
+
+
 
             m_sam.m_qname = record.id;
             m_sam.m_flag = 0;

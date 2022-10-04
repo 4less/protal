@@ -113,6 +113,7 @@ namespace protal {
                     cigar_ani = WFA2Wrapper::CigarANI(acigar);
                     cigar = acigar;
                     score = ascore;
+
 //
 //                    std::cout << "------------------------------------------" << std::endl;
 //                    std::cout << anchor.a.ToString() << std::endl;

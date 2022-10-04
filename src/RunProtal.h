@@ -65,9 +65,10 @@ namespace protal {
             using OutputHandler = VarkitOutputHandler;
 
             std::ofstream varkit_output(options.GetOutputFile(),std::ios::binary);
-            std::ofstream sam_output(options.GetOutputFile()+".sam",std::ios::out);
+            std::ofstream sam_output(options.GetOutputFile() + ".sam",std::ios::out);
+            std::ofstream snp_output(options.GetOutputFile() + ".snps",std::ios::out);
 
-            OutputHandler output_handler(varkit_output, sam_output, 1024*512, 1024*1024*16);
+            OutputHandler output_handler(varkit_output, sam_output, snp_output, 1024*512, 1024*1024*16);
 
             // AnchorFinder
             AnchorFinder anchor_finder(kmer_lookup);

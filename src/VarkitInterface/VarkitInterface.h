@@ -112,4 +112,5 @@ namespace protal {
         line.predicted_ani = ani;
         line.total_hits_best = total_hits_best;
     }
+
 }

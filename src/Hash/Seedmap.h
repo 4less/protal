@@ -122,8 +122,6 @@ namespace protal {
 
         uint64_t ctrl_block_key_mask = (1 << ctrl_block_frequency_bitshift) - 1;
 
-
-
         size_t max_key_ubiquity = (1 << 8) / ctrl_block_frequency;
 
 //        size_t ctrl_block_frequency_bitshift = 4;
