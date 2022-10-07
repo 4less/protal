@@ -90,6 +90,17 @@ WFAligner::AlignmentStatus WFAligner::alignEnd2End(
   // Delegate
   return alignEnd2End(pattern.c_str(),pattern.length(),text.c_str(),text.length());
 }
+WFAligner::AlignmentStatus WFAligner::alignEnd2End(
+    std::string_view pattern,
+    std::string_view text) {
+  // Delegate
+  auto query = std::string(pattern.data(),pattern.length());
+  auto ref = std::string(text.data(),text.length());
+//  std::cout << "pattern: " << query << std::endl;
+//  std::cout << "text: " << ref << std::endl;
+//  return alignEnd2End(pattern.data(),pattern.length(),text.data(),text.length());
+  return alignEnd2End(query.data(),query.length(),ref.data(),ref.length());
+}
 /*
  * Align Ends-free
  */
@@ -224,7 +235,7 @@ void WFAligner::setMinOffsetsPerThread(
 /*
  * Accessors
  */
-int WFAligner::getAlignmentScore() {
+int WFAligner::getAlignmentScore() const {
   return wfAligner->cigar->score;
 }
 int WFAligner::getAlignmentStatus() {
@@ -232,11 +243,11 @@ int WFAligner::getAlignmentStatus() {
 }
 void WFAligner::getAlignmentCigar(
     char** const cigarOperations,
-    int* cigarLength) {
+    int* cigarLength) const {
  *cigarOperations = wfAligner->cigar->operations + wfAligner->cigar->begin_offset;
  *cigarLength = wfAligner->cigar->end_offset - wfAligner->cigar->begin_offset;
 }
-std::string WFAligner::getAlignmentCigar() {
+std::string WFAligner::getAlignmentCigar() const {
   // Fetch CIGAR
   char* buffer;
   int bufferLength;
@@ -324,7 +335,13 @@ WFAlignerGapAffine::WFAlignerGapAffine(
   attributes.affine_penalties.mismatch = mismatch;
   attributes.affine_penalties.gap_opening = gapOpening;
   attributes.affine_penalties.gap_extension = gapExtension;
+  // Debug
+
+//  attributes.heuristic.strategy = wf_heuristic_xdrop;
+//  attributes.heuristic.zdrop = 100;
+//  attributes.heuristic.xdrop = 100;
   wfAligner = wavefront_aligner_new(&attributes);
+//  wavefront_aligner_set_max_alignment_score(wfAligner,20);
 }
 WFAlignerGapAffine::WFAlignerGapAffine(
     const int match,

@@ -49,7 +49,7 @@ namespace protal {
             KmerLookupSM kmer_lookup(map);
 
             GenomeLoader genomes(options.GetSequenceFile(), options.GetSequenceMapFile());
-            WFA2Wrapper aligner(4, 6, 2);
+            WFA2Wrapper aligner(4, 6, 2, options.GetXDrop());
 
             if (options.PreloadGenomes()) {
                 Benchmark bm_preload_genomes("Preload genomes");
@@ -64,17 +64,20 @@ namespace protal {
 
             using OutputHandler = VarkitOutputHandler;
 
-            std::ofstream varkit_output(options.GetOutputFile(),std::ios::binary);
-            std::ofstream sam_output(options.GetOutputFile() + ".sam",std::ios::out);
-            std::ofstream snp_output(options.GetOutputFile() + ".snps",std::ios::out);
+            using optional_ofstream = std::optional<std::ofstream>;
+            std::ofstream varkit_output(options.GetOutputFile(), std::ios::binary);
+            std::ofstream sam_output(options.GetOutputFile() + ".sam", std::ios::out);
+            optional_ofstream snp_output =
+                    options.NoStrains() ? optional_ofstream{} :
+                    optional_ofstream{ std::in_place, options.GetOutputFile() + ".snps", std::ios::out };
 
-            OutputHandler output_handler(varkit_output, sam_output, snp_output, 1024*512, 1024*1024*16);
+            OutputHandler output_handler(varkit_output, sam_output, snp_output, 1024*512, 1024*1024*16, 0.8);
 
             // AnchorFinder
             AnchorFinder anchor_finder(kmer_lookup);
 
             // AlignmentHandler approach
-            SimpleAlignmentHandler alignment_handler(genomes, aligner, kmer_size);
+            SimpleAlignmentHandler alignment_handler(genomes, aligner, kmer_size, options.GetAlignTop(), options.GetMaxScoreAni());
 
             Benchmark bm_classify("Run classify");
             if (options.PairedMode()) {
@@ -122,6 +125,9 @@ namespace protal {
             varkit_output.close();
             sam_output.close();
 
+            if (snp_output.has_value()) snp_output.value().close();
+
+
 
             bm_classify.PrintResults();
 
@@ -144,6 +150,9 @@ namespace protal {
         // Untangle Template options that ed to be written out specifically.
         if (options.BenchmarkAlignment()) {
             AlignmentBenchmark alignment_benchmark{};
+            if (!options.GetBenchmarkAlignmentOutputFile().empty()) {
+                alignment_benchmark.SetOutput(options.GetBenchmarkAlignmentOutputFile());
+            }
             RunWrapper(options, alignment_benchmark);
         } else {
             RunWrapper(options);
@@ -157,7 +166,7 @@ namespace protal {
     static void Test(int argc, char *argv[]) {
         string pattern = "TCTTTACTCGCGCGTTGGAGAAATACAATAGT";
         string text    = "TCTATACTGCGCGTTTGGAGAAATAAAATAGT";
-        WFA2Wrapper aligner(4, 6, 2);
+        WFA2Wrapper aligner(4, 6, 2, 0);
         AlignmentResult result;
         aligner.Alignment(pattern, text, result);
         aligner.PrintAlignment();

@@ -63,8 +63,6 @@ namespace protal::classify {
 
             while (reader(record)) {
                 // Implement logger
-
-
                 thread_statistics.reads++;
 
                 // Clear intermediate storage objects
@@ -119,6 +117,10 @@ namespace protal::classify {
                 if constexpr (benchmark_active) {
                     benchmark_global.Join(thread_core_benchmark);
                 }
+
+                std::cout << "Tail: " << alignment_handler.total_tail_alignments << std::endl;
+                std::cout << "TLen: " << alignment_handler.total_tail_length << std::endl;
+                std::cout << "rate: " << (static_cast<double>(alignment_handler.total_tail_length)/static_cast<double>(alignment_handler.total_tail_alignments)) << std::endl;
             }
         }
 

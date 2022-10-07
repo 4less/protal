@@ -124,31 +124,41 @@ namespace protal {
     class VarkitOutputHandler {
     private:
         std::ostream& m_os;
-        std::ostream& m_snp_os;
+        std::optional<std::ofstream>& m_snp_os;
         std::ostream& m_sam_os;
 
         BufferedStringOutput m_sam_output;
         BufferedOutput<ClassificationLine> m_output;
+        BufferedOutput<IOSNP> m_snp_output;
         ClassificationLine m_line;
+        IOSNPList snp_list;
         SamEntry m_sam;
         AlignmentInfo m_info;
 
+        bool m_output_snps = false;
+        double m_min_cigar_ani = 0;
     public:
         size_t alignments = 0;
 
-        VarkitOutputHandler(std::ostream& os, std::ostream& sam_os, std::ostream& snp_os, size_t varkit_buffer_capacity, size_t sam_buffer_capacity) :
+        VarkitOutputHandler(std::ostream& os, std::ostream& sam_os, std::optional<ofstream>& snp_os, size_t varkit_buffer_capacity, size_t sam_buffer_capacity, double min_cigar_ani=0.0f) :
                 m_os(os),
                 m_sam_os(sam_os),
                 m_snp_os(snp_os),
                 m_output(varkit_buffer_capacity),
-                m_sam_output(sam_buffer_capacity) {}
+                m_snp_output(varkit_buffer_capacity),
+                m_sam_output(sam_buffer_capacity),
+                m_output_snps(snp_os.has_value()),
+                m_min_cigar_ani(min_cigar_ani) {}
 
         VarkitOutputHandler(VarkitOutputHandler const& other) :
                 m_os(other.m_os),
                 m_sam_os(other.m_sam_os),
                 m_snp_os(other.m_snp_os),
                 m_output(other.m_output.Capacity()),
-                m_sam_output(other.m_sam_output.Capacity()) {}
+                m_snp_output(other.m_snp_output.Capacity()),
+                m_sam_output(other.m_sam_output.Capacity()),
+                m_output_snps(other.m_output_snps),
+                m_min_cigar_ani(other.m_min_cigar_ani) {}
 
         ~VarkitOutputHandler() {
 #pragma omp critical(varkit_output)
@@ -160,36 +170,27 @@ namespace protal {
 
         void operator () (AlignmentResultList& alignment_results, FastxRecord& record) {
             if (alignment_results.empty()) return;
+            bool multiple_best = alignment_results.size() > 1 && alignment_results[0].AlignmentScore() == alignment_results[1].AlignmentScore();
 
-            int best_score = alignment_results[0].AlignmentScore();
-            size_t best_score_idx = 0;
-            size_t best_score_occurences = 0;
-
-            for (auto i = 1; i < alignment_results.size(); i++) {
-                auto& result = alignment_results[i];
-                if (result.AlignmentScore() == best_score) {
-                    best_score_occurences++;
-                }
-                if (result.AlignmentScore() < best_score) {
-                    best_score_occurences = 1;
-                    best_score = result.AlignmentScore();
-                    best_score_idx = i;
-                }
-            }
-
-            if (best_score_occurences > 1) {
+            if (multiple_best) {
                 return;
             }
 
             m_line.Reset();
+            snp_list.clear();
 
-            auto& best = alignment_results[best_score_idx];
+            auto& best = alignment_results.front();
+
+            if (WFA2Wrapper::CigarANI(best.Cigar()) < m_min_cigar_ani) {
+                return;
+            }
 
             WFA2Wrapper::GetAlignmentInfo(m_info, best.Cigar());
 
             ToClassificationLine(m_line, best.Taxid(), best.GeneId(), best.GenePos() + m_info.alignment_start, m_info.alignment_length, 1, m_info.alignment_ani);
 
 
+            //Todo put snps in output list
 
             m_sam.m_qname = record.id;
             m_sam.m_flag = 0;
@@ -213,6 +214,23 @@ namespace protal {
             if (!m_sam_output.Write(m_sam.ToString())) {
 #pragma omp critical(sam_output)
                 m_sam_output.Write(m_sam_os);
+            }
+
+            if (m_output_snps) {
+//                std::cout << "\n----\n" << record.id << std::endl;
+//                std::cout << record.sequence << std::endl;
+//                std::cout << best.Cigar() << std::endl;
+//                std::cout << "CigarANI: " << WFA2Wrapper::CigarANI(best.Cigar()) << std::endl;
+                ExtractIOSNPs(snp_list, best.Cigar(), record.sequence, record.quality, record.sequence,
+                              0, best.Taxid(), best.GeneId(), best.GenePos(), 1, 1);
+                for (auto& snp : snp_list) {
+//                    std::cout << snp.ToString() << " " << snp.snp_position-best.GenePos() << ":" << record.sequence[snp.snp_position-best.GenePos()] << std::endl;
+                    if (!m_snp_output.Write(snp)) {
+#pragma omp critical(snp_output)
+                        m_snp_output.Write(m_snp_os.value());
+                    }
+                }
+//                Utils::Input();
             }
         }
     };

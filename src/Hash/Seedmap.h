@@ -114,8 +114,8 @@ namespace protal {
 
         // This variable defines how many keys are managed by one control block
         // Must be power of two
-        size_t ctrl_block_frequency = 16; // Version 1
-//        size_t ctrl_block_frequency = 8; // Version 2
+//        size_t ctrl_block_frequency = 16; // Version 1
+        size_t ctrl_block_frequency = 8; // Version 2
 
         // bitshift to find which control block a key is in.
         size_t ctrl_block_frequency_bitshift = log2(ctrl_block_frequency);

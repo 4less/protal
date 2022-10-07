@@ -22,7 +22,21 @@ namespace protal {
 
         size_t m_anchor_fp_no_hit = 0;
 
+        std::ostream* os = &std::cout;
+        std::ofstream* ofs = nullptr;
+
     public:
+        ~CoreBenchmark() {
+//            if (ofs) {
+//                ofs->close();
+//                delete ofs;
+//            }
+        }
+
+        void SetOutput(std::string const& output_file) {
+            ofs = new ofstream(output_file, std::ios::app);
+        }
+
         static std::pair<uint32_t, uint32_t> HeaderToTruth(std::string const& header) {
             if (header.empty()) {
                 std::cerr << "Tried to extract taxonomic id and gene id from empty header" << std::endl;
@@ -55,27 +69,33 @@ namespace protal {
         }
 
         void AddSeeds(SeedList const& seeds, size_t true_taxid, size_t true_geneid) {
+            bool found = false;
             for (auto& seed : seeds) {
                 if (seed.taxid == true_taxid && seed.geneid == true_geneid) {
                     m_seed_bce.tp++;
-                    return;
+                    found = true;
+                } else {
+                    m_seed_bce.fp++;
                 }
             }
 
-            m_seed_bce.fn++;
+            m_seed_bce.fn += !found;
         };
 
         void AddAnchors(AlignmentAnchorList const& anchors, size_t true_taxid, size_t true_geneid) {
+            bool found = false;
             for (auto& anchor : anchors) {
                 if (anchor.a.taxid == true_taxid && anchor.a.geneid == true_geneid) {
                     m_anchor_bce.tp++;
-                    return;
+                    found = true;
+                } else {
+                    m_anchor_bce.fp++;
                 }
             }
 
             m_anchor_fp_no_hit += anchors.empty();
 
-            m_anchor_bce.fn++;
+            m_anchor_bce.fn += !found;
         };
 
         void AddAlignmentResults(AlignmentResultList const& alignments, size_t true_taxid, size_t true_geneid) {
@@ -91,6 +111,7 @@ namespace protal {
                 m_best_alignment_bce.tp++;
             } else {
                 m_best_alignment_bce.fp++;
+                m_best_alignment_bce.fn++;
             }
 
             if (alignments.size() == 1 || (alignments.size() > 1 && alignments[1].AlignmentScore() < best_alignment.AlignmentScore())) {
@@ -99,15 +120,20 @@ namespace protal {
                     m_best_unique_alignment_bce.tp++;
                 } else {
                     m_best_unique_alignment_bce.fp++;
+                    m_best_unique_alignment_bce.fn++;
                 }
             }
 
+            bool found = false;
             for (auto& alignment : alignments) {
                 if (alignment.Taxid() == true_taxid && alignment.GeneId() == true_geneid) {
                     m_alignment_bce.tp++;
-                    break;
+                    found = true;
+                } else {
+                    m_alignment_bce.fp++;
                 }
             }
+            m_alignment_bce.fn += !found;
         };
 
         void AddBestAlignmentResult(AlignmentResult& alignment, size_t true_taxid, size_t true_geneid) {

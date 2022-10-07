@@ -29,6 +29,7 @@ add_library(protal_lib
         Hash/SeedmapFlex.h
         Hash/KmerPutter.h
         Hash/KmerLookup.h
+        Profiling/Profiler.h
         SequenceUtils/GenomeLoader.h
         IO/AlignmentOutputHandler.h
         Alignment/WFA2Wrapper.h
@@ -89,6 +90,7 @@ target_link_directories(protal_lib
         VarkitInterface/
         Alignment/
         Utils/
+        Profiling/
         SequenceUtils/)
 
 target_include_directories(protal_lib
@@ -100,6 +102,7 @@ target_include_directories(protal_lib
         VarkitInterface/
         Alignment/
         Utils/
+        Profiling/
         SequenceUtils/)
 
 

@@ -93,6 +93,62 @@ namespace protal {
 
     };
 
+    struct IOSNP {
+        size_t read_id = 0;
+        uint32_t tax_id = 0;
+        uint32_t gene_id = 0;
+        uint32_t snp_position = 0;
+        uint8_t snp_quality = 0;
+        char snp_base = 'X';
+        uint8_t read_num = false;
+
+        IOSNP() {};
+
+        IOSNP (size_t read_id, uint32_t tax_id, uint32_t gene_id, uint32_t snp_position, char snp_quality, char snp_base, uint8_t read_num):
+                read_id(read_id),
+                tax_id(tax_id),
+                gene_id(gene_id),
+                snp_position(snp_position),
+                snp_quality(snp_quality),
+                snp_base(snp_base),
+                read_num(read_num) {}
+
+        std::string Header() {
+            return "read_id\ttaxonomic_id\tgene_id\tsnp_position\tsnp_quality\tsnp_base\tfirst_read";
+        }
+
+        static inline IOSNP FromLine(std::string &line) {
+            auto snp = IOSNP();
+            int start = 0;
+            int stop = 0;
+
+            while (++stop != '\t');
+            snp.read_id = std::stoull(line.substr(start, stop - start));
+            start = stop + 1;
+            while (++stop != '\t');
+            snp.tax_id = std::stoul(line.substr(start, stop - start));
+            start = stop + 1;
+            while (++stop != '\t');
+            snp.gene_id = std::stoul(line.substr(start, stop - start));
+            start = stop + 1;
+            while (++stop != '\t');
+            snp.snp_position = std::stoul(line.substr(start, stop - start));
+            start = stop + 1;
+            while (++stop != '\t');
+            snp.snp_quality = std::stoul(line.substr(start, stop - start));
+            start = stop + 1;
+            snp.snp_base = std::stoul(line.substr(start, stop - start));
+            start = stop + 1;
+            snp.read_num = (uint8_t) std::stoul(line.substr(start, stop - start));
+
+            return snp;
+        }
+
+        std::string ToString() const {
+            return std::to_string(read_id) + "\t" + std::to_string(tax_id) + "\t" + std::to_string(gene_id) + "\t" + std::to_string(snp_position) + '\t' + std::to_string((int) snp_quality) + '\t' + snp_base + '\t' + std::to_string(int(read_num));
+        }
+    };
+    using IOSNPList = std::vector<IOSNP>;
     /**
      * Mandatory fields used by varkits Profiler:
      * - taxid
@@ -113,4 +169,23 @@ namespace protal {
         line.total_hits_best = total_hits_best;
     }
 
+    static void ExtractIOSNPs(IOSNPList &snp_list, std::string &cigar, std::string &sequence, std::string &quality, std::string &genome, size_t genome_aln_start, size_t taxid, size_t geneid, size_t genepos, size_t read_num, bool reverse) {
+        auto rpos = 0;
+        auto qpos = 0;
+        for (auto cpos = 0; cpos < cigar.length(); cpos++) {
+            auto c = cigar[cpos];
+            if (c == 'X') {
+                snp_list.emplace_back(
+                        IOSNP(read_num,
+                              taxid, geneid,
+                              genepos + rpos,
+                              quality[qpos],
+                              sequence[rpos],
+                              reverse));
+            }
+            rpos += (c != 'I');
+            qpos += (c != 'D');
+//            std::cout << snp_list.back().ToString() << std::endl;
+        }
+    }
 }

@@ -77,6 +77,10 @@ public:
   AlignmentStatus alignEnd2End(
       std::string& pattern,
       std::string& text);
+  // Added to wrapper for string_view support
+  AlignmentStatus alignEnd2End(
+      std::string_view pattern,
+      std::string_view text);
   // Align Ends-free
   AlignmentStatus alignEndsFreeLambda(
       const int patternLength,
@@ -142,12 +146,12 @@ public:
   void setMinOffsetsPerThread(
       const int minOffsetsPerThread);
   // Accessors
-  int getAlignmentScore();
+  int getAlignmentScore() const;
   int getAlignmentStatus();
   void getAlignmentCigar(
       char** const cigarOperations,
-      int* cigarLength);
-  std::string getAlignmentCigar();
+      int* cigarLength) const;
+  std::string getAlignmentCigar() const;
   // Misc
   char* strError(
       const int wfErrorCode);

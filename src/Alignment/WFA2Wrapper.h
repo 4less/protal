@@ -34,15 +34,18 @@ namespace protal {
         int m_mismatch;
         int m_gap_opening;
         int m_gap_extension;
+        size_t m_x_drop;
 
         std::string seq1;
         std::string seq2;
 
+        WFAligner::AlignmentStatus m_status;
     public:
-        WFA2Wrapper(int mismatch, int gap_opening, int gap_extension) :
+        WFA2Wrapper(int mismatch, int gap_opening, int gap_extension, size_t x_drop) :
                 m_mismatch(mismatch),
                 m_gap_opening(gap_opening),
                 m_gap_extension(gap_extension),
+                m_x_drop(x_drop),
                 m_aligner(mismatch, gap_opening, gap_extension, WFAligner::Alignment, WFAligner::MemoryHigh) {
         }
 
@@ -50,11 +53,13 @@ namespace protal {
                 m_mismatch(other.m_mismatch),
                 m_gap_opening(other.m_gap_opening),
                 m_gap_extension(other.m_gap_extension),
+                m_x_drop(other.m_x_drop),
                 m_aligner(other.m_mismatch, other.m_gap_opening, other.m_gap_extension, WFAligner::Alignment,
                           WFAligner::MemoryHigh) {
         };
 
         static double CigarANI(std::string cigar) {
+            if (cigar.empty()) return 0;
             size_t matches = std::count_if(cigar.begin(), cigar.end(), [](char const &c) {
                 return c == 'M';
             });
@@ -148,16 +153,39 @@ namespace protal {
             return m_aligner.getAlignmentCigar();
         }
 
+        bool Success() {
+            return m_status == WFAligner::AlignmentStatus::StatusSuccessful;
+        }
+
         void Alignment(std::string query, std::string ref, AlignmentResult &result) {
             this->seq1 = query;
             this->seq2 = ref;
-            m_aligner.alignEnd2End(seq1, seq2);
+            m_status = m_aligner.alignEnd2End(seq1, seq2);
         }
 
         void Alignment(std::string query, std::string ref) {
             this->seq1 = query;
             this->seq2 = ref;
-            m_aligner.alignEnd2End(seq1, seq2);
+            m_status = m_aligner.alignEnd2End(seq1, seq2);
+        }
+
+        void Alignment1(std::string_view query, std::string_view ref) {
+//            this->seq1 = query;
+            this->seq2 = ref;
+            m_status = m_aligner.alignEnd2End(query, ref);
+            std::cout << "QUERY " << std::endl;
+            std::cout << query << std::endl;
+            std::cout << std::string(query.data(), query.length()) << std::endl;
+            std::cout << "QUERY " << std::endl;
+        }
+
+        void Alignment(std::string_view query, std::string_view ref, double ani_threshold=0.9) {
+//            size_t max_score = query.length() * (1-ani_threshold) * 4;
+//            std::cout << "max_score: " << max_score << std::endl;
+//            m_aligner.setMaxAlignmentScore(max_score);
+//            m_aligner.alignEnd2End(query, ref);
+
+            m_aligner.alignEnd2End(std::string(query), std::string(ref));
         }
 
         void PrintCigar(std::ostream &os = std::cout) {
@@ -171,6 +199,14 @@ namespace protal {
 
         WFAlignerGapAffine &GetAligner() {
             return m_aligner;
+        }
+
+        int GetAlignmentScore() const {
+            return m_aligner.getAlignmentScore();
+        }
+
+        std::string GetAlignmentCigar() const {
+            return m_aligner.getAlignmentCigar();
         }
 
         void PrintAlignment(std::ostream &os = std::cout) {
