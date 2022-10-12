@@ -26,7 +26,6 @@ namespace protal {
     using GeneMap = tsl::sparse_map<uint32_t, Gene>;
     using TaxonMap = tsl::sparse_map<uint32_t, Taxon>;
 
-
     // Data structures
 
     class Gene {
@@ -48,6 +47,9 @@ namespace protal {
                 m_genes[geneid] = Gene{};
             }
             m_genes[geneid].AddRead(genepos);
+        }
+        size_t GeneNum() {
+            return m_genes.size();
         }
     };
 

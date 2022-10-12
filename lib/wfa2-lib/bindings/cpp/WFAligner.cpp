@@ -261,6 +261,11 @@ void WFAligner::cigarPrintPretty(FILE* const stream, std::string const& seq1, st
                        wfAligner->cigar, wfAligner->mm_allocator);
 }
 
+
+void WFAligner::cigarPrintPretty(FILE* const stream, std::string_view seq1, std::string_view seq2) {
+    cigar_print_pretty(stream, seq1.data(), seq1.size(), seq2.data(), seq2.size(),
+                       wfAligner->cigar, wfAligner->mm_allocator);
+}
 /*
  * Misc
  */

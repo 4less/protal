@@ -7,6 +7,17 @@
 #include "KmerLookup.h"
 
 namespace protal {
+    using Seed = LookupResult;
+    using SeedList = std::vector<Seed>;
+    using SeedIterator = SeedList::iterator;
+    using SeedListSet = std::vector<SeedList>;
+    using SeedListSetIterators = std::vector<SeedIterator>;
+
+    struct AdvancedAlignmentAnchor {
+        SeedList m_seeds;
+        bool forward;
+    };
+
     struct AlignmentAnchor {
         LookupResult a;
         LookupResult b;
@@ -18,11 +29,6 @@ namespace protal {
                 a(a), b(b), hit_anchor_count(hit_anchor_count) {};
     };
 
-    using Seed = LookupResult;
-    using SeedList = std::vector<Seed>;
-    using SeedIterator = SeedList::iterator;
-    using SeedListSet = std::vector<SeedList>;
-    using SeedListSetIterators = std::vector<SeedIterator>;
     using Anchor = AlignmentAnchor;
 //    using AnchorList = std::vector<Anchor>;
     using AnchorList = std::vector<std::pair<LookupResult, LookupResult>>;

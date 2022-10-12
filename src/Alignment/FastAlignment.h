@@ -39,7 +39,7 @@ namespace protal {
             return std::min(a/12.0f, b/12.0f);
         }
 
-        static std::pair<int, std::string> FastAlign(std::string_view a, std::string_view b, size_t mismatch_penalty = 4) {
+        static std::pair<int, std::string> FastAlign(std::string_view a, std::string_view b, size_t mismatch_penalty = 4) noexcept {
             std::string cigar = "";
             double matches = 0;
             int alignment_score = 0;

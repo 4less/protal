@@ -22,19 +22,23 @@ namespace protal {
 
         size_t m_anchor_fp_no_hit = 0;
 
-        std::ostream* os = &std::cout;
         std::ofstream* ofs = nullptr;
 
     public:
-        ~CoreBenchmark() {
-//            if (ofs) {
-//                ofs->close();
-//                delete ofs;
-//            }
-        }
+        CoreBenchmark() {};
+
+        CoreBenchmark(CoreBenchmark const& other) :
+                ofs(other.ofs) {};
 
         void SetOutput(std::string const& output_file) {
             ofs = new ofstream(output_file, std::ios::app);
+        }
+
+        void DestroyOutput() {
+            if (ofs) {
+                if (ofs->is_open()) ofs->close();
+                delete ofs;
+            }
         }
 
         static std::pair<uint32_t, uint32_t> HeaderToTruth(std::string const& header) {
@@ -166,13 +170,24 @@ namespace protal {
 
         }
 
-        void WriteRowStats() {
-            m_seed_bce.WriteRowHeader();
-            m_seed_bce.WriteRowStats();
-            m_anchor_bce.WriteRowStats();
-            m_alignment_bce.WriteRowStats();
-            m_best_alignment_bce.WriteRowStats();
-            m_best_unique_alignment_bce.WriteRowStats();
+        void WriteRowStats(std::string prefix="") {
+            m_seed_bce.WriteRowHeader(std::cout, prefix);
+            m_seed_bce.WriteRowStats(std::cout, prefix);
+            m_anchor_bce.WriteRowStats(std::cout, prefix);
+            m_alignment_bce.WriteRowStats(std::cout, prefix);
+            m_best_alignment_bce.WriteRowStats(std::cout, prefix);
+            m_best_unique_alignment_bce.WriteRowStats(std::cout, prefix);
+
+            if (ofs) {
+                if (ofs->tellp() == 0) {
+                    m_seed_bce.WriteRowHeader(*ofs, prefix);
+                }
+                m_seed_bce.WriteRowStats(*ofs, prefix);
+                m_anchor_bce.WriteRowStats(*ofs, prefix);
+                m_alignment_bce.WriteRowStats(*ofs, prefix);
+                m_best_alignment_bce.WriteRowStats(*ofs, prefix);
+                m_best_unique_alignment_bce.WriteRowStats(*ofs, prefix);
+            }
         }
 
         void Print() {

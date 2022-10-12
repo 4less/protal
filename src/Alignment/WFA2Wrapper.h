@@ -36,8 +36,8 @@ namespace protal {
         int m_gap_extension;
         size_t m_x_drop;
 
-        std::string seq1;
-        std::string seq2;
+        std::string_view seq1;
+        std::string_view seq2;
 
         WFAligner::AlignmentStatus m_status;
     public:
@@ -158,34 +158,20 @@ namespace protal {
         }
 
         void Alignment(std::string query, std::string ref, AlignmentResult &result) {
-            this->seq1 = query;
-            this->seq2 = ref;
-            m_status = m_aligner.alignEnd2End(seq1, seq2);
+            m_aligner.setMaxAlignmentScore(INT32_MAX);
+            m_status = m_aligner.alignEnd2End(query, ref);
         }
 
         void Alignment(std::string query, std::string ref) {
-            this->seq1 = query;
-            this->seq2 = ref;
-            m_status = m_aligner.alignEnd2End(seq1, seq2);
-        }
-
-        void Alignment1(std::string_view query, std::string_view ref) {
-//            this->seq1 = query;
-            this->seq2 = ref;
+            m_aligner.setMaxAlignmentScore(INT32_MAX);
             m_status = m_aligner.alignEnd2End(query, ref);
-            std::cout << "QUERY " << std::endl;
-            std::cout << query << std::endl;
-            std::cout << std::string(query.data(), query.length()) << std::endl;
-            std::cout << "QUERY " << std::endl;
         }
 
-        void Alignment(std::string_view query, std::string_view ref, double ani_threshold=0.9) {
-//            size_t max_score = query.length() * (1-ani_threshold) * 4;
-//            std::cout << "max_score: " << max_score << std::endl;
-//            m_aligner.setMaxAlignmentScore(max_score);
-//            m_aligner.alignEnd2End(query, ref);
-
-            m_aligner.alignEnd2End(std::string(query), std::string(ref));
+        void Alignment(std::string_view query, std::string_view ref, int max_score=INT32_MAX) {
+            seq1 = query;
+            seq2 = ref;;
+            m_aligner.setMaxAlignmentScore(max_score);
+            m_status = m_aligner.alignEnd2End(query, ref);
         }
 
         void PrintCigar(std::ostream &os = std::cout) {
@@ -214,6 +200,9 @@ namespace protal {
             PrintAlignmentScore();
             std::cout << seq1 << std::endl;
             std::cout << seq2 << std::endl;
+            if (seq1.empty() || seq2.empty()) {
+                std::cerr << "seq1 or seq2 not initialized (string_view in WFA2Wrapper)";
+            }
 
             m_aligner.cigarPrintPretty(stdout, seq1, seq2);
         }

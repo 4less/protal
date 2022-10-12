@@ -32,6 +32,7 @@ namespace protal {
                 ("2,second", "Comma separated list of reads. must have <-1/--first> specified.", cxxopts::value<std::string>()->default_value(""))
                 ("3,output", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names.", cxxopts::value<std::string>()->default_value(""))
                 ("h,help", "Print help.")
+                ("f,fastalign", "Speed up alignment by allowing approximate alignment between seeds with no indication for indels.")
                 ("n,no_strains", "Stray on species level. Do not output SNPs")
                 ("0,benchmark_alignment", "Benchmark alignment part of protal based on true taxonomic id and gene id supplied in the read header. Header must fulfill the formatting >taxid_geneid... with the regex: >[0-9]+_[0-9]+([^0-9]+.*)*")
                 ("9,benchmark_alignment_output", "Benchmark alignment output. Output is appended to the file.", cxxopts::value<std::string>())
@@ -53,6 +54,7 @@ namespace protal {
         bool m_benchmark_alignment = false;
         bool m_show_help = false;
         bool m_no_strains = false;
+        bool m_fastalign = false;
 
         std::string m_sequence_file;
         std::string m_database_path;
@@ -75,8 +77,8 @@ namespace protal {
         Options(bool build, bool no_strains, bool preload_genomes, bool benchmark_alignment,
                 std::string benchmark_alignment_output, bool show_help, std::string first,
                 std::string second, std::string database_path, std::string output_file,
-                std::string sequence_file, size_t threads, size_t align_top, size_t max_score_ani,
-                size_t x_drop
+                std::string sequence_file, size_t threads, size_t align_top, double max_score_ani,
+                size_t x_drop, bool fastalign
                 ) :
             m_build(build),
             m_no_strains(no_strains),
@@ -91,6 +93,7 @@ namespace protal {
             m_align_top(align_top),
             m_max_score_ani(max_score_ani),
             m_x_drop(x_drop),
+            m_fastalign(fastalign),
             m_benchmark_alignment(benchmark_alignment),
             m_benchmark_alignment_output(benchmark_alignment_output) {};
 
@@ -109,11 +112,10 @@ namespace protal {
             result_str += "output file:         " + m_output_file + '\n';
             result_str += "preload genomes:     " + std::to_string(m_preload_genomes) + '\n';
             result_str += "----- Alignment -----" + std::string(30, '-') + '\n';
-            result_str += "align top:       " + std::to_string(m_align_top) + '\n';
+            result_str += "align top:           " + std::to_string(m_align_top) + '\n';
             result_str += "max score ani:       " + std::to_string(m_max_score_ani) + '\n';
             result_str += "x_drop:              " + std::to_string(m_x_drop) + '\n';
-//            result_str += "seed num:        " + std::to_string(m_seed_num) + '\n';
-//            result_str += "advance by:      " + std::to_string(m_advance_by) + '\n';
+            result_str += "fastalign:           " + std::to_string(m_fastalign) + '\n';
             result_str += "---- Dev Options ----" + std::string(30, '-') + '\n';
             result_str += "benchmark alignment: " + std::to_string(m_benchmark_alignment) + '\n';
             result_str += "^ output:            " + m_benchmark_alignment_output + '\n';
@@ -139,6 +141,10 @@ namespace protal {
 
         bool BenchmarkAlignment() const {
             return m_benchmark_alignment;
+        }
+
+        bool FastAlign() const {
+            return m_fastalign;
         }
 
         std::string GetSequenceFilePath() const {
@@ -217,11 +223,13 @@ namespace protal {
             bool build = result.count("build");
             bool preload_genomes = result.count("preload_genomes");
             bool benchmark_alignment = result.count("benchmark_alignment");
+            bool fastalign = result.count("fastalign");
 
             size_t threads = result["threads"].as<size_t>();
             size_t align_top = result["align_top"].as<size_t>();
             size_t x_drop = result["x_drop"].as<size_t>();
             double max_score_ani = result["max_score_ani"].as<double>();
+
 
             auto reference = result["reference"].as<std::string>();
 
@@ -259,7 +267,8 @@ namespace protal {
                     threads,
                     align_top,
                     max_score_ani,
-                    x_drop);
+                    x_drop,
+                    fastalign);
         }
     };
 

@@ -60,8 +60,8 @@ struct BinaryClassifierEvaluator {
         os << "F1:         \t\t" << F1() << std::endl;
     }
 
-    static void WriteRowHeader(std::ostream &os=std::cout, std::string name_col="Name") {
-        os << name_col << "\tTP\tFP\tTN\tFN\tSensitivity\tSpecificity\tPrecision\tAccuracy\tF1" << std::endl;
+    static void WriteRowHeader(std::ostream &os=std::cout, std::string row_prefix="") {
+        os << row_prefix << "Name\tTP\tFP\tTN\tFN\tSensitivity\tSpecificity\tPrecision\tAccuracy\tF1" << std::endl;
     }
 
     void Join(BinaryClassifierEvaluator const& other) {
@@ -71,7 +71,8 @@ struct BinaryClassifierEvaluator {
         this->fn += other.fn;
     }
 
-    void WriteRowStats(std::ostream &os=std::cout) const {
+    void WriteRowStats(std::ostream &os=std::cout, std::string row_prefix="") const {
+        os << row_prefix;
         os << name << '\t';
         os << tp << '\t';
         os << fp << '\t';

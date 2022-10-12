@@ -33,6 +33,7 @@
 #define BINDINGS_CPP_WFALIGNER_HPP_
 
 #include <string>
+#include <string_view>
 
 extern "C" {
   #include "../../wavefront/wavefront_aligner.h"
@@ -159,6 +160,7 @@ public:
       const int verbose);
 
   void cigarPrintPretty(FILE* const stream, const std::string &seq1, const std::string &seq2);
+  void cigarPrintPretty(FILE *const stream, std::string_view seq1, std::string_view seq2);
 
 protected:
   wavefront_aligner_attr_t attributes;

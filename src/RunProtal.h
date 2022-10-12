@@ -77,7 +77,7 @@ namespace protal {
             AnchorFinder anchor_finder(kmer_lookup);
 
             // AlignmentHandler approach
-            SimpleAlignmentHandler alignment_handler(genomes, aligner, kmer_size, options.GetAlignTop(), options.GetMaxScoreAni());
+            SimpleAlignmentHandler alignment_handler(genomes, aligner, kmer_size, options.GetAlignTop(), options.GetMaxScoreAni(), options.FastAlign());
 
             Benchmark bm_classify("Run classify");
             if (options.PairedMode()) {
@@ -151,9 +151,13 @@ namespace protal {
         if (options.BenchmarkAlignment()) {
             AlignmentBenchmark alignment_benchmark{};
             if (!options.GetBenchmarkAlignmentOutputFile().empty()) {
+                std::cout << "Benchmark to " << options.GetBenchmarkAlignmentOutputFile() << std::endl;
                 alignment_benchmark.SetOutput(options.GetBenchmarkAlignmentOutputFile());
             }
             RunWrapper(options, alignment_benchmark);
+            if (!options.GetBenchmarkAlignmentOutputFile().empty()) {
+                alignment_benchmark.DestroyOutput();
+            }
         } else {
             RunWrapper(options);
         }
