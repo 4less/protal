@@ -43,6 +43,7 @@ namespace protal {
         size_t total_tail_alignments = 0;
         size_t total_tail_length = 0;
         Benchmark bm_alignment{ "Alignment" };
+        Benchmark bm_seedext{ "Seed Extension" };
         size_t dummy = 0;
 
 
@@ -146,6 +147,25 @@ namespace protal {
             return (std::ceil((1 - min_ani) * static_cast<double>(overlap_length)) * mismatch_penalty) + 1;
         }
 
+        void ExtendAllAnchors(AlignmentAnchorList const& anchors, std::string const& fwd, std::string const& rev) {
+            for (auto anchor : anchors) {
+                // copy anchor;
+                bool reversed = ReverseAnchor(anchor, fwd.length());
+                auto query = reversed ? rev : fwd;
+
+                // Get Resources
+                auto& genome = m_genome_loader.GetGenome(anchor.a.taxid);
+                auto& gene = genome.GetGeneOMP(anchor.a.geneid);
+
+                auto [lefta, righta] = ExtendSeed(anchor.a, m_kmer_size, query, gene.Sequence());
+                auto [leftb, rightb] = ExtendSeed(anchor.b, m_kmer_size, query, gene.Sequence());
+
+                dummy += lefta;
+                dummy += righta;
+                dummy += leftb;
+                dummy += rightb;
+            }
+        }
 
         inline std::tuple<bool, int, std::string> Align(AlignmentAnchor const& anchor, std::string const& query, std::string const& gene) {
             //                front_end_q                         back_start_q
@@ -401,6 +421,10 @@ namespace protal {
 
 
             int last_score = 0;
+
+            bm_seedext.Start();
+            ExtendAllAnchors(anchors, fwd, rev);
+            bm_seedext.Stop();
 
             for (auto& anchor : anchors) {
                 reversed = ReverseAnchor(anchor, read_len);

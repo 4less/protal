@@ -42,7 +42,9 @@ add_library(protal_lib
         IO/BufferedOutput.h
         IO/BufferedOutput.cpp
         Core/SeedingStrategy.h
+        Core/ChainingStrategy.h
         Core/AnchorFinder.h
+        Core/ChainAnchorFinder.h
         Core/AlignmentStrategy.h
         VarkitInterface/VarkitInterface.h
         Statistics.h

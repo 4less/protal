@@ -26,6 +26,7 @@ namespace protal {
     using LookupList = std::vector<LookupResult>;
     using SeedList = LookupList;
 
+
     struct AlignmentAnchor;
     using AlignmentAnchorList = std::vector<AlignmentAnchor>;
 

@@ -37,8 +37,9 @@ namespace protal {
             for (auto pair : kmer_list) {
                 auto [mmer, pos] = pair;
                 m_kmer_lookup.Get(seeds, mmer, pos);
-                if (m_all_seeds.size() != prev_size) {
-                    m_seed_size.emplace_back(std::pair<int32_t,int32_t>( pos, seeds.size() - prev_size ));
+                if (seeds.size() != prev_size) {
+                    m_sort_indices.emplace_back(seeds.size());
+//                    m_seed_size.emplace_back(std::pair<int32_t,int32_t>( pos, seeds.size() - prev_size ));
                     prev_size = seeds.size();
                 }
             }
@@ -271,6 +272,8 @@ namespace protal {
 
         SeedList m_best_seed;
         std::vector<std::pair<int32_t,int32_t>> m_seed_size;
+        std::vector<size_t> m_sort_indices;
+
 
         size_t m_k = 15;
 
@@ -283,6 +286,7 @@ namespace protal {
                 auto [mmer, pos] = pair;
                 m_kmer_lookup.Get(m_all_seeds, mmer, pos);
                 if (m_all_seeds.size() != prev_size) {
+                    m_sort_indices.emplace_back(m_all_seeds.size() - prev_size);
                     m_seed_size.emplace_back(std::pair<int32_t,int32_t>( pos, m_all_seeds.size() - prev_size ));
                     prev_size = m_all_seeds.size();
                 }

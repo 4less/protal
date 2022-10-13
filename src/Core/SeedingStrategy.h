@@ -13,11 +13,6 @@ namespace protal {
     using SeedListSet = std::vector<SeedList>;
     using SeedListSetIterators = std::vector<SeedIterator>;
 
-    struct AdvancedAlignmentAnchor {
-        SeedList m_seeds;
-        bool forward;
-    };
-
     struct AlignmentAnchor {
         LookupResult a;
         LookupResult b;
@@ -28,6 +23,7 @@ namespace protal {
         AlignmentAnchor(LookupResult&& a, LookupResult &&b, size_t hit_anchor_count) :
                 a(a), b(b), hit_anchor_count(hit_anchor_count) {};
     };
+
 
     using Anchor = AlignmentAnchor;
 //    using AnchorList = std::vector<Anchor>;

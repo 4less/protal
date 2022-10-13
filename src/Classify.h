@@ -111,6 +111,8 @@ namespace protal::classify {
 
                 bm_alignment_global.Join(bm_alignment);
                 alignment_handler_global.bm_alignment.Join(alignment_handler.bm_alignment);
+                alignment_handler_global.bm_seedext.Join(alignment_handler.bm_seedext);
+                alignment_handler_global.dummy += alignment_handler.dummy;
 
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
@@ -118,6 +120,8 @@ namespace protal::classify {
                 if constexpr (benchmark_active) {
                     benchmark_global.Join(thread_core_benchmark);
                 }
+
+
 
                 std::cout << "Tail: " << alignment_handler.total_tail_alignments << std::endl;
                 std::cout << "TLen: " << alignment_handler.total_tail_length << std::endl;
@@ -137,6 +141,8 @@ namespace protal::classify {
         anchor_finder_global.m_bm_pairing.PrintResults();
         bm_alignment_global.PrintResults();
         alignment_handler_global.bm_alignment.PrintResults();
+        alignment_handler_global.bm_seedext.PrintResults();
+        std::cout << alignment_handler_global.dummy << std::endl;
         std::cout << "----------------------------------------------------\n" << std::endl;
 
 
@@ -267,6 +273,9 @@ namespace protal::classify {
                 bm_alignment_global.Join(bm_alignment);
                 alignment_handler_global.bm_alignment.Join(alignment_handler.bm_alignment);
 
+                alignment_handler_global.bm_seedext.Join(alignment_handler.bm_seedext);
+                alignment_handler_global.dummy += alignment_handler.dummy;
+
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
 
@@ -288,6 +297,8 @@ namespace protal::classify {
         anchor_finder_global.m_bm_pairing.PrintResults();
         bm_alignment_global.PrintResults();
         alignment_handler_global.bm_alignment.PrintResults();
+        alignment_handler_global.bm_seedext.PrintResults();
+        std::cout << alignment_handler_global.dummy << std::endl;
         std::cout << "----------------------------------------------------\n" << std::endl;
 
         return statistics;
