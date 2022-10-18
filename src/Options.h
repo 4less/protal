@@ -40,7 +40,9 @@ namespace protal {
                 ("a,max_score_ani", "A max score makes an alignment stop if the alignment diverges too much. This parameter estimates the score for a given ani and is a tradeoff between speed/accuracy. [ Default: " + std::to_string(DEFAULT_MAX_SCORE_ANI) + "]", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MAX_SCORE_ANI)))
                 ("x,x_drop", "Value determines when to cut of branches in the aligment process that are unpromising. [ Default: " + std::to_string(DEFAULT_X_DROP) + "]", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_X_DROP)))
                 ("e,output_top", "After alignment, alignments are sorted by score. <output_top> specifies how many alignments should be reported starting with the highest scoring alignment.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_OUTPUT_TOP)))
-                ("p,preload_genomes", "Preload complete reference library (can be very memory intensive) instead of dynamic loading. This improves performance. [default off]")
+                ("g,preload_genomes", "Preload complete reference library (can be very memory intensive) instead of dynamic loading. This improves performance. [default off]")
+                ("p,profile", "Perform taxonomic profiling.")
+                ("q,profile_only", "Provide profile filename (.sam) and only perform profiling based on sam file.", cxxopts::value<std::string>()->default_value(""))
                 ("reference", "", cxxopts::value<std::string>()->default_value(""));
 
         return options;
@@ -50,17 +52,21 @@ namespace protal {
     class Options {
     private:
         bool m_build = false;
+        bool m_profile = false;
         bool m_preload_genomes = false;
         bool m_benchmark_alignment = false;
         bool m_show_help = false;
         bool m_no_strains = false;
         bool m_fastalign = false;
 
+
         std::string m_sequence_file;
         std::string m_database_path;
-        std::string m_output_file;
+        std::string m_output_prefix;
         std::string m_first;
         std::string m_second;
+        std::string m_profile_in;
+
         size_t m_threads = DEFAULT_THREADS;
 
         std::string m_benchmark_alignment_output;
@@ -74,20 +80,22 @@ namespace protal {
         const std::string PROTAL_SEQUENCE_MAP_FILE = "reference.map";
 
     public:
-        Options(bool build, bool no_strains, bool preload_genomes, bool benchmark_alignment,
+        Options(bool build, bool profile, bool no_strains, bool preload_genomes, bool benchmark_alignment,
                 std::string benchmark_alignment_output, bool show_help, std::string first,
-                std::string second, std::string database_path, std::string output_file,
+                std::string second, std::string database_path, std::string output_prefix,
                 std::string sequence_file, size_t threads, size_t align_top, double max_score_ani,
-                size_t x_drop, bool fastalign
+                size_t x_drop, bool fastalign, std::string profile_in
                 ) :
             m_build(build),
+            m_profile(profile),
+            m_profile_in(profile_in),
             m_no_strains(no_strains),
             m_preload_genomes(preload_genomes),
             m_show_help(show_help),
             m_first(std::move(first)),
             m_second(std::move(second)),
             m_database_path(std::move(database_path)),
-            m_output_file(std::move(output_file)),
+            m_output_prefix(std::move(output_prefix)),
             m_sequence_file(std::move(sequence_file)),
             m_threads(threads),
             m_align_top(align_top),
@@ -109,7 +117,8 @@ namespace protal {
             result_str += "second:              " + m_second + '\n';
             result_str += "db path:             " + m_database_path + '\n';
             result_str += "sequence file:       " + m_sequence_file + '\n';
-            result_str += "output file:         " + m_output_file + '\n';
+            result_str += "profile file:        " + m_profile_in + '\n';
+            result_str += "output prefix:       " + m_output_prefix + '\n';
             result_str += "preload genomes:     " + std::to_string(m_preload_genomes) + '\n';
             result_str += "----- Alignment -----" + std::string(30, '-') + '\n';
             result_str += "align top:           " + std::to_string(m_align_top) + '\n';
@@ -125,6 +134,18 @@ namespace protal {
 
         bool BuildMode() const {
             return m_build;
+        }
+
+        bool Profile() const {
+            return m_profile;
+        }
+
+        std::string ProfileFile() const {
+            return m_profile_in;
+        }
+
+        std::string& ProfileFile() {
+            return m_profile_in;
         }
 
         bool PreloadGenomes() const {
@@ -159,8 +180,8 @@ namespace protal {
             return m_database_path + "/" + PROTAL_INDEX_FILE;
         }
 
-        std::string GetOutputFile() const {
-            return m_output_file;
+        std::string GetOutputPrefix() const {
+            return m_output_prefix;
         }
 
         std::string GetSequenceFile() const {
@@ -224,6 +245,7 @@ namespace protal {
             bool preload_genomes = result.count("preload_genomes");
             bool benchmark_alignment = result.count("benchmark_alignment");
             bool fastalign = result.count("fastalign");
+            bool profile = result.count("profile");
 
             size_t threads = result["threads"].as<size_t>();
             size_t align_top = result["align_top"].as<size_t>();
@@ -236,9 +258,10 @@ namespace protal {
             auto first = result.count("first") ? result["first"].as<std::string>() : "";
             auto second = result.count("second") ? result["second"].as<std::string>() : "";
 
+            auto profile_in = result.count("profile_only") ? result["profile_only"].as<std::string>() : "";
+
             auto output_file = result.count("output_file") ? result["output_file"].as<std::string>() : "";
             auto benchmark_alignment_output_file = result.count("benchmark_alignment_output") ? result["benchmark_alignment_output"].as<std::string>() : "";
-
 
             std::string db_path;
             if (result.count("db")) {
@@ -254,6 +277,7 @@ namespace protal {
 
             return Options(
                     build,
+                    profile,
                     no_strains,
                     preload_genomes,
                     benchmark_alignment,
@@ -268,7 +292,8 @@ namespace protal {
                     align_top,
                     max_score_ani,
                     x_drop,
-                    fastalign);
+                    fastalign,
+                    profile_in);
         }
     };
 

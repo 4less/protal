@@ -57,7 +57,12 @@ public:
     }
 
     inline bool Write(T &item) {
-        assert(m_buffer_size + m_entry_size < m_buffer_capacity);
+        if (m_buffer_size >= m_buffer_capacity) {
+            std::cout << "m_buffer_size " << m_buffer_size << std::endl;
+            std::cout << "m_entry_size " << m_entry_size << std::endl;
+            std::cout << "m_buffer_capacity " << m_buffer_capacity << std::endl;
+        }
+        assert(m_buffer_size < m_buffer_capacity);
         memcpy(m_buffer + m_buffer_size, &item, m_entry_size);
         m_buffer_size++;
         return m_buffer_size < m_buffer_capacity;

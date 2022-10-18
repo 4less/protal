@@ -50,17 +50,66 @@ namespace protal {
             return OffsetPair { static_cast<int>(s.genepos) + s.readpos, static_cast<int>(s.genepos) - s.readpos };
         }
 
-        Anchor ExtractAnchor(SeedList &seeds) {
-            bool forward = seeds.front().genepos < seeds.back().genepos ? true : false;
+        static bool IsReverse(Anchor& a) {
+            return a.Front().readpos > a.Back().readpos;
+        }
+
+        static inline void ReverseSeed(Seed& seed, size_t& read_length, size_t k) {
+            seed.readpos = read_length - seed.readpos - k;
+        }
+        inline void ReverseSeedList(SeedList &seeds, size_t& read_length) {
+            for (auto& seed : seeds) {
+                ReverseSeed(seed, read_length, m_k);
+            }
+            std::reverse(seeds.begin(), seeds.end());
+        }
+
+        Anchor ExtractAnchor(SeedList &seeds, size_t read_length) {
+            bool forward = seeds.front().genepos < seeds.back().genepos;
+
+//            std::cout << "Init " << std::string(50, '-') << "fwd " << forward << std::endl;
+//            for (auto &seed: seeds) {
+//                std::cout << seed.ToString() << std::endl;
+//            }
+
+            if (!forward) {
+                ReverseSeedList(seeds, read_length);
+//                std::cout << "Reverse " << std::string(50, '-') << std::endl;
+//                for (auto &seed: seeds) {
+//                    std::cout << seed.ToString() << std::endl;
+//                }
+            }
 
             Anchor anchor(seeds.front().taxid, seeds.front().geneid, forward);
+            bool stop = false;
+            bool skip_first = true;
             for (auto& seed : seeds) {
+                if (!skip_first && (seeds.front().genepos >= seed.genepos)) {
+//                    std::cout << "Skip " << seed.ToString() << " " << (seeds.front().genepos < seed.genepos != forward) << "  detected: " << forward << std::endl;
+                    stop = true;
+                    skip_first = false;
+                    continue;
+                }
+                skip_first = false;
                 anchor.AddSeed(seed, m_k);
             }
+
+            /////////////////////////////////////////////
+//            if (stop) {
+//                std::cout << "Debug " << std::string(50, '-') << std::endl;
+//                for (auto &seed: seeds) {
+//                    std::cout << seed.ToString() << std::endl;
+//                }
+//                std::cout << " -> " << anchor.ToString() << std::endl;
+//                Utils::Input();
+//            }
+            /////////////////////////////////////////////
+
+//            std::cout << " -> " << anchor.ToString() << std::endl;
             return anchor;
         }
 
-        void FindAnchorsSingleRef(SeedList &seeds, ChainAnchorList &anchors) {
+        void FindAnchorsSingleRef(SeedList &seeds, ChainAnchorList &anchors, size_t read_length) {
             while (seeds.size() > 1) {
                 auto& init_seed = seeds[0];
                 auto init_offset = Offset(init_seed);
@@ -75,7 +124,7 @@ namespace protal {
                     }
                 }
                 if (m_seed_tmp_take.size() > 1) {
-                    anchors.emplace_back(ExtractAnchor(m_seed_tmp_take));
+                    anchors.emplace_back(ExtractAnchor(m_seed_tmp_take, read_length));
                 }
 
                 seeds.clear();
@@ -84,7 +133,7 @@ namespace protal {
             }
         }
 
-        inline void FindPairs(SeedList &seeds, ChainAnchorList &anchors) {
+        inline void FindPairs(SeedList &seeds, ChainAnchorList &anchors, size_t read_length) {
             if (seeds.empty()) return;
 
             for (auto i = 0; i < seeds.size()-1; i++) {
@@ -101,7 +150,7 @@ namespace protal {
                     m_seed_tmp.insert(m_seed_tmp.end(),
                                       std::make_move_iterator(start_it),
                                       std::make_move_iterator(end_it));
-                    FindAnchorsSingleRef(m_seed_tmp, anchors);
+                    FindAnchorsSingleRef(m_seed_tmp, anchors, read_length);
                     i += group_size - 1;
                 }
             }
@@ -119,8 +168,9 @@ namespace protal {
     public:
         size_t dummy = 0;
         Benchmark m_bm_seeding{"Seeding"};
-        Benchmark m_bm_processing{"Process Seeds"};
+        Benchmark m_bm_processing{"Sorting Seeds"};
         Benchmark m_bm_pairing{"Pairing"};
+        Benchmark m_bm_sorting_anchors{"Sorting Anchors"};
 
         ChainAnchorFinder(KmerLookup& lookup) :
                 m_kmer_lookup(lookup) {
@@ -129,7 +179,7 @@ namespace protal {
         ChainAnchorFinder(ChainAnchorFinder const& other) :
                 m_kmer_lookup(other.m_kmer_lookup) {};
 
-        void operator () (KmerList& kmer_list, SeedList& seeds, ChainAnchorList& anchors) {
+        void operator () (KmerList& kmer_list, SeedList& seeds, ChainAnchorList& anchors, size_t read_length) {
             m_bm_seeding.Start();
             FindSeeds(kmer_list, seeds);
             m_bm_seeding.Stop();
@@ -139,8 +189,15 @@ namespace protal {
             m_bm_processing.Stop();
 
             m_bm_pairing.Start();
-            FindPairs(seeds, anchors);
+            FindPairs(seeds, anchors, read_length);
             m_bm_pairing.Stop();
+
+            m_bm_sorting_anchors.Start();
+            std::sort(anchors.begin(), anchors.end() ,
+                      [](Anchor const& a, Anchor const& b) {
+                return a.total_length > b.total_length;
+            });
+            m_bm_sorting_anchors.Stop();
         }
     };
 

@@ -7,9 +7,10 @@
 #include <vector>
 #include "BinaryClassifierEvaluator.h"
 
-#include "SeedingStrategy.h"
+//#include "SeedingStrategy.h"
 #include "AlignmentOutputHandler.h"
 #include "Constants.h"
+#include "ChainingStrategy.h"
 
 namespace protal {
     using BCE = BinaryClassifierEvaluator;
@@ -89,7 +90,7 @@ namespace protal {
         void AddAnchors(AlignmentAnchorList const& anchors, size_t true_taxid, size_t true_geneid) {
             bool found = false;
             for (auto& anchor : anchors) {
-                if (anchor.a.taxid == true_taxid && anchor.a.geneid == true_geneid) {
+                if (anchor.taxid == true_taxid && anchor.geneid == true_geneid) {
                     m_anchor_bce.tp++;
                     found = true;
                 } else {

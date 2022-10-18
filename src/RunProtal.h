@@ -10,10 +10,11 @@
 #include "Build.h"
 #include "Alignment/WFA2Wrapper.h"
 #include "Classify.h"
-#include "KmerProcessor.h"
-#include "AnchorFinder.h"
+#include "ChainAnchorFinder.h"
+//#include "AnchorFinder.h"
 #include "AlignmentStrategy.h"
 #include "gzstream/gzstream.h"
+#include "Profiler.h"
 
 namespace protal {
     template<typename AlignmentBenchmark=NoBenchmark>
@@ -59,17 +60,18 @@ namespace protal {
 
 //            using AnchorFinder = SimpleAnchorFinder<KmerLookupSM>;
 //            using AnchorFinder = HashMapAnchorFinder<KmerLookupSM>;
-            using AnchorFinder = ListAnchorFinder<KmerLookupSM>;
+//            using AnchorFinder = ListAnchorFinder<KmerLookupSM>;
+            using AnchorFinder = ChainAnchorFinder<KmerLookupSM>;
 //            using AnchorFinder = NaiveAnchorFinder<KmerLookupSM>;
 
             using OutputHandler = VarkitOutputHandler;
 
             using optional_ofstream = std::optional<std::ofstream>;
-            std::ofstream varkit_output(options.GetOutputFile(), std::ios::binary);
-            std::ofstream sam_output(options.GetOutputFile() + ".sam", std::ios::out);
+            std::ofstream varkit_output(options.GetOutputPrefix() + ".tsv", std::ios::binary);
+            std::ofstream sam_output(options.GetOutputPrefix() + ".sam", std::ios::out);
             optional_ofstream snp_output =
                     options.NoStrains() ? optional_ofstream{} :
-                    optional_ofstream{ std::in_place, options.GetOutputFile() + ".snps", std::ios::out };
+                    optional_ofstream{ std::in_place, options.GetOutputPrefix() + ".snps", std::ios::out };
 
             OutputHandler output_handler(varkit_output, sam_output, snp_output, 1024*512, 1024*1024*16, 0.8);
 
@@ -147,6 +149,10 @@ namespace protal {
             exit(0);
         }
 
+        if (!options.ProfileFile().empty()) {
+            goto Profile;
+        }
+
         // Untangle Template options that ed to be written out specifically.
         if (options.BenchmarkAlignment()) {
             AlignmentBenchmark alignment_benchmark{};
@@ -161,6 +167,15 @@ namespace protal {
         } else {
             RunWrapper(options);
         }
+
+        if (options.Profile()) {
+            Profile:
+
+            profiler::Profiler profiler;
+
+            profiler.FromSam(options.ProfileFile());
+        }
+
 
         bm_total.PrintResults();
     }

@@ -7,6 +7,8 @@
 #include "Seedmap.h"
 #include "Constants.h"
 #include "SeedingStrategy.h"
+#include "Benchmark.h"
+#include "sparse_map.h"
 
 namespace protal {
 
@@ -111,7 +113,7 @@ namespace protal {
             return OffsetPair { static_cast<int>(s.genepos) + s.readpos, static_cast<int>(s.genepos) - s.readpos };
         }
 
-        Anchor ExtractAnchor(SeedList &seeds) {
+        AlignmentAnchor ExtractAnchor(SeedList &seeds) {
             auto& first = seeds.front();
             auto& second = seeds.back();
             size_t base_cov = AnchorBaseCoverage(m_k, seeds);

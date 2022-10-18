@@ -25,7 +25,7 @@ namespace protal {
     };
 
 
-    using Anchor = AlignmentAnchor;
+    using Anchor = CAlignmentAnchor;
 //    using AnchorList = std::vector<Anchor>;
     using AnchorList = std::vector<std::pair<LookupResult, LookupResult>>;
 

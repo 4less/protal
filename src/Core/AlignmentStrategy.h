@@ -8,6 +8,7 @@
 #include "AlignmentOutputHandler.h"
 #include "GenomeLoader.h"
 #include "SeedingStrategy.h"
+#include "ChainingStrategy.h"
 #include "KmerUtils.h"
 #include "FastAlignment.h"
 
@@ -31,6 +32,10 @@ namespace protal {
 
         inline void ReverseAnchorReadPos(LookupResult& anchor, size_t& read_length) {
             anchor.readpos = read_length - anchor.readpos - m_kmer_size;
+        }
+
+        inline void ReverseAnchorReadPos(ChainLink& seed, size_t& read_length) {
+            seed.readpos = read_length - seed.readpos - seed.length;
         }
 
         inline void ReverseAnchorPairReadPos(LookupResult& anchor_a, LookupResult& anchor_b, size_t& read_length) {
@@ -74,11 +79,20 @@ namespace protal {
             return reversed;
         }
 
-        inline int SeedIndel(AlignmentAnchor& anchor) {
-            int rpos_diff = static_cast<int>(anchor.b.readpos) - static_cast<int>(anchor.a.readpos);
-            int gpos_diff = static_cast<int>(anchor.b.genepos) - static_cast<int>(anchor.a.genepos);
+        inline void ReverseAnchor(CAlignmentAnchor& anchor, size_t read_len) {
+            for (auto& chainlink : anchor.chain) {
+                ReverseAnchorReadPos(chainlink, read_len);
+            }
+            std::reverse(anchor.chain.begin(), anchor.chain.end());
+        }
+
+        inline int SeedIndel(CAlignmentAnchor& anchor) {
+            if (anchor.chain.size() == 1) return 0;
+            int rpos_diff = static_cast<int>(anchor.Back().readpos) - static_cast<int>(anchor.Front().readpos);
+            int gpos_diff = static_cast<int>(anchor.Back().genepos) - static_cast<int>(anchor.Front().genepos);
             return rpos_diff - gpos_diff;
         }
+
 
 
         size_t ExtendSeedLeft(Seed const& s, std::string const& query, std::string const& gene) {
@@ -143,31 +157,68 @@ namespace protal {
             return { extension_left, extension_right };
         }
 
+        static std::pair<size_t, size_t> ExtendSeed(ChainLink& s, std::string const& query, std::string const& gene) {
+            size_t extension_left = 0;
+            size_t extension_right = 0;
+
+            size_t max_extension_len = std::min(static_cast<uint32_t>(s.readpos), s.genepos);
+            for (int qpos = s.readpos - 1, rpos = s.genepos - 1;
+//                 qpos >= 0 && rpos >= 0 && // Maybe remove
+                 extension_left < max_extension_len && query[qpos] == gene[rpos];
+                 qpos--, rpos--) {
+                extension_left++;
+            }
+            max_extension_len = std::min(
+                    static_cast<uint32_t>(query.length() - s.readpos - s.length),
+                    static_cast<uint32_t>(gene.length() - s.genepos - s.length));
+
+            for (int qpos = s.readpos + s.length, rpos = s.genepos + s.length;
+//                 qpos < query.length() && rpos < gene.length() &&
+                 extension_right < max_extension_len && query[qpos] == gene[rpos];
+                 qpos++, rpos++) {
+                extension_right++;
+            }
+            assert(s.ReadStart() >= extension_left);
+            assert(s.GeneStart() >= extension_left);
+            assert(s.ReadEnd() + extension_right <= query.length());
+            assert(s.GeneEnd() + extension_right <= gene.length());
+
+            s.ExtendLength(extension_left, extension_right);
+            return { extension_left, extension_right };
+        }
+
+
         static int MaxScore(double min_ani, uint32_t overlap_length, int mismatch_penalty=4) {
             return (std::ceil((1 - min_ani) * static_cast<double>(overlap_length)) * mismatch_penalty) + 1;
         }
 
+
+
         void ExtendAllAnchors(AlignmentAnchorList const& anchors, std::string const& fwd, std::string const& rev) {
             for (auto anchor : anchors) {
                 // copy anchor;
-                bool reversed = ReverseAnchor(anchor, fwd.length());
+                bool reversed = !anchor.forward;
                 auto query = reversed ? rev : fwd;
 
                 // Get Resources
-                auto& genome = m_genome_loader.GetGenome(anchor.a.taxid);
-                auto& gene = genome.GetGeneOMP(anchor.a.geneid);
+                auto& genome = m_genome_loader.GetGenome(anchor.taxid);
+                auto& gene = genome.GetGeneOMP(anchor.geneid);
 
-                auto [lefta, righta] = ExtendSeed(anchor.a, m_kmer_size, query, gene.Sequence());
-                auto [leftb, rightb] = ExtendSeed(anchor.b, m_kmer_size, query, gene.Sequence());
 
-                dummy += lefta;
-                dummy += righta;
-                dummy += leftb;
-                dummy += rightb;
+                for (auto i = 0; i < anchor.chain.size(); i++) {
+                    auto& seed = anchor.chain[i];
+                    auto [lefta, righta] = ExtendSeed(seed, query, gene.Sequence());
+                    dummy += lefta + righta;
+//                    if (i > 0 && seed.OverlapsWithLeft(anchor.chain[i-1])) {
+//                        seed.Merge(anchor.chain[i-1].readpos, anchor.chain[i-1].length);
+//                        anchor.chain.erase(anchor.chain.begin() + i);
+//                        i--;
+//                    }
+                }
             }
         }
 
-        inline std::tuple<bool, int, std::string> Align(AlignmentAnchor const& anchor, std::string const& query, std::string const& gene) {
+        inline std::tuple<bool, int, std::string> Align(CAlignmentAnchor& anchor, std::string const& query, std::string const& gene) {
             //                front_end_q                         back_start_q
             //                v                                   v
             //----------------SSSSSSSSS------------------SSSSSSSSS-------------------- Query
@@ -178,61 +229,74 @@ namespace protal {
             constexpr bool debug = false;
             // Phase one = Extend left seed
 
-            auto [lefta, righta] = ExtendSeed(anchor.a, m_kmer_size, query, gene);
-            auto [leftb, rightb] = ExtendSeed(anchor.b, m_kmer_size, query, gene);
+//            std::cout << "---------------------------------------------" << std::endl;
+//            std::cout << anchor.ToString() << std::endl;
 
-            size_t qstartm = anchor.a.readpos + m_kmer_size + righta;
-            size_t qendm = anchor.b.readpos - leftb;
-            size_t rstartm = anchor.a.genepos + m_kmer_size + righta;
-            size_t rendm = anchor.b.genepos - leftb;
+            bool twoseeds = anchor.chain.size() > 1;
+
+            assert(!anchor.chain.empty());
+            auto [lefta, righta] = ExtendSeed(anchor.Front(), query, gene);
+
+            if (twoseeds) {
+                ExtendSeed(anchor.Back(), query, gene);
+                bool overlap = false;
+                for (auto i = 1; i < anchor.chain.size(); i++) {
+                    if (anchor.chain[i].OverlapsWithLeft(anchor.chain[i-1])) {
+//                        std::cout << "Merge " << anchor.chain[i-1].ToString() << " <<<< " << anchor.chain[i].ToString() << std::endl;
+                        anchor.chain[i-1].Merge(anchor.chain[i].readpos, anchor.chain[i].length);
+                        anchor.chain.erase(anchor.chain.begin() + i);
+                        i--;
+                        overlap = true;
+                    }
+                }
+
+//                if (overlap) {
+//                    std::cout << anchor.ToString() << std::endl;
+//                    std::cout << anchor.Front().ReadStart() << " - " << anchor.Back().ReadEnd() << std::endl;
+//                    m_aligner.Alignment(
+//                            std::string_view(query.c_str() + anchor.Front().ReadStart(), anchor.Back().ReadEnd() - anchor.Front().ReadStart() ),
+//                            std::string_view(gene.c_str() + anchor.Front().genepos, anchor.Back().ReadEnd() - anchor.Front().ReadStart())
+//                            );
+//                    m_aligner.PrintAlignment();
+//
+//                    Utils::Input();
+//                }
+            }
 
 
-            size_t seed_a_size = lefta + m_kmer_size + righta;
-            size_t seed_b_size = leftb + m_kmer_size + rightb;
 
-            size_t qendl = anchor.a.readpos - lefta;
-            size_t rendl = anchor.a.genepos - lefta;
-            size_t qstartl = qendl <= rendl ? 0 : qendl - rendl;
-            size_t rstartl = qendl >= rendl ? 0 : rendl - qendl;
-            size_t ql_len = qendl - qstartl;
-            size_t rl_len = rendl - rstartl;
+//            std::cout << "Extended: " << std::endl;
+//            std::cout << anchor.ToString() << std::endl;
 
-            size_t qstartr = anchor.b.readpos + m_kmer_size + rightb;
-            size_t rstartr = anchor.b.genepos + m_kmer_size + rightb;
-            size_t qtail = query.length() - qstartr;
-            size_t rtail = gene.length() - rstartr;
-
-            size_t total_seed_cov = anchor.a.readpos + m_kmer_size + righta > anchor.b.readpos - leftb ?
-                                    qstartr - qendl :
-                                    seed_a_size+seed_b_size;
-
-            size_t qendr = qtail <= rtail ? query.length() : qstartr + rtail;
-            size_t rendr = qtail >= rtail ? gene.length() : rstartr + qtail;
-            size_t qr_len = qendr - qstartr;
-            size_t rr_len = rendr - rstartr;
-
-            size_t overlap = qendr - qstartl;
-
-            int max_score = MaxScore(m_max_score_ani, overlap, 4);
+            twoseeds = anchor.chain.size() > 1;
 
             std::string mid_cigar = "";
             int mid_score = 0;
-            if (qendm > qstartm) {
-                if constexpr(debug) {
-                    std::cout << std::string_view(query.c_str() + qstartm, qendm - qstartm) << std::endl;
-                    std::cout << std::string_view(gene.c_str() + rstartm, rendm - rstartm) << std::endl;
+            int max_score = MaxScore(m_max_score_ani, anchor.UpdateLength(), 4);
+
+            auto& first = anchor.Front();
+            auto& second = anchor.Back();
+            if (twoseeds) {
+                auto gap = second.ReadStart() - first.ReadEnd();
+                if (gap == 1) {
+                    mid_cigar = 'X';
+                    mid_score = -4;
+                } else {
+                    auto [score, cigar] = FastAligner::FastAlign(
+                            std::string_view(query.c_str() + first.ReadEnd(), gap),
+                            std::string_view(gene.c_str() + first.GeneEnd(), gap));
+                    mid_score = score;
+                    mid_cigar = cigar;
                 }
-                auto [score, cigar] = FastAligner::FastAlign(
-                        std::string_view(query.c_str() + qstartm, qendm - qstartm),
-                        std::string_view(gene.c_str() + rstartm, rendm - rstartm));
-                mid_score = score;
-                mid_cigar = std::string(seed_a_size, 'M') + cigar + std::string(seed_b_size, 'M');
+                mid_cigar = std::string(first.length, 'M') + mid_cigar + std::string(second.length, 'M');
             } else {
-                mid_cigar = std::string(total_seed_cov, 'M');
+                mid_cigar = std::string(first.length, 'M');
             }
 
+
+
             if constexpr(debug) {
-                std::cout << "Total seed coverage " << total_seed_cov << std::endl;
+                std::cout << "Total seed coverage " << anchor.total_length << std::endl;
                 std::cout << "mid_score " << mid_score << std::endl;
             }
 
@@ -242,72 +306,55 @@ namespace protal {
                 return { false, -1, "" };
             }
 
+
             // create stringviews
-            auto q_ltail = std::string_view(query.c_str() + qstartl, ql_len);
-            auto r_ltail = std::string_view(gene.c_str() + rstartl, rl_len);
-            auto q_rtail = std::string_view(query.c_str() + qstartr, qr_len);
-            auto r_rtail = std::string_view(gene.c_str() + rstartr, rr_len);
+            auto left_length = std::min(first.ReadStart(), first.GeneStart());
+            auto right_length = std::min(query.length() - second.ReadEnd(), gene.length() - second.GeneEnd());
+
+            auto query_tail_left = std::string_view(query.c_str() + first.ReadStart() - left_length, left_length);
+            auto target_tail_left = std::string_view(gene.c_str() + first.GeneStart() - left_length, left_length);
+            auto query_tail_right = std::string_view(query.c_str() + second.ReadEnd(), right_length);
+            auto target_tail_right = std::string_view(gene.c_str() + second.GeneEnd(), right_length);
 
             std::string lcig = "";
             std::string rcig = "";
             size_t lsco = 0;
             size_t rsco = 0;
 
-
-
-            if (q_ltail.length() + q_rtail.length() + mid_cigar.length() != qendr - qstartl) {
+            if (query_tail_left.length() + query_tail_right.length() + mid_cigar.length() != (second.ReadEnd() + right_length) - (first.ReadStart() - left_length)) {
                 std::cout << "query length:     " << query.length() << std::endl;
                 std::cout << "GeneLength:       " << gene.length() << std::endl;
-                std::cout << "qendr - qstartl:  " << qendr - qstartl << std::endl;
-                std::cout << "left_len:         " << ql_len << std::endl;
-                std::cout << "right_len:        " << qr_len << std::endl;
                 std::cout << "mid_len:          " << mid_cigar.length() << std::endl;
-                std::cout << "Total seed cov:   " << total_seed_cov << std::endl;
-                std::cout << "Anchor:           " << anchor.a.ToString() << " " << anchor.b.ToString() << std::endl;
-
-                std::cout << q_ltail << " " << std::string_view(query.c_str() + qendl, qstartr -qendl) << " " << q_rtail << std::endl;
-                std::cout << std::string(q_ltail.length() + 1, ' ') << mid_cigar << std::endl;
+                std::cout << "Anchor:           " << anchor.Front().ToString() << " " << anchor.Back().ToString() << std::endl;
                 exit(9);
             }
 
             bool success_a = false;
             bool success_b = false;
-            if (qendl - qstartl > 1) {
-                Benchmark bm_local("");
-                auto [lscore, lsuccess, lcigar] = Optimal(q_ltail, r_ltail, max_score);
-//                auto [lscore, lsuccess, lcigar] = Optimal(q_ltail, r_ltail, max_ani, q_ltail.length() + q_rtail.length(), mid_score);
+            if (query_tail_left.length() > 1) {
+                auto [lscore, lsuccess, lcigar] = Optimal(query_tail_left, target_tail_left, max_score);
                 success_a = lsuccess;
-
-                bm_local.Stop();
                 total_tail_alignments++;
                 total_tail_length += lcigar.length();
                 lsco = lscore;
                 lcig = lcigar;
             } else {
                 success_a = true;
-                if (qendl - qstartl)  {
+                if (query_tail_left.length() == 1)  {
                     lcig = 'X';
                     lsco = -4;
                 }
             }
 
-
-
             // If tail alignment leads to read dropping under ani threshold return failed alignment
             if (!success_a) {
                 return { false, 0, "" };
             }
-
             max_score += lsco;
 
-
-            if (qendr - qstartr > 1) {
-                Benchmark bm_local("");
-                auto [rscore, rsuccess, rcigar] = Optimal(q_rtail, r_rtail, max_score);
-//                auto [rscore, rsuccess, rcigar] = Optimal(q_rtail, r_rtail, max_ani, mid_cigar.length(), mid_score);
+            if (query_tail_right.length() > 1) {
+                auto [rscore, rsuccess, rcigar] = Optimal(query_tail_right, target_tail_right, max_score);
                 success_b = rsuccess;
-
-                bm_local.Stop();
                 total_tail_alignments++;
                 total_tail_length += rcigar.length();
                 dummy += rscore;
@@ -315,9 +362,9 @@ namespace protal {
                 rsco = rscore;
             } else {
                 success_b = true;
-                if (qendr - qstartr) {
+                if (query_tail_right.length() == 1)  {
                     rcig = 'X';
-                    lsco = -4;
+                    rsco = -4;
                 }
             }
 
@@ -329,55 +376,27 @@ namespace protal {
             std::string total_cigar = lcig + mid_cigar + rcig;
 
 
-            dummy += qendr;
-            dummy += rendr;
-
-            if constexpr(debug) {
-                if (true) {
-                    std::cout << "\n--------------------------------------------" << std::endl;
-                    std::cout << q_ltail << " " << q_rtail << " " << qendl - qstartl << std::endl;
-                    std::cout << r_ltail << " " << r_rtail << " " << qendr - qstartr << std::endl;
-                    std::cout << "suca " << success_a << " " << success_b << " sub" << std::endl;
-                    auto [rs, gs, len] = GetAlignmentPositions(anchor, gene.length(), query.length());
-                    auto query_view = std::string_view(query.c_str() + rs, len);
-                    auto gene_view = std::string_view(gene.c_str() + gs, len);
-                    m_aligner.Alignment(
-                            query_view,
-                            gene_view, max_score);
-                    double ani = WFA2Wrapper::CigarANI(m_aligner.GetAlignmentCigar());
-
-                    std::cout << anchor.a.ToString() << std::endl;
-                    std::cout << "<- " << lefta << " " << righta << " ->" << std::endl;
-                    std::cout << anchor.b.ToString() << std::endl;
-                    std::cout << "<- " << leftb << " " << rightb << " ->" << std::endl;
-                    std::cout << "QUERY: " << q_ltail << " " << q_rtail << std::endl;
-                    std::cout << "Cigar: " << lcig << " " << rcig << std::endl;
-                    std::cout << "Ref:   " << r_ltail << " " << r_rtail << std::endl;
-
-                    if (m_aligner.Success()) {
-                        std::cout << "Ani: " << ani << std::endl;
-                        std::cout << total_cigar << " " << WFA2Wrapper::CigarANI(total_cigar) << std::endl;
-                        m_aligner.PrintAlignment();
-
-                    } else {
-                        std::cout << "no success" << std::endl;
-                        std::cout << std::string(query_view.data(), query_view.length()) << std::endl;
-                        std::cout << query_view << std::endl;
-                        std::cout << std::string(gene_view.data(), gene_view.length()) << std::endl;
-                        std::cout << gene_view << std::endl;
-                        exit(8);
-                    }
-                    if (total_cigar != m_aligner.GetAlignmentCigar()) {
-                        Utils::Input();
-                    }
-                }
-            }
+//            auto [rs, gs, len] = GetAlignmentPositions(anchor, gene.length(), query.length());
+//
+//            m_aligner.Alignment(
+//                    std::string_view(query.c_str() + rs, len),
+//                    std::string_view(gene.c_str() + gs, len));
+//            auto ref_cig = m_aligner.GetAlignmentCigar();
+//            if (ref_cig != total_cigar && !((ref_cig.find('D') < ref_cig.length()) && ((ref_cig.find('I') < ref_cig.length())))) {
+//                std::cout << anchor.ToString() << std::endl;
+//                ExtendSeed(second, query, gene);
+//                std::cout << anchor.ToString() << std::endl;
+//                std::cout << total_cigar << std::endl;
+//                std::cout << lcig << " " << mid_cigar << " " << rcig << std::endl;
+//                m_aligner.PrintAlignment();
+//                Utils::Input();
+//            }
 
             return { true, mid_score + lsco + rsco, total_cigar };
         }
 
-        static std::tuple<size_t, size_t, size_t> GetAlignmentPositions(AlignmentAnchor const& anchor, size_t gene_length, size_t read_length) {
-            int abs_pos = anchor.a.genepos - anchor.a.readpos;
+        static std::tuple<size_t, size_t, size_t> GetAlignmentPositions(CAlignmentAnchor& anchor, size_t gene_length, size_t read_length) {
+            int abs_pos = anchor.Front().genepos - anchor.Front().readpos;
             size_t read_start = abs_pos < 0 ? -abs_pos : 0;
             size_t gene_start = std::max(abs_pos, 0);
             size_t overlap = std::min(gene_length - gene_start, read_length - read_start);
@@ -406,14 +425,13 @@ namespace protal {
             auto& fwd = sequence;
             auto rev = KmerUtils::ReverseComplement(fwd);
 
-//            char* read = nullptr;
             bool reversed = false;
 
             size_t read_len = sequence.length();
 
 
-            std::sort(anchors.begin(), anchors.end(), [](AlignmentAnchor const& a, AlignmentAnchor const& b) {
-                return a.hit_anchor_count > b.hit_anchor_count;
+            std::sort(anchors.begin(), anchors.end(), [](CAlignmentAnchor const& a, CAlignmentAnchor const& b) {
+                return a.total_length > b.total_length;
             });
 
             int take_top = m_align_top;
@@ -422,25 +440,29 @@ namespace protal {
 
             int last_score = 0;
 
+
             bm_seedext.Start();
             ExtendAllAnchors(anchors, fwd, rev);
             bm_seedext.Stop();
 
+            std::sort(anchors.begin(), anchors.end(), [](CAlignmentAnchor& a, CAlignmentAnchor& b) {
+               return a.UpdateLength() > b.UpdateLength();
+            });
+
             for (auto& anchor : anchors) {
-                reversed = ReverseAnchor(anchor, read_len);
-                auto& read = reversed ?
-                       rev :
-                       fwd;
+//                if (anchor.chain.size() == 1) continue;
+
+                auto& read = anchor.forward ? fwd : rev;
 
                 // Is indel between anchor seeds?
                 int anchor_indels = SeedIndel(anchor);
 
                 // Get Resources
-                auto& genome = m_genome_loader.GetGenome(anchor.a.taxid);
-                auto& gene = genome.GetGeneOMP(anchor.a.geneid);
+                auto& genome = m_genome_loader.GetGenome(anchor.taxid);
+                auto& gene = genome.GetGeneOMP(anchor.geneid);
 
                 // Absolute read positioning with respect to gene
-                int abs_pos = anchor.a.genepos - anchor.a.readpos;
+                int abs_pos = anchor.Front().genepos - anchor.Front().readpos;
 
 
                 size_t read_start = abs_pos < 0 ? -abs_pos : 0;
@@ -449,7 +471,6 @@ namespace protal {
 
                 std::string query = std::string(read.c_str() + read_start, overlap);
                 std::string reference = gene.Sequence().substr(gene_start, overlap);
-
 
 
                 double cigar_ani = 0;
@@ -480,19 +501,21 @@ namespace protal {
                     cigar = m_aligner.GetAligner().getAlignmentCigar();
                     score = m_aligner.GetAligner().getAlignmentScore();
 
+//                    m_aligner.PrintAlignment();
+
                     if constexpr(alignment_verbose) {
 #pragma omp critical (alignment_debug)
                         {
                             std::cerr << "Alignment\t" << bm_local.GetDuration(Time::microseconds);
                             std::cerr << '\t' << query.length() << '\t' << reference.length() << '\t';
-                            std::cerr << cigar_ani << '\t' << anchor.hit_anchor_count << '\n';
+                            std::cerr << cigar_ani << '\t' << anchor.total_length << '\n';
                         }
                     }
                 }
                 bm_alignment.Stop();
 
                 if (cigar_ani >= m_max_score_ani) {
-                    m_alignment_result.Set(anchor.a.taxid, anchor.b.geneid, abs_pos, !reversed);
+                    m_alignment_result.Set(anchor.taxid, anchor.geneid, abs_pos, !reversed);
                     m_alignment_result.Set(score, cigar);
                     results.emplace_back(m_alignment_result);
                     total_alignments++;
@@ -504,7 +527,6 @@ namespace protal {
 
                 last_score = score;
             }
-
 
 
             // Sort alignment results

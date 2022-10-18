@@ -16,6 +16,7 @@
 #include "GenomeLoader.h"
 #include "AlignmentOutputHandler.h"
 #include "CoreBenchmark.h"
+#include "ChainAnchorFinder.h"
 
 namespace protal::classify {
 
@@ -85,13 +86,21 @@ namespace protal::classify {
 
                 // Calculate Anchors
 //                std::cout << record.id << std::endl;
-                anchor_finder(kmers, seeds, anchors);
+                anchor_finder(kmers, seeds, anchors, record.sequence.length());
                 thread_statistics.total_anchors += anchors.size();
+
+//                std::cout << "Anchor length: " << anchors.size() << std::endl;
+//                for (auto& anchor : anchors) {
+//                    std::cout << anchor.ToString() << std::endl;
+//                }
 
                 // Do Alignment
                 bm_alignment.Start();
                 alignment_handler(anchors, alignment_results, record.sequence);
                 bm_alignment.Stop();
+
+//                Utils::Input();
+//                continue;
 
                 thread_statistics.total_alignments += alignment_results.size();
 
@@ -108,6 +117,7 @@ namespace protal::classify {
                 anchor_finder_global.m_bm_seeding.Join(anchor_finder.m_bm_seeding);
                 anchor_finder_global.m_bm_processing.Join(anchor_finder.m_bm_processing);
                 anchor_finder_global.m_bm_pairing.Join(anchor_finder.m_bm_pairing);
+                anchor_finder_global.m_bm_sorting_anchors.Join(anchor_finder.m_bm_sorting_anchors);
 
                 bm_alignment_global.Join(bm_alignment);
                 alignment_handler_global.bm_alignment.Join(alignment_handler.bm_alignment);
@@ -120,8 +130,6 @@ namespace protal::classify {
                 if constexpr (benchmark_active) {
                     benchmark_global.Join(thread_core_benchmark);
                 }
-
-
 
                 std::cout << "Tail: " << alignment_handler.total_tail_alignments << std::endl;
                 std::cout << "TLen: " << alignment_handler.total_tail_length << std::endl;
@@ -139,6 +147,7 @@ namespace protal::classify {
         anchor_finder_global.m_bm_seeding.PrintResults();
         anchor_finder_global.m_bm_processing.PrintResults();
         anchor_finder_global.m_bm_pairing.PrintResults();
+        anchor_finder_global.m_bm_sorting_anchors.PrintResults();
         bm_alignment_global.PrintResults();
         alignment_handler_global.bm_alignment.PrintResults();
         alignment_handler_global.bm_seedext.PrintResults();
@@ -228,8 +237,8 @@ namespace protal::classify {
                 }
 
                 // Calculate Anchors
-                anchor_finder(kmers1, seeds1, anchors1);
-                anchor_finder(kmers2, seeds2, anchors2);
+                anchor_finder(kmers1, seeds1, anchors1, record1.sequence.length());
+                anchor_finder(kmers2, seeds2, anchors2, record2.sequence.length());
 
                 thread_statistics.total_anchors += anchors1.size();
                 thread_statistics.total_anchors += anchors2.size();
@@ -269,6 +278,7 @@ namespace protal::classify {
                 anchor_finder_global.m_bm_seeding.Join(anchor_finder.m_bm_seeding);
                 anchor_finder_global.m_bm_processing.Join(anchor_finder.m_bm_processing);
                 anchor_finder_global.m_bm_pairing.Join(anchor_finder.m_bm_pairing);
+                anchor_finder_global.m_bm_sorting_anchors.Join(anchor_finder.m_bm_sorting_anchors);
 
                 bm_alignment_global.Join(bm_alignment);
                 alignment_handler_global.bm_alignment.Join(alignment_handler.bm_alignment);
@@ -295,6 +305,7 @@ namespace protal::classify {
         anchor_finder_global.m_bm_seeding.PrintResults();
         anchor_finder_global.m_bm_processing.PrintResults();
         anchor_finder_global.m_bm_pairing.PrintResults();
+        anchor_finder_global.m_bm_sorting_anchors.PrintResults();
         bm_alignment_global.PrintResults();
         alignment_handler_global.bm_alignment.PrintResults();
         alignment_handler_global.bm_seedext.PrintResults();

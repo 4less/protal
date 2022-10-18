@@ -26,12 +26,9 @@ namespace protal {
     using LookupList = std::vector<LookupResult>;
     using SeedList = LookupList;
 
-
-    struct AlignmentAnchor;
-    using AlignmentAnchorList = std::vector<AlignmentAnchor>;
-
-    using AnchorPair = std::pair<LookupResult,LookupResult>;
-    using AnchorPairList = std::vector<AnchorPair>;
+    struct ChainAlignmentAnchor;
+    using CAlignmentAnchor = ChainAlignmentAnchor;
+    using AlignmentAnchorList = std::vector<CAlignmentAnchor>;
 
     struct AlignmentResult;
     using AlignmentResultList = std::vector<AlignmentResult>;
@@ -91,8 +88,8 @@ namespace protal {
      */
     template <typename T>
     concept AnchorFinderConcept =
-    requires(T t, KmerList k, SeedList s, AlignmentAnchorList a) {
-        { t(k, s, a) } -> std::same_as<void>;
+    requires(T t, KmerList k, SeedList s, AlignmentAnchorList a, size_t l) {
+        { t(k, s, a, l) } -> std::same_as<void>;
     };
 
     /*

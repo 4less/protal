@@ -17,9 +17,9 @@ add_library(protal_lib
         Utils/ProgressBar.h
         Utils/xxhash64.h
         Utils/BinaryClassifierEvaluator.h
+        Utils/LineSplitter.h
         SequenceUtils/SeqReader.h
         SequenceUtils/KmerIterator.h
-        SequenceUtils/KmerProcessor.h
         SequenceUtils/KmerUtils.h
         SequenceUtils/Minimizer.h
         Hash/compact_map.h
