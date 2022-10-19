@@ -63,6 +63,8 @@ namespace protal::classify {
 
             Benchmark bm_alignment{"Alignment handler"};
 
+            size_t record_id = omp_get_thread_num();
+
             while (reader(record)) {
                 // Implement logger
                 thread_statistics.reads++;
@@ -110,6 +112,8 @@ namespace protal::classify {
                 if constexpr (benchmark_active) {
                     thread_core_benchmark(seeds, anchors, alignment_results, record.id);
                 }
+
+                record_id += options.GetThreads();
             }
 
 #pragma omp critical(statistics)
@@ -202,6 +206,8 @@ namespace protal::classify {
             AlignmentAnchorList anchors2;
             AlignmentResultList alignment_results2;
 
+            size_t record_id = omp_get_thread_num();
+
             Benchmark bm_alignment{"Alignment handler"};
 
             while (reader(record1, record2)) {
@@ -253,8 +259,8 @@ namespace protal::classify {
                 thread_statistics.total_alignments += alignment_results2.size();
 
                 // Output alignments
-                output_handler(alignment_results1, record1);
-                output_handler(alignment_results2, record2);
+                output_handler(alignment_results1, record1, record_id, true);
+                output_handler(alignment_results2, record2, record_id, false);
 
 
 
@@ -272,6 +278,7 @@ namespace protal::classify {
                 if constexpr(debug == DEBUG_EXTRAVERBOSE) {
 
                 }
+                record_id += options.GetThreads();
             }
 #pragma omp critical(statistics)
             {

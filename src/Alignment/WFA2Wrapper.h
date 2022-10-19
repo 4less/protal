@@ -73,6 +73,20 @@ namespace protal {
             return (static_cast<double>(matches) / (matches + mismatches + indel));
         }
 
+        static int CigarScore(std::string cigar, int mismatch_pen = 4, int gapopen_pen = 6, int gapext_pen = 2) {
+            int score = 0;
+            char last = 'M';
+            for (char c : cigar) {
+                if (c == 'X') score -= 4;
+                if (c == 'I' && last == 'I') score -= gapext_pen;
+                if (c == 'I' && last != 'I') score -= gapopen_pen;
+                if (c == 'D' && last == 'D') score -= gapext_pen;
+                if (c == 'D' && last != 'D') score -= gapopen_pen;
+                last = c;
+            }
+            return score;
+        }
+
 
         static void GetAlignmentInfo(AlignmentInfo& info, std::string const& cigar) {
             size_t alignment_start = 0;

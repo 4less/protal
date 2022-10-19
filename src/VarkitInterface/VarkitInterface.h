@@ -158,7 +158,7 @@ namespace protal {
      * - total_hits_best (for read filter. Just set to high)
      * - (overlap with gene gets computed)
      */
-    static void ToClassificationLine(ClassificationLine& line, size_t taxid, size_t geneid, size_t genepos, size_t read_length, size_t record_id, double ani, size_t total_hits_best=15) {
+    static void ToClassificationLine(ClassificationLine& line, size_t taxid, size_t geneid, size_t genepos, size_t read_length, size_t record_id, double ani, bool forward=true, size_t total_hits_best=15) {
         line.Reset();
         line.taxid = taxid;
         line.geneid = geneid;
@@ -167,6 +167,7 @@ namespace protal {
         line.record_id = record_id;
         line.predicted_ani = ani;
         line.total_hits_best = total_hits_best;
+        line.forward = forward;
     }
 
     static void ExtractIOSNPs(IOSNPList &snp_list, std::string &cigar, std::string &sequence, std::string &quality, std::string &genome, size_t genome_aln_start, size_t taxid, size_t geneid, size_t genepos, size_t read_num, bool reverse) {

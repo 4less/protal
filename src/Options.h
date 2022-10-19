@@ -43,6 +43,7 @@ namespace protal {
                 ("g,preload_genomes", "Preload complete reference library (can be very memory intensive) instead of dynamic loading. This improves performance. [default off]")
                 ("p,profile", "Perform taxonomic profiling.")
                 ("q,profile_only", "Provide profile filename (.sam) and only perform profiling based on sam file.", cxxopts::value<std::string>()->default_value(""))
+                ("8,profile_truth", "Provide truth file and annotate profile taxa with TP/FP. Format is list of integers (internal ids)", cxxopts::value<std::string>()->default_value(""))
                 ("reference", "", cxxopts::value<std::string>()->default_value(""));
 
         return options;
@@ -67,6 +68,8 @@ namespace protal {
         std::string m_second;
         std::string m_profile_in;
 
+        std::string m_profile_truth;
+
         size_t m_threads = DEFAULT_THREADS;
 
         std::string m_benchmark_alignment_output;
@@ -84,7 +87,7 @@ namespace protal {
                 std::string benchmark_alignment_output, bool show_help, std::string first,
                 std::string second, std::string database_path, std::string output_prefix,
                 std::string sequence_file, size_t threads, size_t align_top, double max_score_ani,
-                size_t x_drop, bool fastalign, std::string profile_in
+                size_t x_drop, bool fastalign, std::string profile_in, std::string profile_truth
                 ) :
             m_build(build),
             m_profile(profile),
@@ -102,6 +105,7 @@ namespace protal {
             m_max_score_ani(max_score_ani),
             m_x_drop(x_drop),
             m_fastalign(fastalign),
+            m_profile_truth(profile_truth),
             m_benchmark_alignment(benchmark_alignment),
             m_benchmark_alignment_output(benchmark_alignment_output) {};
 
@@ -127,6 +131,7 @@ namespace protal {
             result_str += "fastalign:           " + std::to_string(m_fastalign) + '\n';
             result_str += "---- Dev Options ----" + std::string(30, '-') + '\n';
             result_str += "benchmark alignment: " + std::to_string(m_benchmark_alignment) + '\n';
+            result_str += "profile truth:       " + m_profile_truth + '\n';
             result_str += "^ output:            " + m_benchmark_alignment_output + '\n';
             result_str += "---------------------" + std::string(30, '-') + '\n';
             return result_str;
@@ -146,6 +151,10 @@ namespace protal {
 
         std::string& ProfileFile() {
             return m_profile_in;
+        }
+
+        std::string& ProfileTruthFile() {
+            return m_profile_truth;
         }
 
         bool PreloadGenomes() const {
@@ -259,6 +268,7 @@ namespace protal {
             auto second = result.count("second") ? result["second"].as<std::string>() : "";
 
             auto profile_in = result.count("profile_only") ? result["profile_only"].as<std::string>() : "";
+            auto profile_truth = result.count("profile_truth") ? result["profile_truth"].as<std::string>() : "";
 
             auto output_file = result.count("output_file") ? result["output_file"].as<std::string>() : "";
             auto benchmark_alignment_output_file = result.count("benchmark_alignment_output") ? result["benchmark_alignment_output"].as<std::string>() : "";
@@ -293,7 +303,8 @@ namespace protal {
                     max_score_ani,
                     x_drop,
                     fastalign,
-                    profile_in);
+                    profile_in,
+                    profile_truth);
         }
     };
 

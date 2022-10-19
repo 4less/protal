@@ -37,6 +37,24 @@ namespace protal {
             tokens.emplace_back(std::string(line.c_str() + start, line.length() - start));
         }
 
+        static void Split(std::string& line, std::string&& delimiter, std::vector<std::string> &tokens) {
+            tokens.clear();
+
+            size_t delim_size = delimiter.length();
+
+            size_t start = 0;
+
+            for (int i = 0; i <= line.length() - delim_size; i++) {
+                if (IsDelim(line, delimiter, i)) {
+                    tokens.emplace_back(std::string(line.c_str() + start, i  - start));
+                    i += delim_size;
+                    start = i;
+                }
+            }
+            tokens.emplace_back(std::string(line.c_str() + start, line.length() - start));
+        }
+
+
         void Split(std::string line) {
             Split(line, m_delimiter, m_tokens);
         }

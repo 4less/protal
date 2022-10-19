@@ -168,7 +168,7 @@ namespace protal {
         }
 
 
-        void operator () (AlignmentResultList& alignment_results, FastxRecord& record) {
+        void operator () (AlignmentResultList& alignment_results, FastxRecord& record, size_t read_id=0, bool forward=true) {
             if (alignment_results.empty()) return;
             bool multiple_best = alignment_results.size() > 1 && alignment_results[0].AlignmentScore() == alignment_results[1].AlignmentScore();
 
@@ -187,22 +187,29 @@ namespace protal {
 
             WFA2Wrapper::GetAlignmentInfo(m_info, best.Cigar());
 
-            ToClassificationLine(m_line, best.Taxid(), best.GeneId(), best.GenePos() + m_info.alignment_start, m_info.alignment_length, 1, m_info.alignment_ani);
+            ToClassificationLine(m_line, best.Taxid(), best.GeneId(), best.GenePos() + m_info.alignment_start, m_info.alignment_length, read_id, m_info.alignment_ani, forward);
 
 
-            //Todo put snps in output list
+            for (auto& alignment_result :  alignment_results) {
+                m_sam.m_qname = record.id;
+                m_sam.m_flag = 0;
+                m_sam.m_rname = std::to_string(alignment_result.Taxid()) + "_" + std::to_string(alignment_result.GeneId());
+                m_sam.m_pos = alignment_result.GenePos() + m_info.alignment_start;
+                m_sam.m_mapq = alignment_result.AlignmentScore();
+                m_sam.m_cigar = alignment_result.Cigar();
+                m_sam.m_rnext = "*";
+                m_sam.m_pnext = 0;
+                m_sam.m_tlen = alignment_result.Cigar().length();
+                m_sam.m_seq = record.sequence;
+                m_sam.m_qual = record.quality;
 
-            m_sam.m_qname = record.id;
-            m_sam.m_flag = 0;
-            m_sam.m_rname = std::to_string(best.Taxid()) + "_" + std::to_string(best.GeneId());
-            m_sam.m_pos = best.GenePos() + m_info.alignment_start;
-            m_sam.m_mapq = best.AlignmentScore();
-            m_sam.m_cigar = best.Cigar();
-            m_sam.m_rnext = "*";
-            m_sam.m_pnext = 0;
-            m_sam.m_tlen = best.Cigar().length();
-            m_sam.m_seq = record.sequence;
-            m_sam.m_qual = record.quality;
+                if (!m_sam_output.Write(m_sam.ToString())) {
+#pragma omp critical(sam_output)
+                    m_sam_output.Write(m_sam_os);
+                }
+            }
+
+
 
 //            std::cout << m_sam.ToString() << std::endl;
 
@@ -211,10 +218,7 @@ namespace protal {
 #pragma omp critical(varkit_output)
                 m_output.Write(m_os);
             }
-            if (!m_sam_output.Write(m_sam.ToString())) {
-#pragma omp critical(sam_output)
-                m_sam_output.Write(m_sam_os);
-            }
+
 
             if (m_output_snps) {
 //                std::cout << "\n----\n" << record.id << std::endl;

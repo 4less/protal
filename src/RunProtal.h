@@ -168,12 +168,24 @@ namespace protal {
             RunWrapper(options);
         }
 
+        /*
+         * PROFILER
+         */
         if (options.Profile()) {
             Profile:
 
-            profiler::Profiler profiler;
+            auto truth = protal::GetTruth(options.ProfileTruthFile());
 
-            profiler.FromSam(options.ProfileFile());
+
+            profiler::Profiler profiler;
+            auto profile = profiler.FromSam(options.ProfileFile());
+            profile.AnnotateWithTruth(truth);
+
+//            std::cout << profile.ToString() << std::endl;
+//
+//            for (auto& [key, taxon] : profile.GetTaxa()) {
+//                std::cout << taxon.ToString() << std::endl;
+//            }
         }
 
 
