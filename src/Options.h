@@ -59,6 +59,7 @@ namespace protal {
         bool m_show_help = false;
         bool m_no_strains = false;
         bool m_fastalign = false;
+        bool m_profile_only = false;
 
 
         std::string m_sequence_file;
@@ -66,7 +67,7 @@ namespace protal {
         std::string m_output_prefix;
         std::string m_first;
         std::string m_second;
-        std::string m_profile_in;
+        std::string m_sam_file;
 
         std::string m_profile_truth;
 
@@ -81,33 +82,49 @@ namespace protal {
         const std::string PROTAL_INDEX_FILE = "index.prx";
         const std::string PROTAL_SEQUENCE_FILE = "reference.fna";
         const std::string PROTAL_SEQUENCE_MAP_FILE = "reference.map";
+        const std::string PROTAL_TAXONOMY_FILE = "internal_taxonomy.dmp";
+        const std::string PROTAL_TAXONOMY_GTDB_FILE = "internal_taxonomy_gtdb.dmp";
+        const std::string PROTAL_TAXONOMY_NCBI_FILE = "internal_taxonomy_ncbi.dmp";
 
     public:
-        Options(bool build, bool profile, bool no_strains, bool preload_genomes, bool benchmark_alignment,
+        Options(bool build, bool profile, bool profile_only, bool no_strains, bool preload_genomes, bool benchmark_alignment,
                 std::string benchmark_alignment_output, bool show_help, std::string first,
                 std::string second, std::string database_path, std::string output_prefix,
                 std::string sequence_file, size_t threads, size_t align_top, double max_score_ani,
-                size_t x_drop, bool fastalign, std::string profile_in, std::string profile_truth
+                size_t x_drop, bool fastalign, std::string sam_file, std::string profile_truth
                 ) :
-            m_build(build),
-            m_profile(profile),
-            m_profile_in(profile_in),
-            m_no_strains(no_strains),
-            m_preload_genomes(preload_genomes),
-            m_show_help(show_help),
-            m_first(std::move(first)),
-            m_second(std::move(second)),
-            m_database_path(std::move(database_path)),
-            m_output_prefix(std::move(output_prefix)),
-            m_sequence_file(std::move(sequence_file)),
-            m_threads(threads),
-            m_align_top(align_top),
-            m_max_score_ani(max_score_ani),
-            m_x_drop(x_drop),
-            m_fastalign(fastalign),
-            m_profile_truth(profile_truth),
-            m_benchmark_alignment(benchmark_alignment),
-            m_benchmark_alignment_output(benchmark_alignment_output) {};
+                m_build(build),
+                m_profile(profile),
+                m_profile_only(profile_only),
+                m_no_strains(no_strains),
+                m_preload_genomes(preload_genomes),
+                m_show_help(show_help),
+                m_first(std::move(first)),
+                m_second(std::move(second)),
+                m_database_path(std::move(database_path)),
+                m_output_prefix(std::move(output_prefix)),
+                m_sam_file(sam_file),
+                m_sequence_file(std::move(sequence_file)),
+                m_threads(threads),
+                m_align_top(align_top),
+                m_max_score_ani(max_score_ani),
+                m_x_drop(x_drop),
+                m_fastalign(fastalign),
+                m_profile_truth(profile_truth),
+                m_benchmark_alignment(benchmark_alignment),
+                m_benchmark_alignment_output(benchmark_alignment_output) {
+
+            if (sam_file.empty() && !m_output_prefix.empty()) {
+                m_sam_file = m_output_prefix + ".sam";
+            }
+            if (!output_prefix.empty()) return;
+
+            if (!m_sam_file.empty()) {
+                if (m_sam_file.ends_with(".sam")) {
+                    m_output_prefix = m_sam_file.substr(0, m_sam_file.length() - 4);
+                }
+            }
+        };
 
         std::string ToString() const {
             std::string result_str = "";
@@ -121,7 +138,7 @@ namespace protal {
             result_str += "second:              " + m_second + '\n';
             result_str += "db path:             " + m_database_path + '\n';
             result_str += "sequence file:       " + m_sequence_file + '\n';
-            result_str += "profile file:        " + m_profile_in + '\n';
+            result_str += "profile file:        " + m_sam_file + '\n';
             result_str += "output prefix:       " + m_output_prefix + '\n';
             result_str += "preload genomes:     " + std::to_string(m_preload_genomes) + '\n';
             result_str += "----- Alignment -----" + std::string(30, '-') + '\n';
@@ -145,12 +162,16 @@ namespace protal {
             return m_profile;
         }
 
-        std::string ProfileFile() const {
-            return m_profile_in;
+        bool ProfileOnly() const {
+            return m_profile_only;
         }
 
-        std::string& ProfileFile() {
-            return m_profile_in;
+        std::string SamFile() const {
+            return m_sam_file;
+        }
+
+        std::string& SamFile() {
+            return m_sam_file;
         }
 
         std::string& ProfileTruthFile() {
@@ -187,6 +208,18 @@ namespace protal {
 
         std::string GetIndexFile() const {
             return m_database_path + "/" + PROTAL_INDEX_FILE;
+        }
+
+        std::string GetInternalTaxonomyFile() const {
+            return m_database_path + "/" + PROTAL_TAXONOMY_FILE;
+        }
+
+        std::string GetInternalTaxonomyGTDBFile() const {
+            return m_database_path + "/" + PROTAL_TAXONOMY_GTDB_FILE;
+        }
+
+        std::string GetInternalTaxonomyNCBIFile() const {
+            return m_database_path + "/" + PROTAL_TAXONOMY_NCBI_FILE;
         }
 
         std::string GetOutputPrefix() const {
@@ -267,8 +300,9 @@ namespace protal {
             auto first = result.count("first") ? result["first"].as<std::string>() : "";
             auto second = result.count("second") ? result["second"].as<std::string>() : "";
 
-            auto profile_in = result.count("profile_only") ? result["profile_only"].as<std::string>() : "";
+            auto sam_in = result.count("profile_only") ? result["profile_only"].as<std::string>() : "";
             auto profile_truth = result.count("profile_truth") ? result["profile_truth"].as<std::string>() : "";
+            bool profile_only = result.count("profile_truth");
 
             auto output_file = result.count("output_file") ? result["output_file"].as<std::string>() : "";
             auto benchmark_alignment_output_file = result.count("benchmark_alignment_output") ? result["benchmark_alignment_output"].as<std::string>() : "";
@@ -288,6 +322,7 @@ namespace protal {
             return Options(
                     build,
                     profile,
+                    profile_only,
                     no_strains,
                     preload_genomes,
                     benchmark_alignment,
@@ -303,7 +338,7 @@ namespace protal {
                     max_score_ani,
                     x_drop,
                     fastalign,
-                    profile_in,
+                    sam_in,
                     profile_truth);
         }
     };

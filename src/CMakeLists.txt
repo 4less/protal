@@ -47,6 +47,8 @@ add_library(protal_lib
         Core/ChainAnchorFinder.h
         Core/AlignmentStrategy.h
         VarkitInterface/VarkitInterface.h
+        Taxonomy/Taxonomy.h
+        Taxonomy/Taxonomy.cpp
         Statistics.h
         Constants.h
         )
@@ -93,7 +95,8 @@ target_link_directories(protal_lib
         Alignment/
         Utils/
         Profiling/
-        SequenceUtils/)
+        SequenceUtils/
+        Taxonomy/)
 
 target_include_directories(protal_lib
         PUBLIC
@@ -105,7 +108,8 @@ target_include_directories(protal_lib
         Alignment/
         Utils/
         Profiling/
-        SequenceUtils/)
+        SequenceUtils/
+        Taxonomy/)
 
 
 # Adding this to the path makes find_package find the required BHM library

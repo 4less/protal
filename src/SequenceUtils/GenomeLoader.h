@@ -38,6 +38,10 @@ namespace protal {
             m_is = is;
         }
 
+        bool IsSet() const {
+            return m_id != 0 || m_length != 0;
+        }
+
         bool IsLoaded() const {
             return !m_sequence.empty();
         }
@@ -63,6 +67,7 @@ namespace protal {
         GeneList m_genes;
         GenomeKey m_key;
         bool m_is_loaded = false;
+
 
         const size_t GeneKeyToIndex(GeneKey const& key) const {
             return key - 1;
@@ -94,6 +99,12 @@ namespace protal {
 
         const GeneList GetGeneList() const {
             return m_genes;
+        }
+
+        size_t GeneNum() const {
+            return std::count_if(m_genes.begin(), m_genes.end(), [](Gene const& gene) {
+                return gene.IsSet();
+            });
         }
 
         void LoadGenome() {

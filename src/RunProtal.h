@@ -15,6 +15,7 @@
 #include "AlignmentStrategy.h"
 #include "gzstream/gzstream.h"
 #include "Profiler.h"
+#include "Taxonomy.h"
 
 namespace protal {
     template<typename AlignmentBenchmark=NoBenchmark>
@@ -68,7 +69,7 @@ namespace protal {
 
             using optional_ofstream = std::optional<std::ofstream>;
             std::ofstream varkit_output(options.GetOutputPrefix() + ".tsv", std::ios::binary);
-            std::ofstream sam_output(options.GetOutputPrefix() + ".sam", std::ios::out);
+            std::ofstream sam_output(options.SamFile(), std::ios::out);
             optional_ofstream snp_output =
                     options.NoStrains() ? optional_ofstream{} :
                     optional_ofstream{ std::in_place, options.GetOutputPrefix() + ".snps", std::ios::out };
@@ -149,7 +150,7 @@ namespace protal {
             exit(0);
         }
 
-        if (!options.ProfileFile().empty()) {
+        if (!options.SamFile().empty() && options.ProfileOnly()) {
             goto Profile;
         }
 
@@ -174,15 +175,28 @@ namespace protal {
         if (options.Profile()) {
             Profile:
 
-            auto truth = protal::GetTruth(options.ProfileTruthFile());
+
+            GenomeLoader genomes(options.GetSequenceFile(), options.GetSequenceMapFile());
+            IntTaxonomy taxonomy(options.GetInternalTaxonomyFile());
 
 
-            profiler::Profiler profiler;
-            auto profile = profiler.FromSam(options.ProfileFile());
-            profile.AnnotateWithTruth(truth);
+            std::cout << "Sam file: " << options.SamFile() << std::endl;
+            profiler::Profiler profiler(genomes);
+            auto profile = profiler.FromSam(options.SamFile());
+
+            if (!options.ProfileTruthFile().empty()) {
+                auto truth = protal::GetTruth(options.ProfileTruthFile());
+                profile.AnnotateWithTruth(truth);
+            }
+
+            profiler::TaxonFilter filter(0.95, 0.7, 70);
+
+            std::cout << "Save profile to " << options.GetOutputPrefix() + ".profile" << std::endl;
+            std::ofstream os(options.GetOutputPrefix() + ".profile", std::ios::out);
+            profile.WriteSparseProfile(taxonomy, filter, os);
+            os.close();
 
 //            std::cout << profile.ToString() << std::endl;
-//
 //            for (auto& [key, taxon] : profile.GetTaxa()) {
 //                std::cout << taxon.ToString() << std::endl;
 //            }
