@@ -14,6 +14,7 @@
 #include "KmerLookup.h"
 #include "FastxReader.h"
 #include "SamHandler.h"
+#include "SNP.h"
 
 namespace protal {
     class AlignmentResult {
@@ -105,6 +106,10 @@ namespace protal {
             m_cigar.clear();
         }
 
+        bool IsSet() const {
+            return m_alignment_score != DEFAULT_ALIGNMENT_SCORE;
+        }
+
         std::string ToString() {
             std::string str = "";
             str += std::to_string(AlignmentScore()) + '\t';
@@ -117,67 +122,75 @@ namespace protal {
         }
     };
 
-    /*
-     * Varkit Output Handler
-     *
-     */
-    class VarkitOutputHandler {
-    private:
-        std::ostream& m_os;
-        std::optional<std::ofstream>& m_snp_os;
-        std::ostream& m_sam_os;
+    static int ScorePairedAlignment(AlignmentResult const& a, AlignmentResult const& b) {
+        int score = 0;
+        if (a.IsSet() && b.IsSet()) {
+            return (a.AlignmentScore() + b.AlignmentScore()) / 2.2;
+        } else if (a.IsSet()) {
+            return a.AlignmentScore() - 2;
+        } else if (b.IsSet()) {
+            return b.AlignmentScore() - 2;
+        }
+        return score;
+    }
 
+    static int ScorePairedAlignment(PairedAlignment const& pair) {
+        return ScorePairedAlignment(pair.first, pair.second);
+    }
+
+    static void ArtoSAM(SamEntry &sam, AlignmentResult const& ar, AlignmentInfo &info, FastxRecord &record) {
+        sam.m_qname = record.id;
+        sam.m_flag = 0;
+        sam.m_rname = std::to_string(ar.Taxid()) + "_" + std::to_string(ar.GeneId());
+        sam.m_pos = ar.GenePos() + info.alignment_start;
+        sam.m_mapq = ar.AlignmentScore();
+        sam.m_cigar = ar.Cigar();
+        sam.m_rnext = "*";
+        sam.m_pnext = 0;
+        sam.m_tlen = ar.Cigar().length();
+        sam.m_seq = record.sequence;
+        sam.m_qual = record.quality;
+    }
+
+    using SNPList = std::vector<SNP>;
+    /*
+     * Protal Output Handler
+     */
+    class ProtalOutputHandler {
+    private:
+        std::ostream& m_sam_os;
         BufferedStringOutput m_sam_output;
-        BufferedOutput<ClassificationLine> m_output;
-        BufferedOutput<IOSNP> m_snp_output;
-        ClassificationLine m_line;
-        IOSNPList snp_list;
         SamEntry m_sam;
+
         AlignmentInfo m_info;
 
-        bool m_output_snps = false;
         double m_min_cigar_ani = 0;
     public:
         size_t alignments = 0;
 
-        VarkitOutputHandler(std::ostream& os, std::ostream& sam_os, std::optional<ofstream>& snp_os, size_t varkit_buffer_capacity, size_t sam_buffer_capacity, double min_cigar_ani=0.0f) :
-                m_os(os),
+        ProtalOutputHandler(std::ostream& sam_os, size_t varkit_buffer_capacity, size_t sam_buffer_capacity, double min_cigar_ani=0.0f) :
                 m_sam_os(sam_os),
-                m_snp_os(snp_os),
-                m_output(varkit_buffer_capacity),
-                m_snp_output(varkit_buffer_capacity),
                 m_sam_output(sam_buffer_capacity),
-                m_output_snps(snp_os.has_value()),
                 m_min_cigar_ani(min_cigar_ani) {}
 
-        VarkitOutputHandler(VarkitOutputHandler const& other) :
-                m_os(other.m_os),
+        ProtalOutputHandler(ProtalOutputHandler const& other) :
                 m_sam_os(other.m_sam_os),
-                m_snp_os(other.m_snp_os),
-                m_output(other.m_output.Capacity()),
-                m_snp_output(other.m_snp_output.Capacity()),
                 m_sam_output(other.m_sam_output.Capacity()),
-                m_output_snps(other.m_output_snps),
                 m_min_cigar_ani(other.m_min_cigar_ani) {}
 
-        ~VarkitOutputHandler() {
-#pragma omp critical(varkit_output)
-            m_output.Write(m_os);
+        ~ProtalOutputHandler() {
 #pragma omp critical(sam_output)
             m_sam_output.Write(m_sam_os);
         }
 
 
-        void operator () (AlignmentResultList& alignment_results, FastxRecord& record, size_t read_id=0, bool forward=true) {
+        void operator () (AlignmentResultList& alignment_results, FastxRecord& record, size_t read_id=0, bool first_pair=true) {
             if (alignment_results.empty()) return;
-            bool multiple_best = alignment_results.size() > 1 && alignment_results[0].AlignmentScore() == alignment_results[1].AlignmentScore();
-
-            if (multiple_best) {
-                return;
-            }
-
-            m_line.Reset();
-            snp_list.clear();
+//            bool multiple_best = alignment_results.size() > 1 && alignment_results[0].AlignmentScore() == alignment_results[1].AlignmentScore();
+//
+//            if (multiple_best) {
+//                return;
+//            }
 
             auto& best = alignment_results.front();
 
@@ -185,11 +198,9 @@ namespace protal {
                 return;
             }
 
-            WFA2Wrapper::GetAlignmentInfo(m_info, best.Cigar());
-
-            ToClassificationLine(m_line, best.Taxid(), best.GeneId(), best.GenePos() + m_info.alignment_start, m_info.alignment_length, read_id, m_info.alignment_ani, forward);
-
-
+            /* ##############################################################
+             * Output alignments.
+             */
             for (auto& alignment_result :  alignment_results) {
                 m_sam.m_qname = record.id;
                 m_sam.m_flag = 0;
@@ -203,38 +214,105 @@ namespace protal {
                 m_sam.m_seq = record.sequence;
                 m_sam.m_qual = record.quality;
 
+                alignments++;
                 if (!m_sam_output.Write(m_sam.ToString())) {
 #pragma omp critical(sam_output)
                     m_sam_output.Write(m_sam_os);
                 }
             }
+        }
+    };
 
 
+    /*
+     * Protal Output Handler
+     */
+    class ProtalPairedOutputHandler {
+    private:
+        std::ostream& m_sam_os;
+        BufferedStringOutput m_sam_output;
+        SamEntry m_sam1;
+        SamEntry m_sam2;
 
-//            std::cout << m_sam.ToString() << std::endl;
+        AlignmentInfo m_info;
 
-            alignments++;
-            if (!m_output.Write(m_line)) {
-#pragma omp critical(varkit_output)
-                m_output.Write(m_os);
+        double m_min_cigar_ani = 0;
+    public:
+        size_t alignments = 0;
+
+        ProtalPairedOutputHandler(std::ostream& sam_os, size_t varkit_buffer_capacity, size_t sam_buffer_capacity, double min_cigar_ani=0.0f) :
+                m_sam_os(sam_os),
+                m_sam_output(sam_buffer_capacity),
+                m_min_cigar_ani(min_cigar_ani) {}
+
+        ProtalPairedOutputHandler(ProtalPairedOutputHandler const& other) :
+                m_sam_os(other.m_sam_os),
+                m_sam_output(other.m_sam_output.Capacity()),
+                m_min_cigar_ani(other.m_min_cigar_ani) {}
+
+        ~ProtalPairedOutputHandler() {
+#pragma omp critical(sam_output)
+            m_sam_output.Write(m_sam_os);
+        }
+
+
+        void operator () (PairedAlignmentResultList& alignment_results, FastxRecord& record1, FastxRecord& record2, size_t read_id=0, bool first_pair=true) {
+            if (alignment_results.empty()) return;
+//            bool multiple_best = alignment_results.size() > 1 && alignment_results[0].AlignmentScore() == alignment_results[1].AlignmentScore();
+//
+//            if (multiple_best) {
+//                return;
+//            }
+
+            auto& best = alignment_results.front();
+
+//            size_t anum = 0;
+//            std::cout << record1.id << std::endl;
+//            for (auto& [ar1, ar2] :  alignment_results) {
+//                std::cout << anum++ << " SCORE: " << ScorePairedAlignment(ar1, ar2) << '\t' << ar1.AlignmentScore() << "{"<< ar1.Taxid() << "," << ar1.GeneId() << "}" << " ";
+//                std::cout << ar2.AlignmentScore() << "{"<< ar2.Taxid() << "," << ar2.GeneId() << "}" << std::endl;
+//            }
+//            Utils::Input();
+
+            if (WFA2Wrapper::CigarANI(best.first.Cigar()) < m_min_cigar_ani) {
+                return;
             }
 
+            /* ##############################################################
+             * Output alignments.
+             */
+            bool first = true;
+            for (auto& [ar1, ar2] :  alignment_results) {
+                bool both = ar1.IsSet() && ar2.IsSet();
 
-            if (m_output_snps) {
-//                std::cout << "\n----\n" << record.id << std::endl;
-//                std::cout << record.sequence << std::endl;
-//                std::cout << best.Cigar() << std::endl;
-//                std::cout << "CigarANI: " << WFA2Wrapper::CigarANI(best.Cigar()) << std::endl;
-                ExtractIOSNPs(snp_list, best.Cigar(), record.sequence, record.quality, record.sequence,
-                              0, best.Taxid(), best.GeneId(), best.GenePos(), 1, 1);
-                for (auto& snp : snp_list) {
-//                    std::cout << snp.ToString() << " " << snp.snp_position-best.GenePos() << ":" << record.sequence[snp.snp_position-best.GenePos()] << std::endl;
-                    if (!m_snp_output.Write(snp)) {
-#pragma omp critical(snp_output)
-                        m_snp_output.Write(m_snp_os.value());
-                    }
+                if (ar1.IsSet()) {
+                    WFA2Wrapper::GetAlignmentInfo(m_info, ar1.Cigar());
+                    ArtoSAM(m_sam1, ar1, m_info, record1);
+                    Flag::SetPairedEnd(m_sam1.m_flag, true, both, true);
+                    Flag::SetRead2Unmapped(m_sam1.m_flag, !ar2.IsSet());
+                    Flag::SetRead1ReverseComplement(m_sam1.m_flag, ar1.Forward());
+                    Flag::SetNotPrimaryAlignment(m_sam1.m_flag, !first);
                 }
-//                Utils::Input();
+                if (ar2.IsSet()) {
+                    WFA2Wrapper::GetAlignmentInfo(m_info, ar2.Cigar());
+                    ArtoSAM(m_sam2, ar2, m_info, record2);
+                    Flag::SetPairedEnd(m_sam2.m_flag, true, both, false, true);
+                    Flag::SetRead1Unmapped(m_sam2.m_flag, !ar1.IsSet());
+                    Flag::SetRead2ReverseComplement(m_sam2.m_flag, ar2.Forward());
+                    Flag::SetNotPrimaryAlignment(m_sam2.m_flag, !first);
+                }
+
+
+                first = false;
+                alignments++;
+                if (ar1.IsSet() && !m_sam_output.Write(m_sam1.ToString())) {
+#pragma omp critical(sam_output)
+                    m_sam_output.Write(m_sam_os);
+                }
+                if (ar2.IsSet() && !m_sam_output.Write(m_sam2.ToString())) {
+#pragma omp critical(sam_output)
+                    m_sam_output.Write(m_sam_os);
+                }
             }
         }
     };

@@ -32,6 +32,8 @@ namespace protal {
 
     struct AlignmentResult;
     using AlignmentResultList = std::vector<AlignmentResult>;
+    using PairedAlignment = std::pair<AlignmentResult, AlignmentResult>;
+    using PairedAlignmentResultList = std::vector<PairedAlignment>;
 
     struct Sample;
     using SampleList = std::vector<Sample>;

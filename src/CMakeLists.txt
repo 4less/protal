@@ -51,6 +51,7 @@ add_library(protal_lib
         Taxonomy/Taxonomy.cpp
         Statistics.h
         Constants.h
+        SNPs/SNP.h
         )
 
 
@@ -96,7 +97,8 @@ target_link_directories(protal_lib
         Utils/
         Profiling/
         SequenceUtils/
-        Taxonomy/)
+        Taxonomy/
+        SNPs/)
 
 target_include_directories(protal_lib
         PUBLIC
@@ -109,7 +111,8 @@ target_include_directories(protal_lib
         Utils/
         Profiling/
         SequenceUtils/
-        Taxonomy/)
+        Taxonomy/
+        SNPs/)
 
 
 # Adding this to the path makes find_package find the required BHM library

@@ -65,7 +65,7 @@ namespace protal {
             using AnchorFinder = ChainAnchorFinder<KmerLookupSM>;
 //            using AnchorFinder = NaiveAnchorFinder<KmerLookupSM>;
 
-            using OutputHandler = VarkitOutputHandler;
+            using OutputHandler = ProtalOutputHandler;
 
             using optional_ofstream = std::optional<std::ofstream>;
             std::ofstream varkit_output(options.GetOutputPrefix() + ".tsv", std::ios::binary);
@@ -74,7 +74,6 @@ namespace protal {
                     options.NoStrains() ? optional_ofstream{} :
                     optional_ofstream{ std::in_place, options.GetOutputPrefix() + ".snps", std::ios::out };
 
-            OutputHandler output_handler(varkit_output, sam_output, snp_output, 1024*512, 1024*1024*16, 0.8);
 
             // AnchorFinder
             AnchorFinder anchor_finder(kmer_lookup);
@@ -84,6 +83,8 @@ namespace protal {
 
             Benchmark bm_classify("Run classify");
             if (options.PairedMode()) {
+                using OutputHandler = ProtalPairedOutputHandler;
+                OutputHandler output_handler(sam_output, 1024*512, 1024*1024*16, 0.8);
 //                std::ifstream is1 {options.GetFirstFile(), std::ios::in};
 //                std::ifstream is2 {options.GetSecondFile(), std::ios::in};
 
@@ -99,7 +100,7 @@ namespace protal {
                         OutputHandler,
                         DEBUG_NONE,
                         AlignmentBenchmark>(
-                        reader, options, anchor_finder, alignment_handler, output_handler, iterator, benchmark);
+                        reader, options, anchor_finder, alignment_handler, output_handler, iterator, genomes, benchmark);
 
                 protal_stats.WriteStats();
 
@@ -107,6 +108,8 @@ namespace protal {
                 is2.close();
 
             } else {
+                using OutputHandler = ProtalOutputHandler;
+                OutputHandler output_handler(sam_output, 1024*512, 1024*1024*16, 0.8);
 //                std::ifstream is {options.GetFirstFile(), std::ios::in};
                 igzstream is { options.GetFirstFile().c_str() };
                 SeqReader reader{ is };

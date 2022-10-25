@@ -40,7 +40,6 @@ namespace protal::classify {
             // Private variables
             FastxRecord record;
 
-
             OutputHandler output_handler(output_handler_global);
 
             // Extract variables from kmi_global
@@ -163,9 +162,37 @@ namespace protal::classify {
     }
 
 
+    static void JoinAlignmentPairs(PairedAlignmentResultList &pairs, AlignmentResultList &read1, AlignmentResultList &read2, GenomeLoader& loader) {
+        std::vector<bool> selected2(read2.size(), false);
+        for (auto& alignment1 : read1) {
+            bool paired = false;
+            size_t read2_index = 0;
+            for (auto& alignment2 : read2) {
+                if (alignment1.Taxid() == alignment2.Taxid()) {
+                    pairs.emplace_back(PairedAlignment{ alignment1, alignment2 });
+                    selected2[read2_index] = true;
+                    paired = true;
+                }
+                read2_index++;
+            }
+            if (!paired) {
+                pairs.emplace_back(PairedAlignment{ alignment1, AlignmentResult() });
+            }
+        }
+        for (int i = 0; i < selected2.size(); i++) {
+            if (!selected2[i]) {
+                pairs.emplace_back(PairedAlignment{ AlignmentResult(), read2[i] });
+            }
+        }
+
+        std::sort(pairs.begin(), pairs.end(), [](PairedAlignment const& a, PairedAlignment const& b) {
+            return ScorePairedAlignment(a) > ScorePairedAlignment(b);
+        });
+    }
+
     template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug, typename AlignmentBenchmark=NoBenchmark>
     requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
-    static Statistics RunPairedEnd(SeqReaderPE& reader_global, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global, AlignmentBenchmark benchmark_global={}) {
+    static Statistics RunPairedEnd(SeqReaderPE& reader_global, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global, GenomeLoader& genome_loader, AlignmentBenchmark benchmark_global={}) {
         constexpr bool benchmark_active = !std::is_same<AlignmentBenchmark, NoBenchmark>();
 
         size_t dummy = 0;
@@ -176,7 +203,7 @@ namespace protal::classify {
         Statistics statistics{};
         Benchmark bm_alignment_global("Alignment handler");
 
-#pragma omp parallel default(none) shared(std::cout, bm_alignment_global, benchmark_global, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
+#pragma omp parallel default(none) shared(std::cout, genome_loader, bm_alignment_global, benchmark_global, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
         {
             // Private variables
             FastxRecord record1;
@@ -206,6 +233,8 @@ namespace protal::classify {
             AlignmentAnchorList anchors2;
             AlignmentResultList alignment_results2;
 
+            PairedAlignmentResultList paired_alignment_results;
+
             size_t record_id = omp_get_thread_num();
 
             Benchmark bm_alignment{"Alignment handler"};
@@ -222,6 +251,7 @@ namespace protal::classify {
                 anchors2.clear();
                 alignment_results1.clear();
                 alignment_results2.clear();
+                paired_alignment_results.clear();
 
                 // Retrieve kmers
                 kmer_handler(std::string_view(record1.sequence), kmers1);
@@ -258,9 +288,13 @@ namespace protal::classify {
                 thread_statistics.total_alignments += alignment_results1.size();
                 thread_statistics.total_alignments += alignment_results2.size();
 
+                JoinAlignmentPairs(paired_alignment_results, alignment_results1,
+                                   alignment_results2, genome_loader);
+
                 // Output alignments
-                output_handler(alignment_results1, record1, record_id, true);
-                output_handler(alignment_results2, record2, record_id, false);
+                output_handler(paired_alignment_results, record1, record2, record_id);
+//                output_handler(alignment_results1, record1, record_id, true);
+//                output_handler(alignment_results2, record2, record_id, false);
 
 
 

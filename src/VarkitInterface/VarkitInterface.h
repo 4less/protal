@@ -186,7 +186,7 @@ namespace protal {
             }
             rpos += (c != 'I');
             qpos += (c != 'D');
-//            std::cout << snp_list.back().ToString() << std::endl;
+//            std::cout << m_snp_list.back().ToString() << std::endl;
         }
     }
 }
