@@ -39,8 +39,12 @@ namespace protal {
         using GeneId = uint32_t;
         using GenePos = uint32_t;
 
+        using OptIRA = std::optional<InternalReadAlignment>;
+        using OptIRAPair = std::pair<OptIRA, OptIRA>;
         using InternalReadAlignmentList = std::vector<InternalReadAlignment>;
         using InternalNonUniqueReadAlignmentList = std::vector<InternalReadAlignment>;
+        using InternalNonUniqueReadOptIRAPairList = std::vector<OptIRAPair>;
+        using InternalNonUniqueReadOptIRAPairListList = std::vector<InternalNonUniqueReadOptIRAPairList>;
         using InternalNonUniqueReadAlignmentListList = std::vector<InternalNonUniqueReadAlignmentList>;
 
         using GeneMap = tsl::sparse_map<uint32_t, Gene>;
@@ -146,6 +150,10 @@ namespace protal {
                 return m_vcov;
             }
 
+            double VerticalCoverage() const {
+                return m_vcov;
+            }
+
             double GetAbundance(double total_vertical_coverage) {
                 return VerticalCoverage()/total_vertical_coverage;
             }
@@ -202,13 +210,21 @@ namespace protal {
 
         struct InternalReadAlignment {
             size_t readid;
-            size_t pairid;
+            size_t pairid;              //128
             TaxId taxid;
             GeneId geneid;
-            GenePos genepos;
-            int alignment_score;
+            GenePos genepos;            //256
             double alignment_ani;
+            int alignment_score;
             bool forward;
+            bool benchmark = false;
+            bool correct = false;
+
+            static const std::pair<TaxId, GeneId> ExtractTaxidGeneid(std::string &ref) {
+                int delim_pos = -1;
+                while (ref[++delim_pos] != '_');
+                return { stoul(ref.substr(0, delim_pos)), stoul(ref.substr(delim_pos+1, ref.length() - delim_pos - 1)) };
+            }
 
             std::string ToString() {
                 std::string str;
@@ -240,6 +256,25 @@ namespace protal {
                     pairid(pairid),
                     alignment_score(alignment_score),
                     alignment_ani(alignment_ani) {};
+
+            InternalReadAlignment(size_t readid, SamEntry &sam, bool benchmark = false) :
+                    readid(readid),
+                    taxid(0),
+                    geneid(0),
+                    genepos(sam.m_pos),
+                    forward(false),
+                    benchmark(benchmark),
+                    pairid(Flag::IsRead2(sam.m_flag)),
+                    alignment_score(WFA2Wrapper::CigarScore(sam.m_cigar)),
+                    alignment_ani(WFA2Wrapper::CompressedCigarANI(sam.m_cigar))
+                    {
+                auto &[ tid, gid ] = ExtractTaxidGeneid(sam.m_rname);
+                taxid = tid;
+                geneid = gid;
+                if (benchmark) {
+                    correct = sam.m_qname.substr(0, sam.m_rname.length()) == sam.m_rname;
+                }
+            };
 
 
             InternalReadAlignment(InternalReadAlignment const &other) :
@@ -334,8 +369,8 @@ namespace protal {
                     os << node.rep_genome << '\t' << "d__Bacteria|" << taxonomy.LineageStr(key) << '\t' << taxon.GetAbundance(total_vcov) << std::endl;
                 }
 
-                if (!one_pass) {
-                    for (auto &[key, taxon]: m_taxa) {
+                if (true || !one_pass) {
+                    for (auto &[key, taxon] : m_taxa) {
                         bool prediction = filter.Pass(taxon);
 
                         std::cerr << key << "\t";
@@ -346,6 +381,7 @@ namespace protal {
                         std::cerr << TaxonFilter::ExpectedGenePresence(taxon) << '\t';
                         std::cerr << TaxonFilter::ExpectedGenePresenceRatio(taxon) << '\t';
                         std::cerr << taxon.Uniqueness() << '\t';
+                        std::cerr << taxon.VerticalCoverage() << '\t';
                         std::cerr << prediction << std::endl;
                     }
                 }
@@ -359,6 +395,7 @@ namespace protal {
         };
 
         class Profiler {
+
         public:
             Profiler(GenomeLoader& genome_loader) :
                     m_genome_loader(genome_loader) {}
@@ -385,8 +422,8 @@ namespace protal {
             private:
                 std::vector<InternalReadAlignmentList> m_unique_alignments;
                 std::vector<InternalNonUniqueReadAlignmentListList> m_non_unique_alignments;
+                std::vector<InternalNonUniqueReadOptIRAPairListList> m_non_unique_paired_alignments;
                 size_t m_size = ReadEvidenceQuality::SIZE;
-
 
             public:
                 AlignmentLists() {
@@ -394,93 +431,133 @@ namespace protal {
                         m_unique_alignments.emplace_back(InternalReadAlignmentList{});
                     for (int i = 0; i < m_size; i++)
                         m_non_unique_alignments.emplace_back(InternalNonUniqueReadAlignmentListList{});
+                    for (int i = 0; i < m_size; i++)
+                        m_non_unique_paired_alignments.emplace_back(InternalNonUniqueReadOptIRAPairListList{});
                 };
 
                 InternalReadAlignmentList &GetUniqueList(ReadEvidenceQuality quality) {
                     return m_unique_alignments[quality];
                 }
-
                 InternalNonUniqueReadAlignmentListList &GetNonUniqueList(ReadEvidenceQuality quality) {
                     return m_non_unique_alignments[quality];
+                }
+                InternalNonUniqueReadOptIRAPairListList &GetNonUniquePairList(ReadEvidenceQuality quality) {
+                    return m_non_unique_paired_alignments[quality];
                 }
             };
 
         private:
             AlignmentLists m_alignments;
             InternalNonUniqueReadAlignmentList m_tmp;
+            InternalNonUniqueReadOptIRAPairList m_tmp_pair;
             GenomeLoader& m_genome_loader;
+
 
         public:
 
+            static std::pair<double, int> ScorePairedAlignment(OptIRA const& a, OptIRA const& b, double divide_penalty=2.2, double alone_penalty=2) {
+                int score = 0;
+                double ani = 0;
+                if (a.has_value() && b.has_value()) {
+                    score = (a.value().alignment_score + b.value().alignment_score) / divide_penalty;
+                    ani = (a.value().alignment_ani + b.value().alignment_ani) / 2;
+                } else if (a.has_value()) {
+                    score = a.value().alignment_score - alone_penalty;
+                    ani = a.value().alignment_ani;
+                } else if (b.has_value()) {
+                    score = b.value().alignment_score - alone_penalty;
+                    ani = b.value().alignment_ani;
+                }
+                return { ani, score };
+            }
+            static std::pair<double, int> ScorePairedAlignment(OptIRAPair const& pair, double divide_penalty=2.2, double alone_penalty=2) {
+                return ScorePairedAlignment(pair.first, pair.second);
+            }
+
 
             void
-            ProcessUnique(InternalReadAlignment const &ira, ReadEvidenceQuality min_qual = ReadEvidenceQuality::GOOD) {
-                auto qual = GetReadEvidenceQuality(ira.alignment_ani, ira.alignment_score);
+            ProcessUnique(std::optional<InternalReadAlignment> const &ira, std::optional<InternalReadAlignment> const &ira2, ReadEvidenceQuality min_qual = ReadEvidenceQuality::GOOD) {
+                auto [ani, score] = ScorePairedAlignment(ira, ira2);
+                auto qual = GetReadEvidenceQuality(ani, score);
                 static int good_qual_counter = 0;
-//                if (qual >= min_qual) {
-//                    good_qual_counter++;
-//                    std::cout << "good_unique_qual_counter: " << good_qual_counter << std::endl;
-//                }
-                m_alignments.GetUniqueList(qual).emplace_back(ira);
+                if (ira.has_value()) m_alignments.GetUniqueList(qual).emplace_back(ira.value());
+                if (ira2.has_value()) m_alignments.GetUniqueList(qual).emplace_back(ira2.value());
             }
 
             void ProcessNonUniqueWorker(std::vector<InternalReadAlignment> &non_uniques) {
                 if (non_uniques.empty()) return;
-                std::sort(non_uniques.begin(), non_uniques.end(),
-                          [](InternalReadAlignment const &a, InternalReadAlignment const &b) {
-                              return a.alignment_score > b.alignment_score;
-                          });
+                // Assume scores are
+//                std::sort(non_uniques.begin(), non_uniques.end(),
+//                          [](InternalReadAlignment const &a, InternalReadAlignment const &b) {
+//                              return a.alignment_score > b.alignment_score;
+//                          });
                 auto &best = non_uniques.front();
                 auto qual = GetReadEvidenceQuality(best.alignment_ani, best.alignment_score);
-
-//                std::cout << quality_map[qual];
-//                std::cout << " These for a non-unique cluster with same read_name" << std::endl;
-//                for (auto a : non_uniques) {
-//                    std::cout << a.ToString() << std::endl;
-//                }
-//                std::cout << "-----" << std::endl;
 
                 m_alignments.GetNonUniqueList(qual).emplace_back(std::move(non_uniques));
                 non_uniques.clear();
             }
 
-            void ProcessNonUnique(InternalReadAlignment const &ira) {
+
+            void ProcessNonUniqueWorker(InternalNonUniqueReadOptIRAPairList &non_uniques) {
+                if (non_uniques.empty()) return;
+                auto &best = non_uniques.front();
+
+                auto [ani, score] = ScorePairedAlignment(best);
+
+                auto qual = GetReadEvidenceQuality(ani, score);
+
+                m_alignments.GetNonUniquePairList(qual).emplace_back(std::move(non_uniques));
+                non_uniques.clear();
+            }
+
+            static bool SameReadId(OptIRA const &ira1, OptIRA const &ira2, OptIRAPair const& pair) {
+                assert(pair.first.has_value() || pair.second.has_value());
+                assert(ira1.has_value() || ira2.has_value());
+
+                auto& rid = ira1.has_value() ? ira1.value().readid : ira2.value().readid;
+                auto& rid2 = pair.first.has_value() ? pair.first.value().readid : pair.second.value().readid;
+
+                return rid == rid2;
+            }
+
+            void ProcessNonUnique(std::optional<InternalReadAlignment> const &ira, std::optional<InternalReadAlignment> const &ira2) {
                 static int good_qual_counter = 0;
-                if (!m_tmp.empty() && m_tmp.front().readid != ira.readid) {
-                    ProcessNonUniqueWorker(m_tmp);
+                static int non_unique_same_id_counter = 0;
+                if (!m_tmp_pair.empty() && !SameReadId(ira, ira2, m_tmp_pair.front())) {
+                    ProcessNonUniqueWorker(m_tmp_pair);
+                    non_unique_same_id_counter++;
                 }
-                m_tmp.emplace_back(ira);
+                m_tmp_pair.emplace_back(OptIRAPair { ira, ira2 });
             }
 
-            void Process(InternalReadAlignment const &ira, bool unique) {
+            void Process(std::optional<InternalReadAlignment> const &ira,
+                         std::optional<InternalReadAlignment> const &ira2,
+                         bool unique) {
+                assert(ira.has_value() || ira2.has_value());
                 if (unique) {
-                    ProcessUnique(ira);
+                    ProcessUnique(ira, ira2);
                 } else {
-                    ProcessNonUnique(ira);
+                    ProcessNonUnique(ira, ira2);
                 }
             }
 
-            void RegisterRead(size_t read_id, TaxId taxid, GeneId geneid, GenePos genepos,
-                              bool forward, size_t pairid, int alignment_score,
-                              double alignment_ani, bool unique = true) {
-                Process(InternalReadAlignment{
-                        read_id, pairid, taxid, geneid, genepos, forward,
-                        alignment_score, alignment_ani
-                }, unique);
-            }
 
-            void SamFromTokens(std::vector<std::string>& tokens, SamEntry &sam) {
-                sam.m_qname = tokens[0];
-                sam.m_flag = std::stoul(tokens[1]);
-                sam.m_rname = tokens[2];
-                sam.m_pos = std::stoul(tokens[3]);
-                sam.m_mapq = std::stoul(tokens[4]);
-                sam.m_cigar = tokens[5];
-                sam.m_rnext = tokens[6];
-                sam.m_pnext = std::stoul(tokens[7]);
-                sam.m_tlen = std::stol(tokens[8]);
-                sam.m_seq = tokens[9];
-                sam.m_qual = tokens[10];
+//            void RegisterRead(size_t read_id, TaxId taxid, GeneId geneid, GenePos genepos,
+//                              bool forward, size_t pairid, int alignment_score,
+//                              double alignment_ani, bool unique = true) {
+//
+//                Process(std::optional<InternalReadAlignment>{
+//                    InternalReadAlignment(
+//                        read_id, pairid, taxid, geneid, genepos, forward,
+//                        alignment_score, alignment_ani)
+//                    }, unique);
+//            }
+
+            void Process(size_t read_id, SamEntry &sam1, SamEntry &sam2, bool has_sam1, bool has_sam2, bool unique) {
+                OptIRA oira1 = has_sam1 ? OptIRA(InternalReadAlignment(read_id, sam1)) : OptIRA();
+                OptIRA oira2 = has_sam2 ? OptIRA(InternalReadAlignment(read_id, sam2)) : OptIRA();
+                Process(oira1, oira2, unique);
             }
 
 
@@ -491,49 +568,71 @@ namespace protal {
                 std::string line;
                 std::vector<std::string> tokens;
                 SamEntry current;
+                SamEntry current_other;
                 SamEntry next;
+                SamEntry next_other;
 
-                std::string last = "";
+                bool has_current1 = false, has_current2 = false, has_next1 = false, has_next2 = false;
+
+                std::string current_qname = "__";
+                std::string next_qname = "__";
+                std::string last_qname = "__";
 
 
                 if (!std::getline(file, line)) {
                     std::cerr << "Profile is empty" << std::endl;
                     return MicrobialProfile(m_genome_loader);
                 }
-                LineSplitter::Split(line, delim, tokens);
-                SamFromTokens(tokens, current);
 
+                while (line[0] == '@') {
+                    std::getline(file, line);
+                }
+
+                GetSamPair(file, line, tokens, current, current_other, has_current1, has_current2, true);
+                //last_qname = has_current1 ? current.m_qname.substr(0, current.m_qname.length()-2) : current_other.m_qname.substr(0, current_other.m_qname.length()-2);
+
+//                std::cout << "Has current1: " << has_current1 << " " << current.m_rname << std::endl;
+//                std::cout << "Has current2: " << has_current2 << " " << current_other.m_rname << std::endl;
                 size_t read_id = 0;
-                while (std::getline(file, line)) {
-                    LineSplitter::Split(line, delim, tokens);
-                    SamFromTokens(tokens, next);
-                    bool unique = current.m_qname != last && current.m_qname != next.m_qname;
+                while (GetSamPair(file, line, tokens, next, next_other, has_next1, has_next2)) {
 
-                    LineSplitter::Split(current.m_rname, "_", tokens);
+                    current_qname = has_current1 ? current.m_qname.substr(0, current.m_qname.length()-2) : current_other.m_qname.substr(0, current_other.m_qname.length()-2);
+                    next_qname = has_next1 ? next.m_qname.substr(0, next.m_qname.length()-2) : next_other.m_qname.substr(0, next_other.m_qname.length()-2);
+                    bool unique = current_qname != last_qname && current_qname != next_qname;
 
-                    size_t taxid = std::stoul(tokens[0]);
-                    size_t geneid = std::stoul(tokens[1]);
-                    size_t pos = current.m_pos;
-                    double ani = WFA2Wrapper::CigarANI(current.m_cigar);
-                    int score = WFA2Wrapper::CigarScore(current.m_cigar);
+//                    if (!unique) {
+//                        std::cout << "Has current1: " << has_current1 << " " << current.m_rname << std::endl;
+//                        std::cout << "Has current2: " << has_current2 << " " << current_other.m_rname << std::endl;
+//                        std::cout << "Has next1: " << has_next1 << " " << next.m_rname << std::endl;
+//                        std::cout << "Has next2: " << has_next2 << " " << next_other.m_rname << std::endl;
+//                    }
+//                    std::cout << "current_qname: " << current_qname << " <<<<" << std::endl;
 
-                    read_id += current.m_qname != last;
+                    read_id += current_qname != last_qname;
+                    last_qname = current_qname;
 
-                    RegisterRead(read_id, taxid, geneid, pos, true, 0, score, ani, unique);
+//                    std::cout << std::string(79, '-') << " unique? " << unique << std::endl;
+//                    if (has_current1) {
+//                        std::cout << read_id << " " << current.ToString() << std::endl;
+//                    }
+//                    if (has_current2) {
+//                        std::cout << read_id << " " << current_other.ToString() << std::endl;
+//                    }
 
-                    last = current.m_qname;
+                    Process(read_id, current, current_other, has_current1, has_current2, unique);
+//                    std::cout << "After Process" << std::endl;
+
                     std::swap(current, next);
+                    std::swap(current_other, next_other);
+                    has_current1 = has_next1;
+                    has_current2 = has_next2;
                 }
                 ProcessNonUniqueWorker(m_tmp);
 
-                bool unique = current.m_qname != last;
-                LineSplitter::Split(current.m_rname, "_", tokens);
-                size_t taxid = std::stoul(tokens[0]);
-                size_t geneid = std::stoul(tokens[1]);
-                size_t pos = current.m_pos;
-                double ani = WFA2Wrapper::CigarANI(current.m_cigar);
-                int score = WFA2Wrapper::CigarScore(current.m_cigar);
-                RegisterRead(read_id, taxid, geneid, pos, true, 0, score, ani, unique);
+                current_qname = has_current1 ? current.m_qname : current_other.m_qname;
+                bool unique = current_qname != last_qname;
+                read_id += unique;
+                Process(read_id, current, current_other, has_current1, has_current2, unique);
 
 
                 return Profile();
@@ -543,10 +642,15 @@ namespace protal {
                 MicrobialProfile profile(m_genome_loader);
                 profile.SetName("Profile");
 
+                size_t total_reads_profiled = 0;
+
+                std::cout << "Uniques" << std::endl;
                 for (int i = 0; i < ReadEvidenceQuality::SIZE; i++) {
                     auto qual = quality_enum_list[i];
                     auto& uniques = m_alignments.GetUniqueList(qual);
+                    std::cout << qual << " " << uniques.size() << std::endl;
                     for (auto& ira : uniques) {
+                        total_reads_profiled++;
                         profile.AddRead(ira, true);
                     }
 //                    for (auto& [key, taxon] : profile.GetTaxa()) {
@@ -554,14 +658,36 @@ namespace protal {
 //                    }
                 }
 
+                std::cout << "Non Unique Pairs" << std::endl;
                 for (int i = 0; i < ReadEvidenceQuality::SIZE; i++) {
                     auto qual = quality_enum_list[i];
-                    auto& non_uniques = m_alignments.GetNonUniqueList(qual);
-                    for (auto& ira : non_uniques) {
-                        profile.AddRead(ira.front(), false);
+                    auto& non_uniques = m_alignments.GetNonUniquePairList(qual);
+                    std::cout << qual << " " << non_uniques.size() << std::endl;
+                    for (auto& ira_pair_list : non_uniques) {
+                        if (ira_pair_list.front().first.has_value()) {
+                            profile.AddRead(ira_pair_list.front().first.value(), false);
+                            total_reads_profiled++;
+                        }
+                        if (ira_pair_list.front().second.has_value()) {
+                            profile.AddRead(ira_pair_list.front().second.value(), false);
+                            total_reads_profiled++;
+                        }
+
                     }
                 }
 
+                std::cout << "Non Uniques" << std::endl;
+                for (int i = 0; i < ReadEvidenceQuality::SIZE; i++) {
+                    auto qual = quality_enum_list[i];
+                    auto& non_uniques = m_alignments.GetNonUniqueList(qual);
+                    std::cout << qual << " " << non_uniques.size() << std::endl;
+                    for (auto& ira : non_uniques) {
+                        profile.AddRead(ira.front(), false);
+                        total_reads_profiled++;
+                    }
+                }
+
+                std::cout << "Reads contributed to profiles: " << total_reads_profiled << std::endl;
                 return profile;
             }
 

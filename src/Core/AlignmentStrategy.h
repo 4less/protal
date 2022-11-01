@@ -13,6 +13,73 @@
 #include "FastAlignment.h"
 
 namespace protal {
+    struct AlignmentOrientation {
+        int query_start = 0;
+        int query_end = 0;
+        int query_len = 0;
+        int reference_start = 0;
+        int reference_end = 0;
+        int reference_len = 0;
+        int overlap = 0;
+        int query_dove_left = 0;
+        int query_dove_right = 0;
+        int reference_dove_left = 0;
+        int reference_dove_right = 0;
+
+        int MaxDoveLeft() {
+            return std::max(query_dove_left, reference_dove_left);
+        }
+
+        int MaxDoveRight() {
+            return std::max(query_dove_right, reference_dove_right);
+        }
+
+        std::string ToString() {
+            std::string ret;
+            ret += "query_start:           " + std::to_string(query_start) + '\n';
+            ret += "query_end:             " + std::to_string(query_end) + '\n';
+            ret += "query_len:             " + std::to_string(query_len) + '\n';
+            ret += "reference_start:       " + std::to_string(reference_start) + '\n';
+            ret += "reference_end:         " + std::to_string(reference_end) + '\n';
+            ret += "reference_len:         " + std::to_string(reference_len) + '\n';
+
+            ret += "overlap:               " + std::to_string(overlap) + '\n';
+            ret += "query_dove_left:       " + std::to_string(query_dove_left) + '\n';
+            ret += "query_dove_right:      " + std::to_string(query_dove_right) + '\n';
+            ret += "reference_dove_left:   " + std::to_string(reference_dove_left) + '\n';
+            ret += "reference_dove_right:  " + std::to_string(reference_dove_right);
+            return ret;
+        }
+
+        void Update(int abs_pos, size_t read_length, size_t gene_length, int max_dove) {
+            // Starts and left dovetails
+            query_start = abs_pos < 0 ? -abs_pos : 0;
+            query_dove_left = (query_start - max_dove) < 0 ? query_start : max_dove;
+            reference_start = std::max(abs_pos, 0);
+            reference_dove_left = (reference_start - max_dove) < 0 ? reference_start : max_dove;
+
+            overlap = std::min((gene_length - reference_start), (read_length - query_start));
+
+            // Ends and right dovetails
+            query_end = query_start + overlap;
+            query_dove_right = (query_end + max_dove) > read_length ?
+                               (read_length - query_end) : max_dove;
+            reference_end = reference_start + overlap;
+            reference_dove_right = (reference_end + max_dove) > gene_length ?
+                                   (gene_length - reference_end) : max_dove;
+
+            // Update starts and ends according to dovetails
+            query_start -= query_dove_left;
+            query_end += query_dove_right;
+            reference_start -= reference_dove_left;
+            reference_end += reference_dove_right;
+
+            // Get query and reference lengths based on start and end
+            query_len = query_end - query_start;
+            reference_len = reference_end - reference_start;
+        }
+    };
+
     class SimpleAlignmentHandler {
     private:
         WFA2Wrapper m_aligner;
@@ -24,6 +91,7 @@ namespace protal {
         double m_max_score_ani = 0;
 
         bool m_fastalign = false;
+        AlignmentOrientation m_alignment_orientation;
 
 
         static bool IsReverse(LookupResult const& first_anchor, LookupResult const& second_anchor) {
@@ -306,7 +374,6 @@ namespace protal {
                 return { false, -1, "" };
             }
 
-
             // create stringviews
             auto left_length = std::min(first.ReadStart(), first.GeneStart());
             auto right_length = std::min(query.length() - second.ReadEnd(), gene.length() - second.GeneEnd());
@@ -418,6 +485,7 @@ namespace protal {
             return { m_aligner.GetAligner().getAlignmentScore(), m_aligner.Success(), m_aligner.GetAligner().getAlignmentCigar() };
         }
 
+
         void operator() (AlignmentAnchorList& anchors, AlignmentResultList& results, std::string& sequence) {
 
             constexpr bool alignment_verbose = false;
@@ -464,18 +532,20 @@ namespace protal {
                 // Absolute read positioning with respect to gene
                 int abs_pos = anchor.Front().genepos - anchor.Front().readpos;
 
+                size_t max_dove_size = 0;
+                m_alignment_orientation.Update(abs_pos, read.length(), gene.Sequence().length(), max_dove_size);
 
-                size_t read_start = abs_pos < 0 ? -abs_pos : 0;
-                size_t gene_start = std::max(abs_pos, 0);
-                size_t overlap = std::min(gene.Sequence().length() - gene_start, read_len - read_start);
-
-                std::string query = std::string(read.c_str() + read_start, overlap);
-                std::string reference = gene.Sequence().substr(gene_start, overlap);
+                std::string query = std::string(read.c_str() + m_alignment_orientation.query_start, m_alignment_orientation.query_len);
+                std::string reference = gene.Sequence().substr(m_alignment_orientation.reference_start, m_alignment_orientation.reference_len);
 
 
                 double cigar_ani = 0;
                 std::string cigar = "";
                 int score;
+                int alignment_start = abs_pos;
+                int read_start = abs_pos;
+
+                AlignmentInfo info;
 
                 // anchor_indels == 0 means no indels likely between seeds of anchor
                 bool approximate_alignment = m_fastalign && anchor_indels == 0;
@@ -493,14 +563,85 @@ namespace protal {
                     cigar_ani = WFA2Wrapper::CigarANI(cigart);
                 } else {
                     Benchmark bm_local{"alignment"};
-                    m_aligner.Alignment(query, reference, MaxScore(m_max_score_ani, query.length()));
+//                    if (max_dove_size > 0) {
+//                        m_aligner.Alignment(query, reference,
+//                                            m_alignment_orientation.query_dove_left,
+//                                            m_alignment_orientation.query_dove_right,
+//                                            m_alignment_orientation.reference_dove_left,
+//                                            m_alignment_orientation.reference_dove_right,
+//                                            MaxScore(m_max_score_ani, m_alignment_orientation.overlap));
+//                    } else {
+//                    }
+                    m_aligner.Alignment(query, reference,
+                                        MaxScore(m_max_score_ani, m_alignment_orientation.overlap));
+
                     bm_local.Stop();
 
-                    cigar_ani = WFA2Wrapper::CigarANI(m_aligner.GetAligner().getAlignmentCigar());
+                    if (!m_aligner.Success()) continue;
+                    WFA2Wrapper::GetAlignmentInfo(info, m_aligner.GetAligner().getAlignmentCigar(), m_alignment_orientation.query_dove_left, m_alignment_orientation.reference_dove_left, m_alignment_orientation.query_dove_right, m_alignment_orientation.reference_dove_right);
+                    alignment_start = m_alignment_orientation.reference_start + info.gene_start_offset;
+                    read_start = m_alignment_orientation.query_start + info.read_start_offset;
 
-                    cigar = m_aligner.GetAligner().getAlignmentCigar();
+
+
+//
+//                    std::cout << " ---------------------- " << std::endl;
+//                    //                    alignment_start = m_alignment_orientation.reference_start + info.gene_start_offset;
+//                    read_start = m_alignment_orientation.query_start + info.read_start_offset;
+//
+//                    std::cout << read.substr(read_start, 10) << std::endl;
+//                    std::cout << gene.Sequence().substr(alignment_start, 10) << std::endl;
+//
+//
+//                    std::cout << "Gene length: " << gene.GetLength() << std::endl;
+//                    std::cout << "Min ani: " << m_max_score_ani << std::endl;
+//                    std::cout << "Max: " << MaxScore(m_max_score_ani, m_alignment_orientation.overlap) << std::endl;
+//                    std::cout << m_alignment_orientation.ToString() << std::endl;
+//                    std::cout << std::string(m_alignment_orientation.reference_dove_left, '-') << query
+//                              << std::endl;
+//                    std::cout << std::string(m_alignment_orientation.query_dove_left, '-') << reference
+//                              << std::endl;
+//                    std::cout << " --------- " << std::endl;
+//                    std::cout << info.cigar << std::endl;
+//                    std::cout << info.compressed_cigar << std::endl;
+//                    if (m_alignment_orientation.overlap < read.length())
+//                        Utils::Input();
+
+//                    std::cout << "-------------------##################" << std::endl;
+//                    if (info.insertions || info.deletions) {
+//                        m_aligner.PrintAlignment();
+//                    }
+                    cigar_ani = WFA2Wrapper::CigarANI(info.cigar);
+
+//                    std::cout << read.length() << " - " << read_start << " - " << info.cigar.length() << " - " << info.deletions << " " << info.insertions << std::endl;
+//                    std::cout << info.cigar << std::endl;
+                    int right_padding = read.length() - read_start - info.cigar.length() + info.deletions;
+
+//                    if (right_padding < 0) {
+//                        std::cout << info.cigar << std::endl;
+//                        m_aligner.PrintAlignment();
+//                    }
+//                    std::cout << right_padding << std::endl;
+//                    std::cout << "Read start " << read_start << " ... pad by that much" << std::endl;
+                    cigar = std::string(read_start, 'S') + info.cigar + std::string(right_padding, 'S');
                     score = m_aligner.GetAligner().getAlignmentScore();
+//                    std::cout << info.ToString() << std::endl;
 
+                    auto len = std::count_if(cigar.begin(), cigar.end(), [](char c) {
+                        return c != 'I';
+                    });
+
+                    if (len != read.length()) {
+                        std::cout << m_alignment_orientation.ToString() << std::endl;
+                        std::cout << len << std::endl;
+                        std::cout << query << std::endl;
+                        std::cout << cigar << std::endl;
+                        m_aligner.PrintAlignment();
+                        exit(10);
+                    }
+//                    std::cout << "-----------------------" << std::endl;
+//                    std::cout << read << std::endl;
+//                    std::cout << reference << std::endl;
 //                    m_aligner.PrintAlignment();
 
                     if constexpr(alignment_verbose) {
@@ -515,11 +656,18 @@ namespace protal {
                 bm_alignment.Stop();
 
                 if (cigar_ani >= m_max_score_ani) {
-                    m_alignment_result.Set(anchor.taxid, anchor.geneid, abs_pos, !reversed);
+                    m_alignment_result.Set(anchor.taxid, anchor.geneid, alignment_start, anchor.forward);
                     m_alignment_result.Set(score, cigar);
                     results.emplace_back(m_alignment_result);
                     total_alignments++;
                 }
+
+//                if (cigar_ani != WFA2Wrapper::CompressedCigarANI(info.compressed_cigar)) {
+//                    std::cout << cigar << std::endl;
+//                    std::cout << info.compressed_cigar << std::endl;
+//                    std::cout << cigar_ani << " " << WFA2Wrapper::CompressedCigarANI(info.compressed_cigar) << std::endl;
+//                }
+
                 alignment_end:
                 if (--take_top <= 0) {
                     break;

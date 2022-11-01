@@ -1,10 +1,11 @@
 project(protal_lib)
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_EXE_LINKER_FLAGS "-lwfa -lz")
-set(CMAKE_CXX_FLAGS_DEBUG "-pthread -ggdb -g -std=c++2a -fopenmp -Wall")
+set(CMAKE_EXE_LINKER_FLAGS " -lwfa -lz")
+set(CMAKE_CXX_FLAGS_DEBUG " -pthread -ggdb -g -std=c++2a -fopenmp -Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-std=c++20 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas") #-march=native
 
+message(${CMAKE_CXX_FLAGS_DEBUG})
 
 # This creates the target and must be specified before using target_include etc
 add_library(protal_lib
@@ -52,6 +53,7 @@ add_library(protal_lib
         Statistics.h
         Constants.h
         SNPs/SNP.h
+        Test.h
         )
 
 
@@ -127,11 +129,15 @@ target_include_directories(protal_lib
 # Directly include folders to make them "includable" with '#include "robin_map.h"'
 # require BitHashMap
 # find_package(BHM REQUIRED)
+
 find_package(ZLIB REQUIRED)
+#find_library(HTSLIB htslib /usr/users/QIB_fr017/fritsche/miniconda3/include/)
+
+find_library(HTSLIB_LIB hts)
+target_link_libraries(protal_lib PUBLIC ${HTSLIB_LIB})
 
 # include CWCSV
 #find_package(CWCSV REQUIRED)
-
 
 # Directly include folders to make them "includable" with '#include "robin_map.h"'
 # generic include_directories should link with all targets in "dir"
@@ -144,19 +150,22 @@ find_package(ZLIB REQUIRED)
 target_include_directories(protal_lib PUBLIC /usr/users/QIB_fr017/fritsche/library_cpp/robin)
 target_include_directories(protal_lib PUBLIC /usr/users/QIB_fr017/fritsche/library_cpp/tsl)
 
+
 # Necessary to link to stdc++fs (filesystem experimental support)
 target_link_libraries(protal_lib
         LINK_PUBLIC
         ZLIB::ZLIB
         stdc++fs
         wfa_lib
-        gzstream_lib)
+        gzstream_lib
+#        hts_lib
         #fmt_lib
-
+        )
 
 add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/wfa2-lib/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/wfa)
 #add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/fmt/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/fmt)
 add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/gzstream/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/gzstream)
+#add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/htslib-1.16/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/htslib)
 
 
 #target_include_directories(protal_lib PUBLIC ${CWCSV_INCLUDE_DIR})

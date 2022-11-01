@@ -48,6 +48,11 @@ namespace protal {
         void Load() {
             Load(m_sequence, m_start_byte, m_length);
         };
+
+        size_t GetLength() const {
+            return m_length;
+        }
+
         const std::string& Sequence() const {
             return m_sequence;
         }
@@ -174,6 +179,18 @@ namespace protal {
 
         GenomeMap& GetGenomeMap() {
             return m_genomes;
+        }
+
+        void WriteSamHeader(std::ostream& os=std::cout) {
+            os << "@HD\tVN:1.6\n";
+            for (auto& [key, genome] : m_genomes) {
+                auto& genes = genome.GetGeneList();
+                for (auto i = 0; i < genes.size(); i++) {
+                    if (genes[i].IsSet()) {
+                        os << "@SQ\tSN:" << key << '_' << i << '\t' << "LN:" << genes[i].GetLength() << '\n';
+                    }
+                }
+            }
         }
 
         void LoadAllGenomes() {

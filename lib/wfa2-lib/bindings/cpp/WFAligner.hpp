@@ -162,6 +162,10 @@ public:
   void cigarPrintPretty(FILE* const stream, const std::string &seq1, const std::string &seq2);
   void cigarPrintPretty(FILE *const stream, std::string_view seq1, std::string_view seq2);
 
+  auto GetAligner() {
+      return wfAligner;
+  }
+
 protected:
   wavefront_aligner_attr_t attributes;
   wavefront_aligner_t* wfAligner;

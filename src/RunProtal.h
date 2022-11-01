@@ -67,13 +67,10 @@ namespace protal {
 
             using OutputHandler = ProtalOutputHandler;
 
-            using optional_ofstream = std::optional<std::ofstream>;
-            std::ofstream varkit_output(options.GetOutputPrefix() + ".tsv", std::ios::binary);
             std::ofstream sam_output(options.SamFile(), std::ios::out);
-            optional_ofstream snp_output =
-                    options.NoStrains() ? optional_ofstream{} :
-                    optional_ofstream{ std::in_place, options.GetOutputPrefix() + ".snps", std::ios::out };
 
+            // Maybe change in flag if file should be written.
+            genomes.WriteSamHeader(sam_output);
 
             // AnchorFinder
             AnchorFinder anchor_finder(kmer_lookup);
@@ -128,11 +125,7 @@ namespace protal {
             }
 
             // Close output streams;
-            varkit_output.close();
             sam_output.close();
-
-            if (snp_output.has_value()) snp_output.value().close();
-
 
 
             bm_classify.PrintResults();
@@ -175,6 +168,7 @@ namespace protal {
         /*
          * PROFILER
          */
+        std::cout << "Profile? " << options.Profile() << std::endl;
         if (options.Profile()) {
             Profile:
 

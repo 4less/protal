@@ -15,6 +15,7 @@
 #include "FastxReader.h"
 #include "SamHandler.h"
 #include "SNP.h"
+#include <htslib/sam.h>
 
 namespace protal {
     class AlignmentResult {
@@ -32,6 +33,7 @@ namespace protal {
 
         bool m_forward = false;
         std::string m_cigar;
+        std::string m_compressed_cigar;
 
 
 
@@ -134,6 +136,7 @@ namespace protal {
         return score;
     }
 
+
     static int ScorePairedAlignment(PairedAlignment const& pair) {
         return ScorePairedAlignment(pair.first, pair.second);
     }
@@ -142,13 +145,13 @@ namespace protal {
         sam.m_qname = record.id;
         sam.m_flag = 0;
         sam.m_rname = std::to_string(ar.Taxid()) + "_" + std::to_string(ar.GeneId());
-        sam.m_pos = ar.GenePos() + info.alignment_start;
+        sam.m_pos = ar.GenePos() + info.gene_start_offset;
         sam.m_mapq = ar.AlignmentScore();
-        sam.m_cigar = ar.Cigar();
+        sam.m_cigar = info.compressed_cigar;
         sam.m_rnext = "*";
         sam.m_pnext = 0;
         sam.m_tlen = ar.Cigar().length();
-        sam.m_seq = record.sequence;
+        sam.m_seq = ar.Forward() ? record.sequence : KmerUtils::ReverseComplement(record.sequence);
         sam.m_qual = record.quality;
     }
 
@@ -201,24 +204,21 @@ namespace protal {
             /* ##############################################################
              * Output alignments.
              */
-            for (auto& alignment_result :  alignment_results) {
-                m_sam.m_qname = record.id;
-                m_sam.m_flag = 0;
-                m_sam.m_rname = std::to_string(alignment_result.Taxid()) + "_" + std::to_string(alignment_result.GeneId());
-                m_sam.m_pos = alignment_result.GenePos() + m_info.alignment_start;
-                m_sam.m_mapq = alignment_result.AlignmentScore();
-                m_sam.m_cigar = alignment_result.Cigar();
-                m_sam.m_rnext = "*";
-                m_sam.m_pnext = 0;
-                m_sam.m_tlen = alignment_result.Cigar().length();
-                m_sam.m_seq = record.sequence;
-                m_sam.m_qual = record.quality;
+            bool first = true;
+            for (auto& ar :  alignment_results) {
+                WFA2Wrapper::GetAlignmentInfo(m_info, ar.Cigar());
+                ArtoSAM(m_sam, ar, m_info, record);
+                Flag::SetPairedEnd(m_sam.m_flag, false, false, first_pair, !first_pair);
+                Flag::SetRead2Unmapped(m_sam.m_flag, true);
+                Flag::SetRead1ReverseComplement(m_sam.m_flag, ar.Forward());
+                Flag::SetNotPrimaryAlignment(m_sam.m_flag, !first);
 
                 alignments++;
                 if (!m_sam_output.Write(m_sam.ToString())) {
 #pragma omp critical(sam_output)
                     m_sam_output.Write(m_sam_os);
                 }
+                first = false;
             }
         }
     };
@@ -278,6 +278,8 @@ namespace protal {
                 return;
             }
 
+
+
             /* ##############################################################
              * Output alignments.
              */
@@ -286,6 +288,7 @@ namespace protal {
                 bool both = ar1.IsSet() && ar2.IsSet();
 
                 if (ar1.IsSet()) {
+
                     WFA2Wrapper::GetAlignmentInfo(m_info, ar1.Cigar());
                     ArtoSAM(m_sam1, ar1, m_info, record1);
                     Flag::SetPairedEnd(m_sam1.m_flag, true, both, true);
@@ -294,12 +297,28 @@ namespace protal {
                     Flag::SetNotPrimaryAlignment(m_sam1.m_flag, !first);
                 }
                 if (ar2.IsSet()) {
+                    auto len = std::count_if(ar2.Cigar().begin(), ar2.Cigar().end(), [](char c) {
+                        return c != 'I';
+                    });
+
+                    if (len != record2.sequence.length()) {
+                        std::cout << len << std::endl;
+                        std::cout << record2.sequence << std::endl;
+                        std::cout << ar2.Cigar() << std::endl;
+                        exit(11);
+                    }
                     WFA2Wrapper::GetAlignmentInfo(m_info, ar2.Cigar());
                     ArtoSAM(m_sam2, ar2, m_info, record2);
                     Flag::SetPairedEnd(m_sam2.m_flag, true, both, false, true);
                     Flag::SetRead1Unmapped(m_sam2.m_flag, !ar1.IsSet());
                     Flag::SetRead2ReverseComplement(m_sam2.m_flag, ar2.Forward());
                     Flag::SetNotPrimaryAlignment(m_sam2.m_flag, !first);
+                }
+                if (both) {
+                    m_sam1.m_rnext = m_sam2.m_rname;
+                    m_sam2.m_rnext = m_sam1.m_rname;
+                    m_sam1.m_pnext = m_sam2.m_pos;
+                    m_sam2.m_pnext = m_sam1.m_pos;
                 }
 
 

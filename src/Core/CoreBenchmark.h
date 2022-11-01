@@ -20,6 +20,8 @@ namespace protal {
         BCE m_alignment_bce{"Alignments"};
         BCE m_best_alignment_bce{"Best_alignment"};
         BCE m_best_unique_alignment_bce{"Best_unique_alignment"};
+        BCE m_alignment_pe_bce{"Alignments_PE"};
+        BCE m_best_alignment_pe_bce{"Best_alignment_PE"};
 
         size_t m_anchor_fp_no_hit = 0;
 
@@ -141,6 +143,24 @@ namespace protal {
             m_alignment_bce.fn += !found;
         };
 
+        void AddPairedAlignmentResults(PairedAlignmentResultList const& alignments, size_t true_taxid, size_t true_geneid) {
+            if (alignments.empty()) {
+//                m_alignment_pe_bce.fn++;
+                m_best_alignment_pe_bce.fn++;
+                return;
+            }
+
+            auto& best_alignment = alignments[0];
+            auto best_taxid = best_alignment.first.IsSet() ? best_alignment.first.Taxid() : best_alignment.second.Taxid();
+            auto best_geneid = best_alignment.first.IsSet() ? best_alignment.first.GeneId() : best_alignment.second.GeneId();
+            if (best_taxid == true_taxid && best_geneid == true_geneid) {
+                m_best_alignment_pe_bce.tp++;
+            } else {
+                m_best_alignment_pe_bce.fp++;
+                m_best_alignment_pe_bce.fn++;
+            }
+        };
+
         void AddBestAlignmentResult(AlignmentResult& alignment, size_t true_taxid, size_t true_geneid) {
             if (alignment.Taxid() == true_taxid && alignment.GeneId() == true_geneid) {
                 m_best_alignment_bce.tp++;
@@ -159,6 +179,7 @@ namespace protal {
             m_alignment_bce.Join(other.m_alignment_bce);
             m_best_alignment_bce.Join(other.m_best_alignment_bce);
             m_best_unique_alignment_bce.Join(other.m_best_unique_alignment_bce);
+            m_best_alignment_pe_bce.Join(other.m_best_alignment_pe_bce);
             m_anchor_fp_no_hit += other.m_anchor_fp_no_hit;
         }
 
@@ -171,6 +192,16 @@ namespace protal {
 
         }
 
+        void operator() (SeedList const& seeds, AlignmentAnchorList const& anchors, AlignmentResultList const& alignments, PairedAlignmentResultList const& alignment_pairs, std::string const& header) {
+            auto [tax_id_truth, gene_id_truth] = CoreBenchmark::HeaderToTruth(header);
+
+            AddSeeds(seeds, tax_id_truth, gene_id_truth);
+            AddAnchors(anchors, tax_id_truth, gene_id_truth);
+            AddAlignmentResults(alignments, tax_id_truth, gene_id_truth);
+            AddPairedAlignmentResults(alignment_pairs, tax_id_truth, gene_id_truth);
+
+        }
+
         void WriteRowStats(std::string prefix="") {
             m_seed_bce.WriteRowHeader(std::cout, prefix);
             m_seed_bce.WriteRowStats(std::cout, prefix);
@@ -178,6 +209,7 @@ namespace protal {
             m_alignment_bce.WriteRowStats(std::cout, prefix);
             m_best_alignment_bce.WriteRowStats(std::cout, prefix);
             m_best_unique_alignment_bce.WriteRowStats(std::cout, prefix);
+            m_best_alignment_pe_bce.WriteRowStats(std::cout, prefix);
 
             if (ofs) {
                 if (ofs->tellp() == 0) {

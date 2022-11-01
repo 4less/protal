@@ -7,6 +7,7 @@
 
 
 #include <string>
+#include "LineSplitter.h"
 
 namespace protal {
     using QNAME_t = std::string;
@@ -23,6 +24,7 @@ namespace protal {
     public:
         static void SetPairedEnd(FLAG_t &flag, bool ispaired, bool bothalign, bool is_read1=false, bool is_read2=false) {
             flag |= ispaired;
+            flag |= (bothalign << 1);
             flag |= (is_read1 << 6);
             flag |= (is_read2 << 7);
         }
@@ -68,7 +70,7 @@ namespace protal {
             return flag & 1;
         }
 
-        static bool IsPairBothALign(FLAG_t flag) {
+        static bool IsPairBothAlign(FLAG_t flag) {
             return flag & (1 << 1);
         }
 
@@ -140,6 +142,62 @@ namespace protal {
                     + m_qual;
         }
     };
+
+    static void SamFromTokens(std::vector<std::string>& tokens, SamEntry &sam) {
+        sam.m_qname = tokens[0];
+        sam.m_flag = std::stoul(tokens[1]);
+        sam.m_rname = tokens[2];
+        sam.m_pos = std::stoul(tokens[3]);
+        sam.m_mapq = std::stoul(tokens[4]);
+        sam.m_cigar = tokens[5];
+        sam.m_rnext = tokens[6];
+        sam.m_pnext = std::stoul(tokens[7]);
+        sam.m_tlen = std::stol(tokens[8]);
+        sam.m_seq = tokens[9];
+        sam.m_qual = tokens[10];
+    }
+
+    static bool GetSam(std::istream &file, std::string &line, std::vector<std::string> &tokens, SamEntry &sam) {
+        static std::string delim = "\t";
+        if (!std::getline(file, line)) return false;
+        LineSplitter::Split(line, delim, tokens);
+        SamFromTokens(tokens, sam);
+        return true;
+    }
+
+    static bool GetSamPair(std::istream &file, std::string &line, std::vector<std::string> &tokens, SamEntry &sam1, SamEntry &sam2, bool &has_sam1, bool &has_sam2, bool line_loaded=false) {
+        static std::string delim = "\t";
+        has_sam1 = false;
+        has_sam2 = false;
+        if (!line_loaded) {
+            if (!std::getline(file, line)) return false;
+        }
+//        std::cout << "Current Line: " << line << std::endl;
+        LineSplitter::Split(line, delim, tokens);
+        if (Flag::IsRead1(stoul(tokens[1]))) {
+            SamFromTokens(tokens, sam1);
+            has_sam1 = true;
+//            std::cout << "one maybe two -> ";
+//            std::cout << Flag::IsPairBothAlign(sam1.m_flag) << std::endl;
+        } else {
+            SamFromTokens(tokens, sam2);
+            has_sam2 = true;
+//            std::cout << "only two" << std::endl;
+            return true;
+        }
+
+        if (Flag::IsPairBothAlign(sam1.m_flag)) {
+            if (!std::getline(file, line)) return false;
+//            std::cout << "yes two" << std::endl;
+            LineSplitter::Split(line, delim, tokens);
+            SamFromTokens(tokens, sam2);
+            has_sam1 = true;
+            has_sam2 = true;
+            return true;
+        }
+
+        return true;
+    }
 
     class SamHandler {
 

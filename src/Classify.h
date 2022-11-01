@@ -300,7 +300,7 @@ namespace protal::classify {
 
                 if constexpr (benchmark_active) {
                     thread_core_benchmark(seeds1, anchors1, alignment_results1, record1.id);
-                    thread_core_benchmark(seeds2, anchors2, alignment_results2, record2.id);
+                    thread_core_benchmark(seeds2, anchors2, alignment_results2, paired_alignment_results, record1.id);
                 }
 
                 if constexpr(debug == DEBUG_VERBOSE) {

@@ -302,7 +302,7 @@ namespace protal {
 
             auto sam_in = result.count("profile_only") ? result["profile_only"].as<std::string>() : "";
             auto profile_truth = result.count("profile_truth") ? result["profile_truth"].as<std::string>() : "";
-            bool profile_only = result.count("profile_truth");
+            bool profile_only = result.count("profile_only");
 
             auto output_file = result.count("output_file") ? result["output_file"].as<std::string>() : "";
             auto benchmark_alignment_output_file = result.count("benchmark_alignment_output") ? result["benchmark_alignment_output"].as<std::string>() : "";
