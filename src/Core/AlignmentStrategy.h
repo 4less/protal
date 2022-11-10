@@ -497,29 +497,24 @@ namespace protal {
 
             size_t read_len = sequence.length();
 
-
             std::sort(anchors.begin(), anchors.end(), [](CAlignmentAnchor const& a, CAlignmentAnchor const& b) {
                 return a.total_length > b.total_length;
             });
 
             int take_top = m_align_top;
-
-
-
             int last_score = 0;
 
 
             bm_seedext.Start();
             ExtendAllAnchors(anchors, fwd, rev);
+            std::sort(anchors.begin(), anchors.end(), [](CAlignmentAnchor& a, CAlignmentAnchor& b) {
+                return a.UpdateLength() > b.UpdateLength();
+            });
             bm_seedext.Stop();
 
-            std::sort(anchors.begin(), anchors.end(), [](CAlignmentAnchor& a, CAlignmentAnchor& b) {
-               return a.UpdateLength() > b.UpdateLength();
-            });
+
 
             for (auto& anchor : anchors) {
-//                if (anchor.chain.size() == 1) continue;
-
                 auto& read = anchor.forward ? fwd : rev;
 
                 // Is indel between anchor seeds?
@@ -532,10 +527,14 @@ namespace protal {
                 // Absolute read positioning with respect to gene
                 int abs_pos = anchor.Front().genepos - anchor.Front().readpos;
 
-                size_t max_dove_size = 0;
+                size_t max_dove_size = 9;
                 m_alignment_orientation.Update(abs_pos, read.length(), gene.Sequence().length(), max_dove_size);
 
-                std::string query = std::string(read.c_str() + m_alignment_orientation.query_start, m_alignment_orientation.query_len);
+                assert(m_alignment_orientation.query_start + m_alignment_orientation.query_len <= read.length());
+                assert(m_alignment_orientation.reference_start + m_alignment_orientation.query_len <= gene.Sequence().length());
+                assert(m_alignment_orientation.query_start >= 0);
+                assert(m_alignment_orientation.reference_start >= 0);
+                std::string query = read.substr(m_alignment_orientation.query_start, m_alignment_orientation.query_len);
                 std::string reference = gene.Sequence().substr(m_alignment_orientation.reference_start, m_alignment_orientation.reference_len);
 
 
@@ -563,26 +562,23 @@ namespace protal {
                     cigar_ani = WFA2Wrapper::CigarANI(cigart);
                 } else {
                     Benchmark bm_local{"alignment"};
-//                    if (max_dove_size > 0) {
-//                        m_aligner.Alignment(query, reference,
-//                                            m_alignment_orientation.query_dove_left,
-//                                            m_alignment_orientation.query_dove_right,
-//                                            m_alignment_orientation.reference_dove_left,
-//                                            m_alignment_orientation.reference_dove_right,
-//                                            MaxScore(m_max_score_ani, m_alignment_orientation.overlap));
-//                    } else {
-//                    }
-                    m_aligner.Alignment(query, reference,
-                                        MaxScore(m_max_score_ani, m_alignment_orientation.overlap));
-
+                    if (max_dove_size > 0) {
+                        m_aligner.Alignment(query, reference,
+                                            m_alignment_orientation.query_dove_left,
+                                            m_alignment_orientation.query_dove_right,
+                                            m_alignment_orientation.reference_dove_left,
+                                            m_alignment_orientation.reference_dove_right,
+                                            MaxScore(m_max_score_ani, m_alignment_orientation.overlap));
+                    } else {
+                        m_aligner.Alignment(query, reference,
+                                            MaxScore(m_max_score_ani, m_alignment_orientation.overlap));
+                    }
                     bm_local.Stop();
 
                     if (!m_aligner.Success()) continue;
                     WFA2Wrapper::GetAlignmentInfo(info, m_aligner.GetAligner().getAlignmentCigar(), m_alignment_orientation.query_dove_left, m_alignment_orientation.reference_dove_left, m_alignment_orientation.query_dove_right, m_alignment_orientation.reference_dove_right);
                     alignment_start = m_alignment_orientation.reference_start + info.gene_start_offset;
                     read_start = m_alignment_orientation.query_start + info.read_start_offset;
-
-
 
 //
 //                    std::cout << " ---------------------- " << std::endl;
@@ -615,30 +611,35 @@ namespace protal {
 
 //                    std::cout << read.length() << " - " << read_start << " - " << info.cigar.length() << " - " << info.deletions << " " << info.insertions << std::endl;
 //                    std::cout << info.cigar << std::endl;
-                    int right_padding = read.length() - read_start - info.cigar.length() + info.deletions;
+
+                    int right_padding = read.length() - read_start - info.cigar.length() + info.insertions;
 
 //                    if (right_padding < 0) {
+//                        std::cout << m_alignment_orientation.ToString() << std::endl;
 //                        std::cout << info.cigar << std::endl;
 //                        m_aligner.PrintAlignment();
 //                    }
 //                    std::cout << right_padding << std::endl;
 //                    std::cout << "Read start " << read_start << " ... pad by that much" << std::endl;
+                    assert(read_start >= 0);
+                    assert(right_padding >= 0);
                     cigar = std::string(read_start, 'S') + info.cigar + std::string(right_padding, 'S');
                     score = m_aligner.GetAligner().getAlignmentScore();
 //                    std::cout << info.ToString() << std::endl;
 
-                    auto len = std::count_if(cigar.begin(), cigar.end(), [](char c) {
-                        return c != 'I';
-                    });
+//                    auto len = std::count_if(cigar.begin(), cigar.end(), [](char c) {
+//                        return c != 'I';
+//                    });
+//
+//                    if (len != read.length()) {
+//                        std::cout << m_alignment_orientation.ToString() << std::endl;
+//                        std::cout << len << std::endl;
+//                        std::cout << query << std::endl;
+//                        std::cout << cigar << std::endl;
+//                        m_aligner.PrintAlignment();
+//                        exit(10);
+//                    }
 
-                    if (len != read.length()) {
-                        std::cout << m_alignment_orientation.ToString() << std::endl;
-                        std::cout << len << std::endl;
-                        std::cout << query << std::endl;
-                        std::cout << cigar << std::endl;
-                        m_aligner.PrintAlignment();
-                        exit(10);
-                    }
 //                    std::cout << "-----------------------" << std::endl;
 //                    std::cout << read << std::endl;
 //                    std::cout << reference << std::endl;

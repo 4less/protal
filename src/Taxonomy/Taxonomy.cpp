@@ -9,7 +9,7 @@
 #include <unordered_set>
 
 
-void protal::StdTaxonomy::LoadNodes(std::string path) {
+void protal::taxonomy::StdTaxonomy::LoadNodes(std::string path) {
     std::ifstream is(path.c_str(), std::ios::in);
 
     bool header = false;
@@ -49,7 +49,7 @@ void protal::StdTaxonomy::LoadNodes(std::string path) {
     Level();
 }
 
-protal::Node* protal::StdTaxonomy::GetNode(int taxid) {
+protal::taxonomy::Node* protal::taxonomy::StdTaxonomy::GetNode(int taxid) {
     Node *node = nullptr;
     if (node_from_id_.find(taxid) == node_from_id_.end()) {
         node = new Node();
@@ -62,7 +62,7 @@ protal::Node* protal::StdTaxonomy::GetNode(int taxid) {
     return node;
 }
 
-void protal::StdTaxonomy::DeleteNode(Node* node) {
+void protal::taxonomy::StdTaxonomy::DeleteNode(Node* node) {
     // Safety belt!
     // Node cannot be in the node_from_id_ map if it is gonna be deleted from memory
     for (NodeFromId ::const_iterator it = node_from_id_.begin(); it != node_from_id_.end(); ++it) {
@@ -76,11 +76,11 @@ void protal::StdTaxonomy::DeleteNode(Node* node) {
     delete node;
 }
 
-protal::StdTaxonomy::StdTaxonomy() {
+protal::taxonomy::StdTaxonomy::StdTaxonomy() {
     InitRankMaps();
 }
 
-protal::StdTaxonomy::~StdTaxonomy() {
+protal::taxonomy::StdTaxonomy::~StdTaxonomy() {
     while (!nodes_.empty()) {
         Node* tmp = nodes_.back();
         nodes_.pop_back();
@@ -88,12 +88,12 @@ protal::StdTaxonomy::~StdTaxonomy() {
     }
 }
 
-std::vector<protal::Node *> &protal::StdTaxonomy::Nodes() {
+std::vector<protal::taxonomy::Node *> &protal::taxonomy::StdTaxonomy::Nodes() {
     return nodes_;
 }
 
 
-void protal::StdTaxonomy::ClearNodes() {
+void protal::taxonomy::StdTaxonomy::ClearNodes() {
 //    std::vector<Node*> tmp;
 //    for (auto e : nodes_) {
 //        if (!node_from_id_.contains(e->id)) {
@@ -102,21 +102,21 @@ void protal::StdTaxonomy::ClearNodes() {
 //    }
 }
 
-void protal::StdTaxonomy::Level() {
+void protal::taxonomy::StdTaxonomy::Level() {
     int level = 0;
     std::cout << "rootid: " << root_id_ << std::endl;
     std::cout << "level: " << node_from_id_[root_id_]->id << std::endl;
     Level(node_from_id_[root_id_], level);
 }
 
-void protal::StdTaxonomy::Level(Node* node, int level) {
+void protal::taxonomy::StdTaxonomy::Level(Node* node, int level) {
     node->level = level++;
     for (auto child : node->children) {
         Level(child, level);
     }
 }
 
-void protal::StdTaxonomy::InitRankMaps() {
+void protal::taxonomy::StdTaxonomy::InitRankMaps() {
     rank_to_id_.insert({ "no rank", 0 });
     rank_to_id_.insert({ "domain", 1 });
     rank_to_id_.insert({ "phylum", 2 });
@@ -132,7 +132,7 @@ void protal::StdTaxonomy::InitRankMaps() {
     }
 }
 
-void protal::StdTaxonomy::LoadNames(std::string path) {
+void protal::taxonomy::StdTaxonomy::LoadNames(std::string path) {
 
     std::ifstream is(path.c_str(), std::ios::in);
 
@@ -183,7 +183,7 @@ void protal::StdTaxonomy::LoadNames(std::string path) {
 }
 
 
-void protal::StdTaxonomy::Export(std::string path) {
+void protal::taxonomy::StdTaxonomy::Export(std::string path) {
     std::cout << "Export to " << path << std::endl;
     std::ofstream ofs(path);
     if (!ofs)
@@ -211,7 +211,7 @@ void protal::StdTaxonomy::Export(std::string path) {
     ofs.close();
 }
 
-void protal::StdTaxonomy::SubsetAndRelabel(std::string path, std::string collapse_level) {
+void protal::taxonomy::StdTaxonomy::SubsetAndRelabel(std::string path, std::string collapse_level) {
     std::cout << "Delete intermediate nodes" << std::endl;
 
     bool collapse_if_only_child = true;
@@ -417,7 +417,7 @@ void protal::StdTaxonomy::SubsetAndRelabel(std::string path, std::string collaps
     std::cout << "New size " << nodes_.size() << std::endl;
 }
 
-void protal::StdTaxonomy::SanityCheck(Node* node) {
+void protal::taxonomy::StdTaxonomy::SanityCheck(Node* node) {
     if (node == nullptr)
         node = GetNode(1);
 
@@ -431,7 +431,7 @@ void protal::StdTaxonomy::SanityCheck(Node* node) {
     }
 }
 
-void protal::StdTaxonomy::KeepRanksAndLeaves(tsl::sparse_set<std::string> &ranks, std::vector<Node*> &remove_list, Node* parent_node, Node* node) {
+void protal::taxonomy::StdTaxonomy::KeepRanksAndLeaves(tsl::sparse_set<std::string> &ranks, std::vector<Node*> &remove_list, Node* parent_node, Node* node) {
 //    std::cout << "KeepRanksAndLeaves " << " " << node->id << std::endl;
     bool init = false;
     if (parent_node == nullptr) {
@@ -475,7 +475,7 @@ void protal::StdTaxonomy::KeepRanksAndLeaves(tsl::sparse_set<std::string> &ranks
     }
 }
 
-void protal::StdTaxonomy::KeepRanksAndLeaves(Node *parent_node, protal::Node *node) {
+void protal::taxonomy::StdTaxonomy::KeepRanksAndLeaves(Node *parent_node, protal::taxonomy::Node *node) {
     tsl::sparse_set<std::string> keep_ranks({
         "phylum", "class", "order", "family", "genus", "species"
     });
@@ -484,7 +484,7 @@ void protal::StdTaxonomy::KeepRanksAndLeaves(Node *parent_node, protal::Node *no
 }
 
 
-void protal::StdTaxonomy::RepopulateNodes(Node* node) {
+void protal::taxonomy::StdTaxonomy::RepopulateNodes(Node* node) {
     if (node == nullptr)
         node = GetNode(root_id_);
 
@@ -494,7 +494,7 @@ void protal::StdTaxonomy::RepopulateNodes(Node* node) {
         RepopulateNodes(child);
 }
 
-void protal::StdTaxonomy::Add(std::string path) {
+void protal::taxonomy::StdTaxonomy::Add(std::string path) {
     std::ifstream is(path.c_str(), std::ios::in);
 
     bool header = false;
@@ -515,7 +515,7 @@ void protal::StdTaxonomy::Add(std::string path) {
 
 
 
-void protal::IntTaxonomy::Load(std::string path) {
+void protal::taxonomy::IntTaxonomy::Load(std::string path) {
     std::ifstream is(path.c_str(), std::ios::in);
 
     bool header = true;
@@ -564,11 +564,11 @@ void protal::IntTaxonomy::Load(std::string path) {
     }
 }
 
-protal::IntTaxonomy::IntTaxonomy(std::string path) {
+protal::taxonomy::IntTaxonomy::IntTaxonomy(std::string path) {
     Load(path);
 }
 
-int protal::IntTaxonomy::LCA(int t1, int t2) {
+int protal::taxonomy::IntTaxonomy::LCA(int t1, int t2) {
     if (map.find(t1) == map.end() || map.find(t2) == map.end()) {
         std::cout << "t1: " << t1 << std::endl;
         std::cout << "t2: " << t2 << std::endl;
@@ -612,15 +612,15 @@ int protal::IntTaxonomy::LCA(int t1, int t2) {
     return t1;
 }
 
-protal::IntNode &protal::IntTaxonomy::Get(int t) {
+protal::taxonomy::IntNode &protal::taxonomy::IntTaxonomy::Get(int t) {
     return map.at(t);
 }
 
-protal::IntNode &protal::IntTaxonomy::GetParent(int t) {
+protal::taxonomy::IntNode &protal::taxonomy::IntTaxonomy::GetParent(int t) {
     return map.at(map.at(t).parent_id);
 }
 
-size_t protal::IntTaxonomy::GetSubtreeSize(int t) {
+size_t protal::taxonomy::IntTaxonomy::GetSubtreeSize(int t) {
     auto& node = Get(t);
     size_t num = 0;
     if (node.children.size() == 0) {
@@ -633,17 +633,17 @@ size_t protal::IntTaxonomy::GetSubtreeSize(int t) {
     return num;
 }
 
-size_t protal::IntTaxonomy::MaxTaxid() {
+size_t protal::taxonomy::IntTaxonomy::MaxTaxid() {
     return std::max_element(map.begin(), map.end(), [] (auto e1, auto e2) { return e1.first < e2.first; })->first;
 }
-size_t protal::IntTaxonomy::MaxLeafId() {
+size_t protal::taxonomy::IntTaxonomy::MaxLeafId() {
     return std::max_element(map.begin(), map.end(), [] (auto e1, auto e2) {
         auto e1_id = e1.second.children.empty() ? e1.first : 0;
         auto e2_id = e2.second.children.empty() ? e2.first : 0;
         return e1_id < e2_id; })->first;
 }
 
-bool protal::IntTaxonomy::IsNodeAncestor(int node_id, int leaf_id) {
+bool protal::taxonomy::IntTaxonomy::IsNodeAncestor(int node_id, int leaf_id) {
     auto* leaf = &map.at(leaf_id);
     auto* node = &map.at(node_id);
 
@@ -654,7 +654,7 @@ bool protal::IntTaxonomy::IsNodeAncestor(int node_id, int leaf_id) {
     return node->id == leaf->id;
 }
 
-std::string protal::IntTaxonomy::LineageStr(int t, const std::vector<std::string> ranks, std::string divider)  {
+std::string protal::taxonomy::IntTaxonomy::LineageStr(int t, const std::vector<std::string> ranks, std::string divider)  {
     auto node = map.at(t);
 
     std::vector<std::string> result(ranks.size());
@@ -686,7 +686,7 @@ std::string protal::IntTaxonomy::LineageStr(int t, const std::vector<std::string
     return Utils::join(result, "|");
 }
 
-std::string protal::IntTaxonomy::LineageExternalIds(int t, const std::vector<std::string> ranks, std::string divider)  {
+std::string protal::taxonomy::IntTaxonomy::LineageExternalIds(int t, const std::vector<std::string> ranks, std::string divider)  {
     auto node = map.at(t);
 
     std::vector<std::string> result(ranks.size());
@@ -718,7 +718,7 @@ std::string protal::IntTaxonomy::LineageExternalIds(int t, const std::vector<std
     return Utils::join(result, "|");
 }
 
-std::string protal::IntTaxonomy::Lineage(int t, std::string divider)  {
+std::string protal::taxonomy::IntTaxonomy::Lineage(int t, std::string divider)  {
     auto init = map.at(t);
 
     if (init.IsLeaf() && !init.rep_genome.empty())
@@ -749,7 +749,7 @@ std::string protal::IntTaxonomy::Lineage(int t, std::string divider)  {
     return lineage;
 }
 
-std::string protal::IntTaxonomy::LineageExternal(int t, std::string divider)  {
+std::string protal::taxonomy::IntTaxonomy::LineageExternal(int t, std::string divider)  {
     auto init = map.at(t);
 
     if (init.IsLeaf() && !init.rep_genome.empty())
@@ -780,14 +780,14 @@ std::string protal::IntTaxonomy::LineageExternal(int t, std::string divider)  {
     return lineage;
 }
 
-bool protal::IntTaxonomy::IsRoot(int t) {
+bool protal::taxonomy::IntTaxonomy::IsRoot(int t) {
     return t == root_id;
 }
 
-bool protal::IntTaxonomy::IsLeaf(size_t taxid) {
+bool protal::taxonomy::IntTaxonomy::IsLeaf(size_t taxid) {
     return Get(taxid).children.empty();
 }
 
-bool protal::IntTaxonomy::HasNode(int taxid) {
+bool protal::taxonomy::IntTaxonomy::HasNode(int taxid) {
     return map.contains(taxid);
 }

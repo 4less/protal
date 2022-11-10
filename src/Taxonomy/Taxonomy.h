@@ -7,7 +7,7 @@
 #include "sparse_map.h"
 #include "sparse_set.h"
 
-namespace protal {
+namespace protal::taxonomy {
     struct Node;
     struct IntNode;
     struct Name;

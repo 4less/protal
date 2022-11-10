@@ -174,16 +174,31 @@ namespace protal {
 
 
             GenomeLoader genomes(options.GetSequenceFile(), options.GetSequenceMapFile());
-            IntTaxonomy taxonomy(options.GetInternalTaxonomyFile());
+            taxonomy::IntTaxonomy taxonomy(options.GetInternalTaxonomyFile());
 
 
             std::cout << "Sam file: " << options.SamFile() << std::endl;
             profiler::Profiler profiler(genomes);
-            auto profile = profiler.FromSam(options.SamFile());
 
-            if (!options.ProfileTruthFile().empty()) {
-                auto truth = protal::GetTruth(options.ProfileTruthFile());
-                profile.AnnotateWithTruth(truth);
+            // New Profiler approach
+            std::vector<AlignmentPair> unique_pairs;
+            std::vector<std::vector<AlignmentPair>> pairs;
+            profiler.FromSam(options.SamFile(), pairs, unique_pairs);
+
+            std::cout << "Unique pairs: " << unique_pairs.size() << std::endl;
+            std::cout << "Pairs:        " << pairs.size() << std::endl;
+
+            exit(9);
+
+//            profiler.FromSam(options.SamFile());
+            std::optional<TruthSet> truth = !options.ProfileTruthFile().empty() ?
+                                            std::optional<TruthSet>{ protal::GetTruth(options.ProfileTruthFile()) } :
+                                            std::optional<TruthSet>{};
+
+            auto profile = truth.has_value() ? profiler.ProfileWithTruth(truth.value()) : profiler.Profile();
+
+            if (truth.has_value()) {
+                profile.AnnotateWithTruth(truth.value());
             }
 
             profiler::TaxonFilter filter(0.95, 0.7, 70);

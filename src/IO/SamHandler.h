@@ -172,17 +172,14 @@ namespace protal {
         if (!line_loaded) {
             if (!std::getline(file, line)) return false;
         }
-//        std::cout << "Current Line: " << line << std::endl;
+
         LineSplitter::Split(line, delim, tokens);
         if (Flag::IsRead1(stoul(tokens[1]))) {
             SamFromTokens(tokens, sam1);
             has_sam1 = true;
-//            std::cout << "one maybe two -> ";
-//            std::cout << Flag::IsPairBothAlign(sam1.m_flag) << std::endl;
         } else {
             SamFromTokens(tokens, sam2);
             has_sam2 = true;
-//            std::cout << "only two" << std::endl;
             return true;
         }
 

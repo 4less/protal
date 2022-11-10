@@ -4,6 +4,10 @@
 
 #pragma once
 
+#include <optional>
+#include <string>
+#include <vector>
+
 namespace protal {
     enum DebugLevel {
         DEBUG_NONE,
@@ -17,6 +21,10 @@ namespace protal {
             std::cout << "Dummy print" << std::endl;
         }
     };
+
+    using TaxId = uint32_t;
+    using GeneId = uint32_t;
+    using GenePos = uint32_t;
 
     // Pair k-mer, readpos
     using KmerElement = std::pair<size_t, size_t>;
@@ -34,6 +42,17 @@ namespace protal {
     using AlignmentResultList = std::vector<AlignmentResult>;
     using PairedAlignment = std::pair<AlignmentResult, AlignmentResult>;
     using PairedAlignmentResultList = std::vector<PairedAlignment>;
+
+    struct InternalReadAlignment;
+    using OptIRA = std::optional<InternalReadAlignment>;
+    using OptIRAPair = std::pair<OptIRA, OptIRA>;
+
+    using InternalReadAlignmentList = std::vector<InternalReadAlignment>;
+    using InternalNonUniqueReadAlignmentList = std::vector<InternalReadAlignment>;
+    using InternalNonUniqueReadOptIRAPairList = std::vector<OptIRAPair>;
+    using InternalNonUniqueReadOptIRAPairListList = std::vector<InternalNonUniqueReadOptIRAPairList>;
+    using InternalNonUniqueReadAlignmentListList = std::vector<InternalNonUniqueReadAlignmentList>;
+
 
     struct Sample;
     using SampleList = std::vector<Sample>;

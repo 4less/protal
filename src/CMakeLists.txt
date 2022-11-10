@@ -35,6 +35,9 @@ add_library(protal_lib
         IO/AlignmentOutputHandler.h
         Alignment/WFA2Wrapper.h
         Alignment/FastAlignment.h
+        Alignment/InternalReadAlignment.h
+        Alignment/ScoreAlignments.h
+        Alignment/AlignmentUtils.h
         Core/CoreBenchmark.h
         IO/FastxReader.h
         IO/FastxReader.cpp

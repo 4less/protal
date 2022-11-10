@@ -16,6 +16,7 @@
 #include "SamHandler.h"
 #include "SNP.h"
 #include <htslib/sam.h>
+#include "AlignmentUtils.h"
 
 namespace protal {
     class AlignmentResult {
@@ -196,8 +197,7 @@ namespace protal {
 //            }
 
             auto& best = alignment_results.front();
-
-            if (WFA2Wrapper::CigarANI(best.Cigar()) < m_min_cigar_ani) {
+            if (protal::CigarANI(best.Cigar()) < m_min_cigar_ani) {
                 return;
             }
 
@@ -206,7 +206,7 @@ namespace protal {
              */
             bool first = true;
             for (auto& ar :  alignment_results) {
-                WFA2Wrapper::GetAlignmentInfo(m_info, ar.Cigar());
+                GetAlignmentInfo(m_info, ar.Cigar());
                 ArtoSAM(m_sam, ar, m_info, record);
                 Flag::SetPairedEnd(m_sam.m_flag, false, false, first_pair, !first_pair);
                 Flag::SetRead2Unmapped(m_sam.m_flag, true);
@@ -274,7 +274,7 @@ namespace protal {
 //            }
 //            Utils::Input();
 
-            if (WFA2Wrapper::CigarANI(best.first.Cigar()) < m_min_cigar_ani) {
+            if (CigarANI(best.first.Cigar()) < m_min_cigar_ani) {
                 return;
             }
 
@@ -289,7 +289,7 @@ namespace protal {
 
                 if (ar1.IsSet()) {
 
-                    WFA2Wrapper::GetAlignmentInfo(m_info, ar1.Cigar());
+                    GetAlignmentInfo(m_info, ar1.Cigar());
                     ArtoSAM(m_sam1, ar1, m_info, record1);
                     Flag::SetPairedEnd(m_sam1.m_flag, true, both, true);
                     Flag::SetRead2Unmapped(m_sam1.m_flag, !ar2.IsSet());
@@ -307,7 +307,7 @@ namespace protal {
                         std::cout << ar2.Cigar() << std::endl;
                         exit(11);
                     }
-                    WFA2Wrapper::GetAlignmentInfo(m_info, ar2.Cigar());
+                    GetAlignmentInfo(m_info, ar2.Cigar());
                     ArtoSAM(m_sam2, ar2, m_info, record2);
                     Flag::SetPairedEnd(m_sam2.m_flag, true, both, false, true);
                     Flag::SetRead1Unmapped(m_sam2.m_flag, !ar1.IsSet());
