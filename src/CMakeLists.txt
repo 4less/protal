@@ -56,6 +56,7 @@ add_library(protal_lib
         Statistics.h
         Constants.h
         SNPs/SNP.h
+        SNPs/SNPUtils.h
         Test.h
         )
 

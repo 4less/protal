@@ -11,6 +11,7 @@
 #include "ChainingStrategy.h"
 #include "KmerUtils.h"
 #include "FastAlignment.h"
+#include "SNPUtils.h"
 
 namespace protal {
     struct AlignmentOrientation {
@@ -472,7 +473,7 @@ namespace protal {
 
         inline std::pair<int, std::string> Approximate(std::string &query, std::string &gene) {
 //            auto [ascore, acigar] = FastAligner::FastAlign(query, gene);
-//            cigar_ani = WFA2Wrapper::CigarANI(acigar);
+//            cigar_ani = CigarANI(acigar);
 //            cigar = acigar;
 //            score = ascore;
 
@@ -559,7 +560,7 @@ namespace protal {
 
                     cigar = cigart;
                     score = scoret;
-                    cigar_ani = WFA2Wrapper::CigarANI(cigart);
+                    cigar_ani = CigarANI(cigart);
                 } else {
                     Benchmark bm_local{"alignment"};
                     if (max_dove_size > 0) {
@@ -576,7 +577,7 @@ namespace protal {
                     bm_local.Stop();
 
                     if (!m_aligner.Success()) continue;
-                    WFA2Wrapper::GetAlignmentInfo(info, m_aligner.GetAligner().getAlignmentCigar(), m_alignment_orientation.query_dove_left, m_alignment_orientation.reference_dove_left, m_alignment_orientation.query_dove_right, m_alignment_orientation.reference_dove_right);
+                    GetAlignmentInfo(info, m_aligner.GetAligner().getAlignmentCigar(), m_alignment_orientation.query_dove_left, m_alignment_orientation.reference_dove_left, m_alignment_orientation.query_dove_right, m_alignment_orientation.reference_dove_right);
                     alignment_start = m_alignment_orientation.reference_start + info.gene_start_offset;
                     read_start = m_alignment_orientation.query_start + info.read_start_offset;
 
@@ -607,7 +608,7 @@ namespace protal {
 //                    if (info.insertions || info.deletions) {
 //                        m_aligner.PrintAlignment();
 //                    }
-                    cigar_ani = WFA2Wrapper::CigarANI(info.cigar);
+                    cigar_ani = CigarANI(info.cigar);
 
 //                    std::cout << read.length() << " - " << read_start << " - " << info.cigar.length() << " - " << info.deletions << " " << info.insertions << std::endl;
 //                    std::cout << info.cigar << std::endl;
@@ -641,8 +642,10 @@ namespace protal {
 //                    }
 
 //                    std::cout << "-----------------------" << std::endl;
+//                    std::cout << anchor.ToString() << std::endl;
 //                    std::cout << read << std::endl;
 //                    std::cout << reference << std::endl;
+//                    std::cout << m_aligner.GetAlignmentScore() << std::endl;
 //                    m_aligner.PrintAlignment();
 
                     if constexpr(alignment_verbose) {
@@ -657,16 +660,32 @@ namespace protal {
                 bm_alignment.Stop();
 
                 if (cigar_ani >= m_max_score_ani) {
+//                    std::cout << info.ToString() << std::endl;
+//                    std::cout << "alignment start: " << alignment_start << std::endl;
+//                    std::cout << m_alignment_orientation.ToString() << std::endl;
                     m_alignment_result.Set(anchor.taxid, anchor.geneid, alignment_start, anchor.forward);
                     m_alignment_result.Set(score, cigar);
+
+//                    SamEntry sam;
+//                    AlignmentInfo inf;
+//                    FastxRecord record;
+//                    record.sequence = sequence;
+//
+//                    GetAlignmentInfo(info, m_alignment_result.Cigar());
+//                    ArtoSAM(sam, m_alignment_result, inf, record);
+//
+//                    SNPList snps;
+//                    ExtractSNPs(sam, gene.Sequence(), snps);
+
+
                     results.emplace_back(m_alignment_result);
                     total_alignments++;
                 }
 
-//                if (cigar_ani != WFA2Wrapper::CompressedCigarANI(info.compressed_cigar)) {
+//                if (cigar_ani != CompressedCigarANI(info.compressed_cigar)) {
 //                    std::cout << cigar << std::endl;
 //                    std::cout << info.compressed_cigar << std::endl;
-//                    std::cout << cigar_ani << " " << WFA2Wrapper::CompressedCigarANI(info.compressed_cigar) << std::endl;
+//                    std::cout << cigar_ani << " " << CompressedCigarANI(info.compressed_cigar) << std::endl;
 //                }
 
                 alignment_end:

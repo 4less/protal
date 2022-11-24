@@ -13,6 +13,7 @@
 #include "InternalReadAlignment.h"
 #include "Constants.h"
 #include "AlignmentUtils.h"
+#include "SNPUtils.h"
 
 namespace protal {
 
@@ -220,86 +221,7 @@ namespace protal {
                 return Formula1(taxon);
             }
         };
-//
-//        struct InternalReadAlignment {
-//            size_t readid;
-//            size_t pairid;              //128
-//            TaxId taxid;
-//            GeneId geneid;
-//            GenePos genepos;            //256
-//            double alignment_ani;
-//            int alignment_score;
-//            bool forward;
-//            bool benchmark = false;
-//            bool correct = false;
-//
-//            static const std::pair<TaxId, GeneId> ExtractTaxidGeneid(std::string &ref) {
-//                int delim_pos = -1;
-//                while (ref[++delim_pos] != '_');
-//                return { stoul(ref.substr(0, delim_pos)), stoul(ref.substr(delim_pos+1, ref.length() - delim_pos - 1)) };
-//            }
-//
-//            std::string ToString() const {
-//                std::string str;
-//                str += std::to_string(readid) + '\t';
-//                str += std::to_string(pairid) + '\t';
-//                str += std::to_string(taxid) + '\t';
-//                str += std::to_string(geneid) + '\t';
-//                str += std::to_string(genepos) + '\t';
-//                str += std::to_string(alignment_score) + '\t';
-//                str += std::to_string(alignment_ani) + '\t';
-//                str += std::to_string(forward);
-//                return str;
-//            }
-//
-//            InternalReadAlignment(
-//                    size_t readid,
-//                    size_t pairid,
-//                    TaxId taxid,
-//                    GeneId geneid,
-//                    GenePos genepos,
-//                    bool forward,
-//                    int alignment_score,
-//                    double alignment_ani) :
-//                    readid(readid),
-//                    taxid(taxid),
-//                    geneid(geneid),
-//                    genepos(genepos),
-//                    forward(forward),
-//                    pairid(pairid),
-//                    alignment_score(alignment_score),
-//                    alignment_ani(alignment_ani) {};
-//
-//            InternalReadAlignment(size_t readid, SamEntry &sam, bool benchmark = false) :
-//                    readid(readid),
-//                    taxid(0),
-//                    geneid(0),
-//                    genepos(sam.m_pos),
-//                    forward(false),
-//                    benchmark(benchmark),
-//                    pairid(Flag::IsRead2(sam.m_flag)),
-//                    alignment_score(WFA2Wrapper::CigarScore(sam.m_cigar)),
-//                    alignment_ani(WFA2Wrapper::CompressedCigarANI(sam.m_cigar))
-//                    {
-//                auto &[ tid, gid ] = ExtractTaxidGeneid(sam.m_rname);
-//                taxid = tid;
-//                geneid = gid;
-//                if (benchmark) {
-//                    correct = sam.m_qname.substr(0, sam.m_rname.length()) == sam.m_rname;
-//                }
-//            };
-//
-//
-//            InternalReadAlignment(InternalReadAlignment const &other) :
-//                    readid(other.readid),
-//                    taxid(other.taxid),
-//                    geneid(other.geneid),
-//                    genepos(other.genepos),
-//                    forward(other.forward),
-//                    pairid(other.pairid),
-//                    alignment_score(other.alignment_score),
-//                    alignment_ani(other.alignment_ani) {};
-//        };
+
 
         class MicrobialProfile {
         public:
@@ -414,6 +336,8 @@ namespace protal {
             GenomeLoader &m_genome_loader;
         };
 
+
+
         class Profiler {
 
         public:
@@ -471,6 +395,7 @@ namespace protal {
             InternalNonUniqueReadAlignmentList m_tmp;
             InternalNonUniqueReadOptIRAPairList m_tmp_pair;
             GenomeLoader& m_genome_loader;
+
 
 
         public:
@@ -590,7 +515,7 @@ namespace protal {
                 std::string_view pairless_header1(qname1.c_str(), qname1.length() - 1);
                 std::string_view pairless_header2(qname2.c_str(), qname2.length() - 1);
 
-                std::cout << pairless_header1 << "\n" << pairless_header2 << "\n--" << std::endl;
+//                std::cout << pairless_header1 << "\n" << pairless_header2 << "\n--" << std::endl;
 
                 return pairless_header1 == pairless_header2;
             }
@@ -822,8 +747,112 @@ namespace protal {
                 }
             }
 
-            void OutputErrorData(TruthSet const& set, std::vector<AlignmentPair> &pairs) {
+            std::string ErrorLine(int id, int length1, int score1, bool forward1, int length2, int score2, bool forward2, bool possibly_true, bool same_gene, int distance, bool paired, int ref_length) {
+                std::string line;
+                line += std::to_string(id) + '\t';
+                line += std::to_string(length1) + '\t';
+                line += std::to_string(score1) + '\t';
+                line += std::to_string(forward1) + '\t';
+                line += std::to_string(length2) + '\t';
+                line += std::to_string(score2) + '\t';
+                line += std::to_string(forward2) + '\t';
+                line += std::to_string(possibly_true) + '\t';
+                line += std::to_string(same_gene) + '\t';
+                line += std::to_string(distance) + '\t';
+                line += std::to_string(paired) = '\t';
+                line += std::to_string(ref_length);
+                return line;
+            }
 
+            void TestSNPUtils(std::vector<std::vector<AlignmentPair>> &pair_lists) {
+//                std::cout << "TestSNPUtils" << std::endl;
+                SNPList snps;
+                size_t sum = 0;
+                Benchmark bm("SNPs");
+                for (auto& pairlist : pair_lists) {
+                    for (auto &pair: pairlist) {
+                        auto& any = pair.Any();
+                        auto &[ tid, gid ] = ExtractTaxidGeneid(any.m_rname);
+                        auto& gene = m_genome_loader.GetGenome(tid).GetGene(gid);
+                        gene.Load();
+                        auto& ref = gene.Sequence();
+//                        std::cout << "Extract: " << any.m_qname << " ---> " <<  any.m_rname << std::endl;
+
+//                        PrintAlignment(any, ref);
+                        ExtractSNPs(any, ref, snps, tid, gid);
+                        sum += snps.size();
+                    }
+                }
+                bm.PrintResults();
+                std::cout << "Sum: " << sum << std::endl;
+
+            }
+
+            void OutputErrorData(std::vector<std::vector<AlignmentPair>> &pair_lists) {
+                int pairlist_id = 0;
+                CigarInfo info1;
+                CigarInfo info2;
+                for (auto& pairlist : pair_lists) {
+                    for (auto& pair : pairlist) {
+                        auto &[ tid, gid ] = ExtractTaxidGeneid(pair.Any().m_rname);
+                        auto &[ atid, agid ] = ExtractTaxidGeneid(pair.Any().m_qname);
+//                        std::cerr << pair.Any().m_qname << " " << atid << " " << agid << std::endl;
+                        std::cerr << "CAPTURE\t";
+                        if (pair.IsPair()) {
+                            auto &[ tid1, gid1 ] = ExtractTaxidGeneid(pair.First().m_rname);
+                            auto &[ tid2, gid2 ] = ExtractTaxidGeneid(pair.Second().m_rname);
+                            auto &[ ttid1, tgid1 ] = ExtractTaxidGeneid(pair.First().m_qname);
+                            auto &[ ttid2, tgid2 ] = ExtractTaxidGeneid(pair.Second().m_qname);
+                            CompressedCigarInfo(pair.First().m_cigar, info1);
+                            CompressedCigarInfo(pair.Second().m_cigar, info2);
+                            bool same_gene = gid1 == gid2;
+                            int insert = std::max(pair.First().m_pos, pair.Second().m_pos) - std::min(pair.First().m_pos, pair.Second().m_pos);
+
+                            std::cerr << ErrorLine(pairlist_id, info1.clipped_alignment_length, info1.Score(), Flag::IsRead1ReverseComplement(pair.First().m_flag), info2.clipped_alignment_length, info2.Score(), Flag::IsRead2ReverseComplement(pair.Second().m_flag),  tid == ttid1, same_gene, insert, true, m_genome_loader.GetGenome(tid1).GetGene(gid1).GetLength()) << std::endl;
+                        } else if (pair.HasFirst()) {
+                            CompressedCigarInfo(pair.First().m_cigar, info1);
+                            auto &[ ttid, tgid ] = ExtractTaxidGeneid(pair.First().m_qname);
+                            std::cerr << ErrorLine(pairlist_id, info1.clipped_alignment_length, info1.Score(), Flag::IsRead1ReverseComplement(pair.First().m_flag), -1, -1, false, tid == ttid, false, -1, false, m_genome_loader.GetGenome(tid).GetGene(gid).GetLength()) << std::endl;
+                        } else if (pair.HasSecond()) {
+                            CompressedCigarInfo(pair.Second().m_cigar, info2);
+                            auto &[ ttid, tgid ] = ExtractTaxidGeneid(pair.Second().m_qname);
+                            std::cerr << ErrorLine(pairlist_id, -1, -1, false, info2.clipped_alignment_length, info2.Score(), Flag::IsRead2ReverseComplement(pair.Second().m_flag), tid == ttid, false, -1, false, m_genome_loader.GetGenome(tid).GetGene(gid).GetLength()) << std::endl;
+                        }
+                    }
+
+                    pairlist_id++;
+                }
+            }
+
+            void OutputErrorData(TruthSet const& set, std::vector<std::vector<AlignmentPair>> &pair_lists) {
+                int pairlist_id = 0;
+                CigarInfo info1;
+                CigarInfo info2;
+                for (auto& pairlist : pair_lists) {
+                    for (auto& pair : pairlist) {
+                        auto &[ tid, gid ] = ExtractTaxidGeneid(pair.Any().m_rname);
+                        bool maybe_true = set.contains(tid);
+                        std::cerr << "CAPTURE\t";
+                        if (pair.IsPair()) {
+                            auto &[ tid1, gid1 ] = ExtractTaxidGeneid(pair.First().m_rname);
+                            auto &[ tid2, gid2 ] = ExtractTaxidGeneid(pair.Second().m_rname);
+                            CompressedCigarInfo(pair.First().m_cigar, info1);
+                            CompressedCigarInfo(pair.Second().m_cigar, info2);
+                            bool same_gene = gid1 == gid2;
+                            int insert = std::max(pair.First().m_pos, pair.Second().m_pos) - std::min(pair.First().m_pos, pair.Second().m_pos);
+
+                            std::cerr << ErrorLine(pairlist_id, info1.clipped_alignment_length, info1.Score(), Flag::IsRead1ReverseComplement(pair.First().m_flag), info2.clipped_alignment_length, info2.Score(), Flag::IsRead2ReverseComplement(pair.Second().m_flag),  maybe_true, same_gene, insert, true, m_genome_loader.GetGenome(tid1).GetGene(gid1).GetLength()) << std::endl;
+                        } else if (pair.HasFirst()) {
+                            CompressedCigarInfo(pair.First().m_cigar, info1);
+                            std::cerr << ErrorLine(pairlist_id, info1.clipped_alignment_length, info1.Score(), Flag::IsRead1ReverseComplement(pair.First().m_flag), -1, -1, false, maybe_true, false, -1, false, m_genome_loader.GetGenome(tid).GetGene(gid).GetLength()) << std::endl;
+                        } else if (pair.HasSecond()) {
+                            CompressedCigarInfo(pair.Second().m_cigar, info2);
+                            std::cerr << ErrorLine(pairlist_id, -1, -1, false, info2.clipped_alignment_length, info2.Score(), Flag::IsRead2ReverseComplement(pair.Second().m_flag), maybe_true, false, -1, false, m_genome_loader.GetGenome(tid).GetGene(gid).GetLength()) << std::endl;
+                        }
+                    }
+
+                    pairlist_id++;
+                }
             }
 
             MicrobialProfile ProfileWithTruth(TruthSet const& set) {

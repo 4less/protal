@@ -183,17 +183,28 @@ namespace protal {
             // New Profiler approach
             std::vector<AlignmentPair> unique_pairs;
             std::vector<std::vector<AlignmentPair>> pairs;
+
             profiler.FromSam(options.SamFile(), pairs, unique_pairs);
 
             std::cout << "Unique pairs: " << unique_pairs.size() << std::endl;
             std::cout << "Pairs:        " << pairs.size() << std::endl;
 
-            exit(9);
 
 //            profiler.FromSam(options.SamFile());
             std::optional<TruthSet> truth = !options.ProfileTruthFile().empty() ?
                                             std::optional<TruthSet>{ protal::GetTruth(options.ProfileTruthFile()) } :
                                             std::optional<TruthSet>{};
+
+            if (options.BenchmarkAlignment()) {
+                profiler.TestSNPUtils(pairs);
+//                profiler.OutputErrorData(pairs);
+            } else if (truth.has_value()) {
+//                profiler.TestSNPUtils(pairs);
+                profiler.OutputErrorData(truth.value(), pairs);
+
+            }
+//            Utils::Input();
+            exit(9);
 
             auto profile = truth.has_value() ? profiler.ProfileWithTruth(truth.value()) : profiler.Profile();
 

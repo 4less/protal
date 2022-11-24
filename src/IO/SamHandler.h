@@ -121,14 +121,14 @@ namespace protal {
         RNAME_t m_rname;
         POS_t m_pos;
         MAPQ_t m_mapq;
-        CIGAR_t m_cigar;
         RNAME_t m_rnext;
         POS_t m_pnext;
         TLEN_t m_tlen;
-        SEQ_t m_seq;
         QUAL_t m_qual;
+        SEQ_t m_seq;
+        CIGAR_t m_cigar;
 
-        std::string ToString() {
+        std::string ToString() const {
             return  m_qname + '\t'
                     + std::to_string(m_flag) + '\t'
                     + m_rname + '\t'
@@ -140,6 +140,10 @@ namespace protal {
                     + std::to_string(m_tlen) + '\t'
                     + m_seq + '\t'
                     + m_qual;
+        }
+
+        bool IsReversed() const {
+            return Flag::IsRead1(m_flag) ? Flag::IsRead1ReverseComplement(m_flag) : Flag::IsRead2ReverseComplement(m_flag);
         }
     };
 
