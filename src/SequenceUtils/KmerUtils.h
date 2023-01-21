@@ -27,6 +27,14 @@ namespace KmerUtils {
         return { taxid, geneid };
     }
 
+    static const std::pair<uint32_t, uint32_t> ExtractTaxIdGeneId(std::string &ref) {
+        int delim_pos = -1;
+        while (ref[++delim_pos] != '_');
+        int next_delim_pos = delim_pos;
+        while (next_delim_pos < ref.size() && ref[++next_delim_pos] != '_');
+        return { stoul(ref.substr(0, delim_pos)), stoul(ref.substr(delim_pos+1, next_delim_pos - delim_pos - 1)) };
+    }
+
     static void SortVarkitFasta(std::vector<FastxRecord>& fasta) {
         std::sort(fasta.begin(), fasta.end(), [](FastxRecord const& a, FastxRecord const& b) constexpr {
             auto [a_taxid, a_geneid] = ExtractHeaderInformation(a.header);
@@ -271,4 +279,4 @@ namespace KmerUtils {
 }
 
 
-#endif //KALAMITY_KMERUTILS_H
+#endif

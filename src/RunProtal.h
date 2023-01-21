@@ -176,7 +176,6 @@ namespace protal {
             GenomeLoader genomes(options.GetSequenceFile(), options.GetSequenceMapFile());
             taxonomy::IntTaxonomy taxonomy(options.GetInternalTaxonomyFile());
 
-
             std::cout << "Sam file: " << options.SamFile() << std::endl;
             profiler::Profiler profiler(genomes);
 
@@ -184,11 +183,19 @@ namespace protal {
             std::vector<AlignmentPair> unique_pairs;
             std::vector<std::vector<AlignmentPair>> pairs;
 
-            profiler.FromSam(options.SamFile(), pairs, unique_pairs);
+            ProfilerOptions poptions;
+
+            profiler.FromSam(options.SamFile());
+
+            auto profile = profiler.Profile(poptions);
+
+            std::cout << "Print profile" << std::endl;
+            std::cout << profile.ToString() << std::endl;
 
             std::cout << "Unique pairs: " << unique_pairs.size() << std::endl;
             std::cout << "Pairs:        " << pairs.size() << std::endl;
 
+//            profiler.TestSNPUtils(profiler.m_pairs_unique);
 
 //            profiler.FromSam(options.SamFile());
             std::optional<TruthSet> truth = !options.ProfileTruthFile().empty() ?
@@ -197,16 +204,19 @@ namespace protal {
 
             if (options.BenchmarkAlignment()) {
                 profiler.TestSNPUtils(pairs);
-//                profiler.OutputErrorData(pairs);
+                profiler.OutputErrorData(pairs);
             } else if (truth.has_value()) {
 //                profiler.TestSNPUtils(pairs);
-                profiler.OutputErrorData(truth.value(), pairs);
+                profiler.OutputErrorData(unique_pairs, pairs, &truth.value());
 
             }
 //            Utils::Input();
-            exit(9);
 
-            auto profile = truth.has_value() ? profiler.ProfileWithTruth(truth.value()) : profiler.Profile();
+//            auto profile = truth.has_value() ? profiler.ProfileWithTruth(truth.value()) : profiler.Profile();
+//
+//            auto profile = profiler.Profile(poptions);
+//            std::cout << "Profile:" << std::endl;
+//            std::cout << profile.ToString() << std::endl;
 
             if (truth.has_value()) {
                 profile.AnnotateWithTruth(truth.value());
@@ -216,6 +226,7 @@ namespace protal {
 
             std::cout << "Save profile to " << options.GetOutputPrefix() + ".profile" << std::endl;
             std::ofstream os(options.GetOutputPrefix() + ".profile", std::ios::out);
+            profile.WriteSparseProfile(taxonomy, filter);
             profile.WriteSparseProfile(taxonomy, filter, os);
             os.close();
 

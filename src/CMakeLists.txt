@@ -31,6 +31,7 @@ add_library(protal_lib
         Hash/KmerPutter.h
         Hash/KmerLookup.h
         Profiling/Profiler.h
+        Profiling/ProfilerOptions.h
         SequenceUtils/GenomeLoader.h
         IO/AlignmentOutputHandler.h
         Alignment/WFA2Wrapper.h

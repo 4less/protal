@@ -71,7 +71,7 @@ namespace protal {
             str += std::to_string(snp_pos) + '\t';
 
             if (type == 1) {
-                str += std::string(1, variant) + " (Ref: " + std::string(1, variant) + ")\t";
+                str += std::string(1, variant) + " (Ref: " + std::string(1, reference) + ")\t";
                 str += std::to_string(quality) + '\t';
             } else if (type == 2 || type == 4) {
                 str += *structural + '\t';

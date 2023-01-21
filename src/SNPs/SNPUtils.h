@@ -10,7 +10,15 @@
 namespace protal {
     using SNPList = std::vector<SNP>;
 
-    static void ExtractSNPs(SamEntry const& sam, std::string const& reference, SNPList &snps, int taxid, int geneid) {
+    class SNPNode {
+
+    };
+
+    class SNPNetwork {
+        
+    };
+
+    static void ExtractSNPs(SamEntry const& sam, std::string const& reference, SNPList &snps, int taxid, int geneid, int read_id = 0) {
         snps.clear();
         int qpos = 0;
         int rpos = sam.m_pos;
@@ -29,7 +37,7 @@ namespace protal {
         SNP snp;
         snp.taxid = taxid;
         snp.geneid = geneid;
-        snp.readid = 0;
+        snp.readid = read_id;
         snp.orientation = sam.IsReversed();
         bool is_variant = false;
 
