@@ -52,6 +52,15 @@ namespace protal {
             length = other_readpos + other_length - readpos;
         }
 
+        void MergeWithRight(uint32_t other_readpos, size_t other_length) {
+//            std::cout << "Length before: " << length << std::endl;
+            if (other_readpos < (readpos+length)) {
+                other_length -= readpos + length - other_readpos;
+            }
+            length += other_length;
+//            std::cout << "Length after: " << length << std::endl;
+        }
+
         std::string ToString() {
             return "(RGL " + std::to_string(readpos) + "," + std::to_string(genepos) + ',' + std::to_string(length) + ')';
         }
@@ -90,12 +99,14 @@ namespace protal {
         }
 
         void AddSeed(Seed const& seed, size_t length) {
+//            std::cout << "Add Seed " << seed.ToString() << std::endl;
             if (!chain.empty() && OverlapWithLeft(seed)) {
                 MergeWithLeft(seed, length);
             } else {
                 chain.emplace_back(ChainLink(seed.genepos, seed.readpos, length));
                 total_length += length;
             }
+//            std::cout << ToString() << std::endl;
         }
         size_t UpdateLength() {
             total_length = std::accumulate(chain.begin(), chain.end(), 0, [](size_t acc, ChainLink const& link) {
@@ -121,6 +132,32 @@ namespace protal {
             str += "... ";
             str += std::to_string(total_length);
             str += ']';
+            return str;
+        }
+
+        std::string ToVisualString() {
+            std::string str = "";
+            size_t prev_end = 0;
+            size_t last_end = 0;
+            for (auto& link : chain) {
+                str += std::string(link.readpos, ' ');
+                str += std::string(link.length, '#');
+                str += '\n';
+            }
+            return str;
+        }
+
+        std::string ToVisualString2() {
+            std::string str = "";
+            size_t prev_end = 0;
+            uint16_t last_end = 0;
+            for (auto& link : chain) {
+                if (link.readpos > last_end) {
+                    str += std::string(link.readpos - last_end, ' ');
+                }
+                str += std::string((link.readpos + link.length) - std::max(link.readpos, last_end), '#');
+                last_end = link.readpos + link.length;
+            }
             return str;
         }
     };

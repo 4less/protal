@@ -18,14 +18,33 @@
 #include "Taxonomy.h"
 
 namespace protal {
+
+    static const std::string PROTAL_LOGO =
+            "                                             ,,  \n"
+            "`7MM\"\"\"Mq.                   mm            `7MM  \n"
+            "  MM   `MM.                  MM              MM  \n"
+            "  MM   ,M9 `7Mb,od8 ,pW\"Wq.mmMMmm  ,6\"Yb.    MM  \n"
+            "  MMmmdM9    MM' \"'6W'   `Wb MM   8)   MM    MM  \n"
+            "  MM         MM    8M     M8 MM    ,pm9MM    MM  \n"
+            "  MM         MM    YA.   ,A9 MM   8M   MM    MM  \n"
+            ".JMML.     .JMML.   `Ybmd9'  `Mbmo`Moo9^Yo..JMML.\n\n";
+
+
+
+    static void PrintLogo(std::ostream& os = std::cout) {
+        os << PROTAL_LOGO << std::endl;
+    }
+
     template<typename AlignmentBenchmark=NoBenchmark>
     static void RunWrapper(Options& options, AlignmentBenchmark benchmark=NoBenchmark{}) {
 
         std::cout << "Options:\n" << options.ToString() << std::endl;
 
-        const size_t kmer_size = 15;
-        ClosedSyncmer minimizer{kmer_size, 7, 2};
-        SimpleKmerHandler iterator{kmer_size, minimizer};
+        const size_t mmer_size = 15;
+//        const size_t kmer_size = 27;
+        const size_t kmer_size = 31;
+        ClosedSyncmer minimizer{mmer_size, 7, 2};
+        SimpleKmerHandler iterator{kmer_size, mmer_size, minimizer};
 
         if (options.BuildMode()) {
             Benchmark bm_build("Run build");
@@ -48,7 +67,7 @@ namespace protal {
             bm_load_index.PrintResults();
 
 
-            KmerLookupSM kmer_lookup(map);
+            KmerLookupSM kmer_lookup(map, options.GetMaxKeyUbiquity());
 
             GenomeLoader genomes(options.GetSequenceFile(), options.GetSequenceMapFile());
             WFA2Wrapper aligner(4, 6, 2, options.GetXDrop());
@@ -73,7 +92,7 @@ namespace protal {
             genomes.WriteSamHeader(sam_output);
 
             // AnchorFinder
-            AnchorFinder anchor_finder(kmer_lookup);
+            AnchorFinder anchor_finder(kmer_lookup, mmer_size, 4, 20);
 
             // AlignmentHandler approach
             SimpleAlignmentHandler alignment_handler(genomes, aligner, kmer_size, options.GetAlignTop(), options.GetMaxScoreAni(), options.FastAlign());
@@ -81,7 +100,7 @@ namespace protal {
             Benchmark bm_classify("Run classify");
             if (options.PairedMode()) {
                 using OutputHandler = ProtalPairedOutputHandler;
-                OutputHandler output_handler(sam_output, 1024*512, 1024*1024*16, 0.8);
+                OutputHandler output_handler(sam_output, options.GetMaxOut(), 1024*512, 1024*1024*16, 0.8);
 //                std::ifstream is1 {options.GetFirstFile(), std::ios::in};
 //                std::ifstream is2 {options.GetSecondFile(), std::ios::in};
 
@@ -135,6 +154,7 @@ namespace protal {
     }
 
     static void Run(int argc, char *argv[]) {
+        PrintLogo();
         Benchmark bm_total("Run protal");
 
         using AlignmentBenchmark = CoreBenchmark;
@@ -238,17 +258,5 @@ namespace protal {
 
 
         bm_total.PrintResults();
-    }
-
-
-
-    static void Test(int argc, char *argv[]) {
-        string pattern = "TCTTTACTCGCGCGTTGGAGAAATACAATAGT";
-        string text    = "TCTATACTGCGCGTTTGGAGAAATAAAATAGT";
-        WFA2Wrapper aligner(4, 6, 2, 0);
-        AlignmentResult result;
-        aligner.Alignment(pattern, text, result);
-        aligner.PrintAlignment();
-
     }
 }

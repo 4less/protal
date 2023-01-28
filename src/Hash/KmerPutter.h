@@ -33,9 +33,17 @@ namespace protal {
 
     class KmerPutterSM {
         Seedmap m_sm;
+
     public:
         inline void FirstPut(size_t key) {
-            m_sm.CountUpKey(key);
+//            std::cout << SeedmapUtils::BitString<64>(key) << std::endl;
+//            std::cout << SeedmapUtils::BitString<64>(m_sm.MainKey(key)) << std::endl;
+//            std::cout << SeedmapUtils::BitString<64>(m_sm.FlexKey(key)) << std::endl;
+//            std::cout << SeedmapUtils::BitString<64>(m_sm.m_main_key_mask) << std::endl;
+//            std::cout << SeedmapUtils::BitString<64>(m_sm.m_flex_key_mask_left) << std::endl;
+//            std::cout << SeedmapUtils::BitString<64>(m_sm.m_flex_key_mask_right) << std::endl;
+//            Utils::Input();
+            m_sm.CountUpKey(m_sm.MainKey(key));
         }
 
         inline void Put(size_t& key, size_t& taxid, size_t& geneid, size_t&& genepos) {
@@ -44,6 +52,10 @@ namespace protal {
 
         inline void Put(size_t& key, size_t& taxid, size_t& geneid, size_t& genepos) {
             m_sm.PutOMP(key, taxid, geneid, genepos);
+        }
+
+        Seedmap& GetMap() {
+            return m_sm;
         }
 
         inline void InitializeForPut() {

@@ -13,6 +13,8 @@ namespace protal {
     static const size_t DEFAULT_ALIGN_TOP = 3;
     static const double DEFAULT_MAX_SCORE_ANI = 0.8;
     static const size_t DEFAULT_X_DROP = 1000;
+    static const size_t DEFAULT_MAX_KEY_UBIQUITY = 8;
+    static const size_t DEFAULT_MAX_OUT = 1;
     static const size_t DEFAULT_OUTPUT_TOP = 3;
     static const bool DEFAULT_NO_STRAIN = false;
     static const std::string PROTAL_DB_ENV_VARIABLE = "PROTAL_DB_PATH";
@@ -37,6 +39,8 @@ namespace protal {
                 ("0,benchmark_alignment", "Benchmark alignment part of protal based on true taxonomic id and gene id supplied in the read header. Header must fulfill the formatting >taxid_geneid... with the regex: >[0-9]+_[0-9]+([^0-9]+.*)*")
                 ("9,benchmark_alignment_output", "Benchmark alignment output. Output is appended to the file.", cxxopts::value<std::string>())
                 ("c,align_top", "After seeding, anchor are sorted by quality passed to alignment. <take_top> specifies how many anchors should be aligned starting with the most promising anchor.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_ALIGN_TOP)))
+                ("m,max_out", "Maximum alignments that should be outputted", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_OUT)))
+                ("u,max_key_ubiquity", "Max key ubiquity. Best matching Flexkey count for seed must be lower or equal", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_KEY_UBIQUITY)))
                 ("a,max_score_ani", "A max score makes an alignment stop if the alignment diverges too much. This parameter estimates the score for a given ani and is a tradeoff between speed/accuracy. [ Default: " + std::to_string(DEFAULT_MAX_SCORE_ANI) + "]", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MAX_SCORE_ANI)))
                 ("x,x_drop", "Value determines when to cut of branches in the aligment process that are unpromising. [ Default: " + std::to_string(DEFAULT_X_DROP) + "]", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_X_DROP)))
                 ("e,output_top", "After alignment, alignments are sorted by score. <output_top> specifies how many alignments should be reported starting with the highest scoring alignment.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_OUTPUT_TOP)))
@@ -78,6 +82,8 @@ namespace protal {
         size_t m_align_top = DEFAULT_ALIGN_TOP;
         double m_max_score_ani = DEFAULT_MAX_SCORE_ANI;
         size_t m_x_drop = DEFAULT_X_DROP;
+        size_t m_max_key_ubiquity = DEFAULT_MAX_KEY_UBIQUITY;
+        size_t m_max_out = DEFAULT_MAX_OUT;
 
         const std::string PROTAL_INDEX_FILE = "index.prx";
         const std::string PROTAL_SEQUENCE_FILE = "reference.fna";
@@ -90,9 +96,9 @@ namespace protal {
         Options(bool build, bool profile, bool profile_only, bool no_strains, bool preload_genomes, bool benchmark_alignment,
                 std::string benchmark_alignment_output, bool show_help, std::string first,
                 std::string second, std::string database_path, std::string output_prefix,
-                std::string sequence_file, size_t threads, size_t align_top, double max_score_ani,
-                size_t x_drop, bool fastalign, std::string sam_file, std::string profile_truth
-                ) :
+                std::string sequence_file, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
+                size_t x_drop, size_t max_key_ubiquity, bool fastalign, std::string sam_file,
+                std::string profile_truth) :
                 m_build(build),
                 m_profile(profile),
                 m_profile_only(profile_only),
@@ -107,8 +113,10 @@ namespace protal {
                 m_sequence_file(std::move(sequence_file)),
                 m_threads(threads),
                 m_align_top(align_top),
+                m_max_out(max_out),
                 m_max_score_ani(max_score_ani),
                 m_x_drop(x_drop),
+                m_max_key_ubiquity(max_key_ubiquity),
                 m_fastalign(fastalign),
                 m_profile_truth(profile_truth),
                 m_benchmark_alignment(benchmark_alignment),
@@ -143,9 +151,11 @@ namespace protal {
             result_str += "preload genomes:     " + std::to_string(m_preload_genomes) + '\n';
             result_str += "----- Alignment -----" + std::string(30, '-') + '\n';
             result_str += "align top:           " + std::to_string(m_align_top) + '\n';
+            result_str += "max key ubiquity:    " + std::to_string(m_max_key_ubiquity) + '\n';
             result_str += "max score ani:       " + std::to_string(m_max_score_ani) + '\n';
-            result_str += "x_drop:              " + std::to_string(m_x_drop) + '\n';
+            result_str += "x-drop:              " + std::to_string(m_x_drop) + '\n';
             result_str += "fastalign:           " + std::to_string(m_fastalign) + '\n';
+            result_str += "max out:             " + std::to_string(m_max_out) + '\n';
             result_str += "---- Dev Options ----" + std::string(30, '-') + '\n';
             result_str += "benchmark alignment: " + std::to_string(m_benchmark_alignment) + '\n';
             result_str += "profile truth:       " + m_profile_truth + '\n';
@@ -262,8 +272,16 @@ namespace protal {
             return m_align_top;
         }
 
+        size_t GetMaxOut() const {
+            return m_max_out;
+        }
+
         size_t GetXDrop() const {
             return m_x_drop;
+        }
+
+        size_t GetMaxKeyUbiquity() const {
+            return m_max_key_ubiquity;
         }
 
         double GetMaxScoreAni() const {
@@ -292,7 +310,9 @@ namespace protal {
             size_t threads = result["threads"].as<size_t>();
             size_t align_top = result["align_top"].as<size_t>();
             size_t x_drop = result["x_drop"].as<size_t>();
+            size_t max_key_ubiquity = result["max_key_ubiquity"].as<size_t>();
             double max_score_ani = result["max_score_ani"].as<double>();
+            size_t max_out = result["max_out"].as<size_t>();
 
 
             auto reference = result["reference"].as<std::string>();
@@ -335,8 +355,10 @@ namespace protal {
                     reference,
                     threads,
                     align_top,
+                    max_out,
                     max_score_ani,
                     x_drop,
+                    max_key_ubiquity,
                     fastalign,
                     sam_in,
                     profile_truth);

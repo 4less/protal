@@ -228,25 +228,39 @@ namespace protal {
             return { extension_left, extension_right };
         }
 
-        static std::pair<size_t, size_t> ExtendSeed(ChainLink& s, std::string const& query, std::string const& gene) {
+        static std::pair<size_t, size_t> ExtendSeed(ChainLink& s, std::string const& query, std::string const& gene, uint16_t query_left_limit=0, uint16_t query_right_limit=0) {
             size_t extension_left = 0;
             size_t extension_right = 0;
+            if (query_right_limit == 0) query_right_limit = query.length();
 
-            size_t max_extension_len = std::min(static_cast<uint32_t>(s.readpos), s.genepos);
+//            std::cout << s.ToString() << std::endl;
+//            std::cout << "Start: " << std::endl;
+//            std::cout << "qpos:  " << s.readpos - 1 << std::endl;
+//            std::cout << "rpos:  " << s.genepos - 1 << std::endl;
+//            std::cout << "query_left_limit:  " << query_left_limit << std::endl;
+//            std::cout << "query_right_limit:  " << query_right_limit << std::endl;
+//            std::cout << "ref_left_limit:  " << 0 << std::endl;
+//            std::cout << "ref_right_limit:  " << query_right_limit << std::endl;
             for (int qpos = s.readpos - 1, rpos = s.genepos - 1;
-//                 qpos >= 0 && rpos >= 0 && // Maybe remove
-                 extension_left < max_extension_len && query[qpos] == gene[rpos];
-                 qpos--, rpos--) {
+                    qpos >= query_left_limit && rpos >= 0 && query[qpos] == gene[rpos];
+                    qpos--, rpos--) {
                 extension_left++;
             }
-            max_extension_len = std::min(
-                    static_cast<uint32_t>(query.length() - s.readpos - s.length),
-                    static_cast<uint32_t>(gene.length() - s.genepos - s.length));
+//            std::cout << "extension_left: " << extension_left << std::endl;
+//            size_t max_extension_len = std::min(static_cast<uint32_t>(s.readpos), s.genepos);
+//            for (int qpos = s.readpos - 1, rpos = s.genepos - 1;
+////                 qpos >= 0 && rpos >= 0 && // Maybe remove
+//                 extension_left < max_extension_len && query[qpos] == gene[rpos];
+//                 qpos--, rpos--) {
+//                extension_left++;
+//            }
+//            max_extension_len = std::min(
+//                    static_cast<uint32_t>(query.length() - s.readpos - s.length),
+//                    static_cast<uint32_t>(gene.length() - s.genepos - s.length));
 
             for (int qpos = s.readpos + s.length, rpos = s.genepos + s.length;
-//                 qpos < query.length() && rpos < gene.length() &&
-                 extension_right < max_extension_len && query[qpos] == gene[rpos];
-                 qpos++, rpos++) {
+                    qpos < query_right_limit && rpos < gene.length() && query[qpos] == gene[rpos];
+                    qpos++, rpos++) {
                 extension_right++;
             }
             assert(s.ReadStart() >= extension_left);
@@ -275,17 +289,29 @@ namespace protal {
                 auto& genome = m_genome_loader.GetGenome(anchor.taxid);
                 auto& gene = genome.GetGeneOMP(anchor.geneid);
 
-
+//                std::cout << anchor.ToString() << std::endl;
+//                std::cout << anchor.ToVisualString() << std::endl;
+//                std::cout << query << " " << (reversed ? "reversed" : "forward") << std::endl;
                 for (auto i = 0; i < anchor.chain.size(); i++) {
                     auto& seed = anchor.chain[i];
-                    auto [lefta, righta] = ExtendSeed(seed, query, gene.Sequence());
+//                    std::cout << gene.Sequence().substr(seed.genepos > seed.readpos ? seed.genepos - seed.readpos : 0, 150) << std::endl;
+                    auto [lefta, righta] = ExtendSeed(seed, query, gene.Sequence(), ((i > 0) ? anchor.chain[i-1].readpos + anchor.chain[i-1].length : 0), ((i+1) < anchor.chain.size() ? anchor.chain[i+1].readpos : query.length()));
                     dummy += lefta + righta;
-//                    if (i > 0 && seed.OverlapsWithLeft(anchor.chain[i-1])) {
-//                        seed.Merge(anchor.chain[i-1].readpos, anchor.chain[i-1].length);
-//                        anchor.chain.erase(anchor.chain.begin() + i);
-//                        i--;
-//                    }
+                    if (i > 0 && seed.OverlapsWithLeft(anchor.chain[i-1])) {
+//                        std::cout << "Before merge" << std::endl;
+//                        std::cout << i << ": " << seed.ToString() << std::endl;
+//                        std::cout << anchor.ToVisualString() << std::endl;
+
+                        anchor.chain[i-1].Merge(seed.readpos, seed.length);
+                        anchor.chain.erase(anchor.chain.begin() + i);
+//                        std::cout << "After merge" << std::endl;
+//                        std::cout << anchor.ToVisualString() << std::endl;
+                        i--;
+                    }
                 }
+//                std::cout << anchor.ToVisualString() << std::endl;
+//                std::cout << anchor.ToVisualString2() << std::endl;
+//                Utils::Input();
             }
         }
 

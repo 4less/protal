@@ -14,6 +14,7 @@
 #include "Constants.h"
 #include "Hash/KmerPutter.h"
 #include "robin_map.h"
+#include "KmerUtils.h"
 
 namespace protal::build {
 
@@ -31,19 +32,24 @@ namespace protal::build {
 
         Statistics statistics;
 
+        size_t main_k = putter.GetMap().m_exact_k;
+        size_t main_k_bits = putter.GetMap().m_main_bits;
+        size_t flex_k = putter.GetMap().m_flex_k;
+        size_t flex_k_bits = putter.GetMap().m_flex_k_bits;
+
 
         // TODO Fix multithreaded database building.
         if (options.GetThreads() > 1) {
             std::cerr << "Building db with multiple threads is currently broken" << std::endl;
-            exit(8);
+            omp_set_num_threads(1);
         }
 
+        std::cout << "Run Build" << std::endl;
         if constexpr(protal::HasFirstPut<KmerPutter>) {
-#pragma omp parallel default(none) shared(std::cout, options, is, dummy, read_count, kmer_handler_global, statistics, putter)
+#pragma omp parallel default(none) shared(std::cout, options, is, dummy, read_count, kmer_handler_global, statistics, putter, main_k_bits, flex_k_bits)
             {
                 // Private variables
                 FastxRecord record;
-
 
                 // Extract variables from kmi_global
                 KmerHandler kmer_handler(kmer_handler_global);
@@ -52,6 +58,8 @@ namespace protal::build {
                 thread_statistics.thread_num = omp_get_thread_num();
 
                 KmerList kmers;
+
+                std::cout << "Build: iterate records" << std::endl;
 
                 while (reader(record)) {
                     thread_statistics.reads++;
@@ -93,7 +101,7 @@ namespace protal::build {
         is.clear();                 // clear fail and eof bits
         is.seekg(0, std::ios::beg); // back to the start!
 
-#pragma omp parallel default(none) shared(std::cout, options, is, dummy, read_count, kmer_handler_global, statistics, putter)
+#pragma omp parallel default(none) shared(std::cout, options, is, dummy, read_count, kmer_handler_global, statistics, putter, flex_k_bits, main_k_bits)
     {
         // Private variables
         FastxRecord record;
@@ -111,12 +119,15 @@ namespace protal::build {
 
         KmerList kmers;
 
+        std::cout << "After first put" << std::endl;
         while (reader(record)) {
             kmer_handler.SetSequence(std::string_view(record.sequence));
 
             auto [taxonomic_id, gene_id] = KmerUtils::ExtractHeaderInformation(record.header);
 
             thread_statistics.reads++;
+
+//            std::cout << record.id << std::endl;
 
             // Retrieve kmers
             kmers.clear();

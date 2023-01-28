@@ -216,8 +216,8 @@ namespace protal::classify {
 
         constexpr bool output_data = true;
 
-        std::ofstream adoh_os(options.GetOutputPrefix() + ".adata", std::ios::out);
-        ProtalAlignmentDataOutputHandler adoh_global(adoh_os, 1024*1024*16, 0.8);
+//        std::ofstream adoh_os(options.GetOutputPrefix() + ".adata", std::ios::out);
+//        ProtalAlignmentDataOutputHandler adoh_global(adoh_os, 1024*1024*16, 0.8);
 
         size_t dummy = 0;
 
@@ -226,8 +226,12 @@ namespace protal::classify {
 
         Statistics statistics{};
         Benchmark bm_alignment_global("Alignment handler");
+        Benchmark bm_output_global("Output handler");
 
-#pragma omp parallel default(none) shared(std::cout, adoh_global, genome_loader, bm_alignment_global, benchmark_global, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
+        Utils::Histogram seed_sizes_global;
+        Utils::Histogram anchor_sizes_global;
+
+#pragma omp parallel default(none) shared(std::cout, /*adoh_global,*/ genome_loader, seed_sizes_global, anchor_sizes_global, bm_alignment_global, bm_output_global, benchmark_global, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
         {
             // Private variables
             FastxRecord record1;
@@ -242,7 +246,7 @@ namespace protal::classify {
             AlignmentHandler alignment_handler(alignment_handler_global);
 
             // Alignment data output handler (set with flag)
-            ProtalAlignmentDataOutputHandler adoh(adoh_global);
+//            ProtalAlignmentDataOutputHandler adoh(adoh_global);
 
             // IO
             SeqReaderPE reader{reader_global};
@@ -265,6 +269,10 @@ namespace protal::classify {
             size_t record_id = omp_get_thread_num();
 
             Benchmark bm_alignment{"Alignment handler"};
+            Benchmark bm_output{"Output handler"};
+            Utils::Histogram seed_sizes;
+            Utils::Histogram anchor_sizes;
+
 
             while (reader(record1, record2)) {
                 thread_statistics.reads++;
@@ -303,6 +311,11 @@ namespace protal::classify {
                 anchor_finder(kmers1, seeds1, anchors1, record1.sequence.length());
                 anchor_finder(kmers2, seeds2, anchors2, record2.sequence.length());
 
+                seed_sizes.AddObservation(seeds1.size());
+                seed_sizes.AddObservation(seeds2.size());
+                anchor_sizes.AddObservation(anchors1.size());
+                anchor_sizes.AddObservation(anchors2.size());
+
                 thread_statistics.total_anchors += anchors1.size();
                 thread_statistics.total_anchors += anchors2.size();
 
@@ -315,7 +328,6 @@ namespace protal::classify {
                 thread_statistics.total_alignments += alignment_results1.size();
                 thread_statistics.total_alignments += alignment_results2.size();
 
-                // Maybe get rid of this
                 // This pairs SE alignments into all possible pairs.
                 JoinAlignmentPairs(paired_alignment_results, alignment_results1,
                                    alignment_results2, genome_loader);
@@ -325,62 +337,12 @@ namespace protal::classify {
                 SortAlignmentPairs3(paired_alignment_results);
 
 
-                {
-                    auto [taxonomic_id, gene_id] = KmerUtils::ExtractTaxIdGeneId(record1.id);
-
-                    bool global_label = false;
-                    size_t max_al = 5;
-                    size_t al_count = 0;
-
-                    auto best_taxid = paired_alignment_results.front().first.IsSet() ? paired_alignment_results.front().first.Taxid() : paired_alignment_results.front().second.Taxid();
-                    bool best_true = best_taxid == taxonomic_id;
-                    bool ambiguous_best = paired_alignment_results.size() > 1 &&
-                                          Score(paired_alignment_results[0]) == Score(paired_alignment_results[1]);
-
-
-                    if constexpr(false) {
-                        if (!best_true && !ambiguous_best) {
-                            std::cout << record1.id << std::endl;
-                            for (auto &[ar1, ar2]: paired_alignment_results) {
-                                if (ar1.IsSet()) std::cout << "1: " << ar1.ToString() << std::endl;
-                                if (ar2.IsSet()) std::cout << "2: " << ar2.ToString() << std::endl;
-                                std::cout << "Double score: " << Score({ar1, ar2}) << std::endl;
-                                std::cout << "Bit score:    " << Bitscore({ar1, ar2}) << std::endl;
-                                std::cout << "---" << std::endl;
-                            }
-
-                            std::cout << "First read anchors" << std::endl;
-                            for (auto &a1: anchors1) {
-                                std::cout << a1.ToString() << std::endl;
-                            }
-
-                            std::cout << "Second read anchors" << std::endl;
-                            for (auto &a2: anchors2) {
-                                std::cout << a2.ToString() << std::endl;
-                            }
-
-                            std::cout << "First read seeds" << std::endl;
-                            for (auto &s1: seeds1) {
-                                std::cout << s1.ToString() << std::endl;
-                            }
-                            std::cout << "Second read seeds" << std::endl;
-                            for (auto &s2: seeds2) {
-                                std::cout << s2.ToString() << std::endl;
-                            }
-
-                            Utils::Input();
-                        }
-                    }
-
-                }
-
+                bm_output.Start();
                 // Output alignments
                 output_handler(paired_alignment_results, record1, record2, record_id);
 //                output_handler(alignment_results1, record1, record_id, true);
 //                output_handler(alignment_results2, record2, record_id, false);
-
-                if constexpr(output_data)
-                    adoh(paired_alignment_results, record1, record2, record_id);
+                bm_output.Stop();
 
                 if constexpr (benchmark_active) {
                     thread_core_benchmark(seeds1, anchors1, alignment_results1, record1.id);
@@ -401,11 +363,13 @@ namespace protal::classify {
 #pragma omp critical(statistics)
             {
                 anchor_finder_global.m_bm_seeding.Join(anchor_finder.m_bm_seeding);
+                anchor_finder_global.m_bm_seed_subsetting.Join(anchor_finder.m_bm_seed_subsetting);
                 anchor_finder_global.m_bm_processing.Join(anchor_finder.m_bm_processing);
                 anchor_finder_global.m_bm_pairing.Join(anchor_finder.m_bm_pairing);
                 anchor_finder_global.m_bm_sorting_anchors.Join(anchor_finder.m_bm_sorting_anchors);
 
                 bm_alignment_global.Join(bm_alignment);
+                bm_output_global.Join(bm_output);
                 alignment_handler_global.bm_alignment.Join(alignment_handler.bm_alignment);
 
                 alignment_handler_global.bm_seedext.Join(alignment_handler.bm_seedext);
@@ -413,6 +377,9 @@ namespace protal::classify {
 
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
+
+                seed_sizes_global.Join(seed_sizes);
+                anchor_sizes_global.Join(anchor_sizes);
 
                 if constexpr (benchmark_active) {
                     benchmark_global.Join(thread_core_benchmark);
@@ -426,18 +393,32 @@ namespace protal::classify {
             std::cout << "\n------------Alignment benchmarks------------------" << std::endl;
             benchmark_global.WriteRowStats();
             std::cout << "----------------------------------------------------\n" << std::endl;
+            benchmark_global.WriteRowStatsToFile(options.GetOutputPrefix() + "_benchmark.tsv");
         }
 
         std::cout << "---------------Speed benchmarks---------------------" << std::endl;
         anchor_finder_global.m_bm_seeding.PrintResults();
+        anchor_finder_global.m_bm_seed_subsetting.PrintResults();
         anchor_finder_global.m_bm_processing.PrintResults();
         anchor_finder_global.m_bm_pairing.PrintResults();
         anchor_finder_global.m_bm_sorting_anchors.PrintResults();
         bm_alignment_global.PrintResults();
+        bm_output_global.PrintResults();
         alignment_handler_global.bm_alignment.PrintResults();
         alignment_handler_global.bm_seedext.PrintResults();
-        std::cout << alignment_handler_global.dummy << std::endl;
         std::cout << "----------------------------------------------------\n" << std::endl;
+
+        std::ofstream time_os(options.GetOutputPrefix() + "_runtime.tsv", std::ios::out);
+        time_os << anchor_finder_global.m_bm_seeding.GetName() << '\t' << anchor_finder_global.m_bm_seeding.GetDuration(Time::seconds) << '\n';
+        time_os << anchor_finder_global.m_bm_processing.GetName() << '\t' << anchor_finder_global.m_bm_processing.GetDuration(Time::seconds) << '\n';
+        time_os << anchor_finder_global.m_bm_pairing.GetName() << '\t' << anchor_finder_global.m_bm_pairing.GetDuration(Time::seconds) << '\n';
+        time_os << anchor_finder_global.m_bm_sorting_anchors.GetName() << '\t' << anchor_finder_global.m_bm_sorting_anchors.GetDuration(Time::seconds) << '\n';
+        time_os << bm_alignment_global.GetName() << '\t' << bm_alignment_global.GetDuration(Time::seconds) << '\n';
+        time_os << bm_output_global.GetName() << '\t' << bm_output_global.GetDuration(Time::seconds) << '\n';
+        time_os.close();
+
+        seed_sizes_global.ToTSV(options.GetOutputPrefix() + "_seedsizes_histogram.tsv");
+        anchor_sizes_global.ToTSV(options.GetOutputPrefix() + "_anchorsizes_histogram.tsv");
 
         return statistics;
     }

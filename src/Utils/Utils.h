@@ -18,8 +18,46 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <fstream>
 
 namespace Utils {
+    class Histogram {
+        std::vector<uint32_t> frequencies{0, 0};
+
+    public:
+        void Join(Histogram const& other) {
+            if (frequencies.size() < other.frequencies.size()) {
+                frequencies.resize(other.frequencies.size(), 0);
+            }
+            for (auto i = 0; i < other.frequencies.size(); i++) {
+                frequencies[i] += other.frequencies[i];
+            }
+        }
+        void AddObservation(uint32_t observation) {
+            if (observation >= frequencies.size()) {
+                frequencies.resize(observation+1, 0);
+            }
+            frequencies[observation]++;
+        }
+
+        void ToTSV(std::string& path) {
+            std::ofstream out(path, std::ios::out);
+            ToStream(out);
+            out.close();
+        }
+        void ToTSV(std::string&& path) {
+            std::ofstream out(path.c_str(), std::ios::out);
+            ToStream(out);
+            out.close();
+        }
+
+        void ToStream(std::ostream& os) {
+            for (auto i = 0; i < frequencies.size(); i++) {
+                os << i << '\t' << frequencies[i] << '\n';
+            }
+        }
+    };
+
     static void shift(uint8_t * array, size_t length, size_t by) {
         for (int i = 0; i < length-1; i++) {
             array[i] <<= by;

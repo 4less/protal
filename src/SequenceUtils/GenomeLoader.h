@@ -207,6 +207,10 @@ namespace protal {
 
         Genome& GetGenome(GenomeKey const& key) {
             assert(m_genomes.contains(key));
+            if (!m_genomes.contains(key)) {
+                std::cout << key << std::endl;
+                exit(10);
+            }
             return m_genomes.at(key);
         }
 

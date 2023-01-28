@@ -131,13 +131,13 @@ namespace protal {
         // Bytespace a controlblock takes up
         size_t ctrl_block_size = 4; // Byte
         size_t ctrl_block_size_shift = log2(ctrl_block_size);
-//        size_t ctrl_block_size_shift = 2;
+//        size_t ctrl_block_byte_size_shift = 2;
 
         size_t keymap_size_total = keymap_size + (((keymap_size/ctrl_block_frequency)+1) * ctrl_block_size);
 
         /*
          * The number of total value entries per block.
-         * Each block holds indices for <ctrl_block_frequency> keys
+         * Each block holds indices for <m_keys_per_ctrl_block> keys
          * and the values for thes keys may not be more than <max_block_size>
          */
         size_t max_block_size = (1 << sizeof(KeyMap_t)*8);
@@ -148,10 +148,10 @@ namespace protal {
         uint64_t m_found_counter = 0;
 
         void Print() {
-            std::cout << "ctrl_block_frequency:             " << ctrl_block_frequency << std::endl;
+            std::cout << "m_keys_per_ctrl_block:             " << ctrl_block_frequency << std::endl;
             std::cout << "ctrl_block_frequency_bitshift:    " << ctrl_block_frequency_bitshift << std::endl;
-            std::cout << "ctrl_block_size:                  " << ctrl_block_size << std::endl;
-            std::cout << "ctrl_block_size_shift:            " << ctrl_block_size_shift << std::endl;
+            std::cout << "ctrl_block_byte_size:                  " << ctrl_block_size << std::endl;
+            std::cout << "ctrl_block_byte_size_shift:            " << ctrl_block_size_shift << std::endl;
             std::cout << "ctrl_block_key_mask:              " << ctrl_block_key_mask << std::endl;
             std::cout << "keymap_size_total:                " << keymap_size_total << std::endl;
             std::cout << "max_block_size:                   " << max_block_size << std::endl;

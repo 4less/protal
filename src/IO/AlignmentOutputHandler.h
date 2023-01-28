@@ -464,19 +464,22 @@ namespace protal {
 
         AlignmentInfo m_info;
 
+        size_t m_max_out = 1;
         double m_min_cigar_ani = 0;
     public:
         size_t alignments = 0;
 
-        ProtalPairedOutputHandler(std::ostream& sam_os, size_t varkit_buffer_capacity, size_t sam_buffer_capacity, double min_cigar_ani=0.0f) :
+        ProtalPairedOutputHandler(std::ostream& sam_os, size_t max_out, size_t varkit_buffer_capacity, size_t sam_buffer_capacity, double min_cigar_ani=0.0f) :
                 m_sam_os(sam_os),
                 m_sam_output(sam_buffer_capacity),
-                m_min_cigar_ani(min_cigar_ani) {}
+                m_min_cigar_ani(min_cigar_ani),
+                m_max_out(max_out) {}
 
         ProtalPairedOutputHandler(ProtalPairedOutputHandler const& other) :
                 m_sam_os(other.m_sam_os),
                 m_sam_output(other.m_sam_output.Capacity()),
-                m_min_cigar_ani(other.m_min_cigar_ani) {}
+                m_min_cigar_ani(other.m_min_cigar_ani),
+                m_max_out(other.m_max_out) {}
 
         ~ProtalPairedOutputHandler() {
 #pragma omp critical(sam_output)
@@ -486,29 +489,12 @@ namespace protal {
 
         void operator () (PairedAlignmentResultList& alignment_results, FastxRecord& record1, FastxRecord& record2, size_t read_id=0, bool first_pair=true) {
             if (alignment_results.empty()) return;
-//            bool multiple_best = alignment_results.size() > 1 && alignment_results[0].AlignmentScore() == alignment_results[1].AlignmentScore();
-//
-//            if (multiple_best) {
-//                return;
-//            }
 
             auto& best = alignment_results.front();
-
-
-
-//            size_t anum = 0;
-//            std::cout << record1.id << std::endl;
-//            for (auto& [ar1, ar2] :  alignment_results) {
-//                std::cout << anum++ << " SCORE: " << ScorePairedAlignment(ar1, ar2) << '\t' << ar1.AlignmentScore() << "{"<< ar1.Taxid() << "," << ar1.GeneId() << "}" << " ";
-//                std::cout << ar2.AlignmentScore() << "{"<< ar2.Taxid() << "," << ar2.GeneId() << "}" << std::endl;
-//            }
-//            Utils::Input();
 
             if (CigarANI(best.first.Cigar()) < m_min_cigar_ani) {
                 return;
             }
-
-
 
             /* ##############################################################
              * Output alignments.
@@ -518,19 +504,13 @@ namespace protal {
 
             std::string alignment_data_str = "";
 
+            size_t output_counter = 0;
             for (auto& [ar1, ar2] :  alignment_results) {
                 bool both = ar1.IsSet() && ar2.IsSet();
 
                 int alignment_length = 0;
                 int alignment_score = 0;
                 int adjusted_score = 0;
-
-
-//                if (ar1.IsSet()) {
-//                    std::cout << "    " << ar1.Taxid() << " " << ar1.GeneId() << std::endl;
-//                } else {
-//                    std::cout << "    " << ar2.Taxid() << " " << ar2.GeneId() << std::endl;
-//                }
 
                 if (ar1.IsSet()) {
 
@@ -588,12 +568,10 @@ namespace protal {
 #pragma omp critical(sam_output)
                     m_sam_output.Write(m_sam_os);
                 }
-//                std::cout << alignment_length << " " << alignment_score << std::endl;
-//                std::cout << "--" << std::endl;
+                if (++output_counter == m_max_out) {
+                    break;
+                }
             }
-//
-//            Utils::Input();
-//            std::cout << "--------" << std::endl;
         }
     };
 }

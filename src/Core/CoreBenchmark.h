@@ -17,6 +17,7 @@ namespace protal {
     class CoreBenchmark {
         BCE m_seed_bce{"Seeds"};
         BCE m_anchor_bce{"Anchors"};
+        BCE m_best_anchor_bce{"Best_Anchor"};
         BCE m_alignment_bce{"Alignments"};
         BCE m_best_alignment_bce{"Best_alignment"};
         BCE m_best_unique_alignment_bce{"Best_unique_alignment"};
@@ -26,6 +27,10 @@ namespace protal {
         size_t m_anchor_fp_no_hit = 0;
 
         std::ofstream* ofs = nullptr;
+
+        size_t m_total_reads = 0;
+        size_t m_total_pairs = 0;
+        size_t m_correct_without_pair = 0;
 
     public:
         CoreBenchmark() {};
@@ -100,9 +105,19 @@ namespace protal {
                 }
             }
 
-            m_anchor_fp_no_hit += anchors.empty();
+            if (!anchors.empty()) {
+                auto& best = anchors[0];
+                if (best.taxid == true_taxid && best.geneid == true_geneid) {
+                    m_best_anchor_bce.tp++;
+                } else {
+                    m_best_anchor_bce.fp++;
+                }
+            }
 
+            m_anchor_fp_no_hit += anchors.empty();
+            m_best_anchor_bce.fn += anchors.empty();
             m_anchor_bce.fn += !found;
+
         };
 
         void AddAlignmentResults(AlignmentResultList const& alignments, size_t true_taxid, size_t true_geneid) {
@@ -145,7 +160,7 @@ namespace protal {
 
         void AddPairedAlignmentResults(PairedAlignmentResultList const& alignments, size_t true_taxid, size_t true_geneid) {
             if (alignments.empty()) {
-//                m_alignment_pe_bce.fn++;
+                m_alignment_pe_bce.fn++;
                 m_best_alignment_pe_bce.fn++;
                 return;
             }
@@ -159,6 +174,21 @@ namespace protal {
                 m_best_alignment_pe_bce.fp++;
                 m_best_alignment_pe_bce.fn++;
             }
+
+            bool found = false;
+            for (auto& [ar1, ar2] : alignments) {
+                if ((ar1.IsSet() && ar1.Taxid() == true_taxid && ar1.GeneId() == true_geneid) &&
+                    (ar1.IsSet() && ar1.Taxid() == true_taxid && ar1.GeneId() == true_geneid)) {
+                    if (!found && !(ar1.IsSet() && ar2.IsSet())) {
+                        m_correct_without_pair++;
+                    }
+                    found = true;
+                    m_alignment_pe_bce.tp++;
+                } else {
+                    m_alignment_pe_bce.fp++;
+                }
+            }
+            m_alignment_pe_bce.fn += !found;
         };
 
         void AddBestAlignmentResult(AlignmentResult& alignment, size_t true_taxid, size_t true_geneid) {
@@ -176,11 +206,16 @@ namespace protal {
         void Join(CoreBenchmark const& other) {
             m_seed_bce.Join(other.m_seed_bce);
             m_anchor_bce.Join(other.m_anchor_bce);
+            m_best_anchor_bce.Join(other.m_best_anchor_bce);
             m_alignment_bce.Join(other.m_alignment_bce);
             m_best_alignment_bce.Join(other.m_best_alignment_bce);
             m_best_unique_alignment_bce.Join(other.m_best_unique_alignment_bce);
             m_best_alignment_pe_bce.Join(other.m_best_alignment_pe_bce);
+            m_alignment_pe_bce.Join(other.m_alignment_pe_bce);
             m_anchor_fp_no_hit += other.m_anchor_fp_no_hit;
+            m_total_reads += other.m_total_reads;
+            m_total_pairs += other.m_total_pairs;
+            m_correct_without_pair += other.m_correct_without_pair;
         }
 
         void operator() (SeedList const& seeds, AlignmentAnchorList const& anchors, AlignmentResultList const& alignments, std::string const& header) {
@@ -190,6 +225,7 @@ namespace protal {
             AddAnchors(anchors, tax_id_truth, gene_id_truth);
             AddAlignmentResults(alignments, tax_id_truth, gene_id_truth);
 
+            m_total_reads++;
         }
 
         void operator() (SeedList const& seeds, AlignmentAnchorList const& anchors, AlignmentResultList const& alignments, PairedAlignmentResultList const& alignment_pairs, std::string const& header) {
@@ -200,27 +236,40 @@ namespace protal {
             AddAlignmentResults(alignments, tax_id_truth, gene_id_truth);
             AddPairedAlignmentResults(alignment_pairs, tax_id_truth, gene_id_truth);
 
+            m_total_reads++;
+            m_total_pairs++;
+        }
+
+        void WriteRowStatsToStream(std::ostream& os, std::string prefix="") {
+            m_seed_bce.WriteRowStats(os, prefix);
+            m_anchor_bce.WriteRowStats(os, prefix);
+            m_best_anchor_bce.WriteRowStats(os, prefix);
+            m_alignment_bce.WriteRowStats(os, prefix);
+            m_best_alignment_bce.WriteRowStats(os, prefix);
+            m_best_unique_alignment_bce.WriteRowStats(os, prefix);
+            m_alignment_pe_bce.WriteRowStats(os, prefix);
+            m_best_alignment_pe_bce.WriteRowStats(os, prefix);
+        }
+
+        void WriteRowStatsToFile(std::string file_path) {
+            std::ofstream out(file_path, std::ios::out);
+            WriteRowStatsToStream(out);
+            out.close();
         }
 
         void WriteRowStats(std::string prefix="") {
             m_seed_bce.WriteRowHeader(std::cout, prefix);
             m_seed_bce.WriteRowStats(std::cout, prefix);
             m_anchor_bce.WriteRowStats(std::cout, prefix);
+            m_best_anchor_bce.WriteRowStats(std::cout, prefix);
             m_alignment_bce.WriteRowStats(std::cout, prefix);
             m_best_alignment_bce.WriteRowStats(std::cout, prefix);
             m_best_unique_alignment_bce.WriteRowStats(std::cout, prefix);
+            m_alignment_pe_bce.WriteRowStats(std::cout, prefix);
             m_best_alignment_pe_bce.WriteRowStats(std::cout, prefix);
-
-            if (ofs) {
-                if (ofs->tellp() == 0) {
-                    m_seed_bce.WriteRowHeader(*ofs, prefix);
-                }
-                m_seed_bce.WriteRowStats(*ofs, prefix);
-                m_anchor_bce.WriteRowStats(*ofs, prefix);
-                m_alignment_bce.WriteRowStats(*ofs, prefix);
-                m_best_alignment_bce.WriteRowStats(*ofs, prefix);
-                m_best_unique_alignment_bce.WriteRowStats(*ofs, prefix);
-            }
+            std::cout << "Total reads:                 " << m_total_reads << std::endl;
+            std::cout << "Total pairs:                 " << m_total_pairs << std::endl;
+            std::cout << "Total best PE is not paired: " << m_correct_without_pair << std::endl;
         }
 
         void Print() {

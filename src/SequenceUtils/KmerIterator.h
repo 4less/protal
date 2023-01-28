@@ -151,9 +151,14 @@ namespace protal {
     private:
         CFMinimizer m_minimizer{};
 
-        uint32_t m_k{};
+        const uint32_t m_k{};
+        const uint32_t m_m{};
+
         size_t m_kmer{};
+        size_t m_mmer{};
         size_t m_mask{};
+        size_t m_mmask{};
+        size_t m_mshift{};
         uint32_t m_pos = 0;
 
 //        char* m_seq = nullptr;
@@ -206,17 +211,11 @@ namespace protal {
             return m_total_minimizers;
         }
 
-        void Init(size_t k) {
-            m_k = k;
-            m_mask = (1llu << (m_k*2)) -1;
-        }
-
-        SimpleKmerHandler(size_t k, CFMinimizer& minimizer) : m_k(k), m_minimizer(minimizer) {
-            Init(m_k);
+        SimpleKmerHandler(size_t k, size_t m, CFMinimizer& minimizer) :
+                m_k(k), m_m(m), m_mshift((k-m)*2), m_mmask((1llu << (m*2)) -1), m_mask((1llu << (k*2)) -1), m_minimizer(minimizer) {
         }
         SimpleKmerHandler(SimpleKmerHandler const& other) :
-                m_minimizer(other.m_minimizer) {
-            Init(other.m_k);
+                m_k(other.m_k), m_m(other.m_m), m_mshift((other.m_k-other.m_m)*2), m_mmask((1llu << (other.m_m*2)) -1), m_mask((1llu << (other.m_k*2)) -1), m_minimizer(other.m_minimizer) {
         }
         Syncmer minimizer{15, 7, 2};
 
@@ -259,17 +258,22 @@ namespace protal {
             list.clear();
             SetSequence(sequence);
             while (NextWrapper(m_kmer)) {
-                if (m_minimizer(m_kmer)) {
+                m_mmer = (m_kmer >> m_mshift) & m_mmask;
+
+                if (m_minimizer(m_mmer)) {
                     m_total_minimizers++;
                     list.emplace_back(KmerElement(m_kmer, GetPos()));
                 }
             }
         }
+
         inline void operator () (std::string_view const&& sequence, KmerList& list) {
             list.clear();
             SetSequence(sequence);
             while (NextWrapper(m_kmer)) {
-                if (m_minimizer(m_kmer)) {
+                m_mmer = (m_kmer >> m_mshift) & m_mmask;
+
+                if (m_minimizer(m_mmer)) {
                     m_total_minimizers++;
                     list.emplace_back(KmerElement(m_kmer, GetPos()));
                 }

@@ -28,6 +28,10 @@ namespace protal {
             Start();
         }
 
+        std::string GetName() const {
+            return name;
+        }
+
         void Start() {
             start_time = high_resolution_clock::now();
         }
@@ -79,13 +83,15 @@ namespace protal {
                 time_sum /= static_cast<double>(threads_sampled);
             }
 
-            uint hours = time_sum / 3600000000;
-            time_sum -= hours * 3600000000;
-            uint mins = time_sum / 60000000;
-            time_sum -= mins * 60000000;
-            uint secs = time_sum / 1000000;
-            time_sum -= secs * 1000000;
-            uint msecs = time_sum / 1000;
+            auto time_sum_local = time_sum;
+
+            uint hours = time_sum_local / 3600000000;
+            time_sum_local -= hours * 3600000000;
+            uint mins = time_sum_local / 60000000;
+            time_sum_local -= mins * 60000000;
+            uint secs = time_sum_local / 1000000;
+            time_sum_local -= secs * 1000000;
+            uint msecs = time_sum_local / 1000;
 
             std::cout << name << " took ";
             if (hours) std::cout << hours << "h ";
