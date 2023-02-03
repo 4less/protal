@@ -16,6 +16,7 @@ namespace protal {
     requires KmerLookupConcept<KmerLookup>
     class ListAnchorFinder {
         KmerLookup m_kmer_lookup;
+        size_t last_lookup = 0;
 
         SeedList m_all_seeds;
         SeedList m_seed_tmp;
@@ -49,6 +50,7 @@ namespace protal {
 
         inline bool FindSeeds(LookupList &anchor_list, KmerList &kmer_list, std::vector<size_t> &indices, size_t &index) {
             anchor_list.clear();
+            last_lookup = 0;
             for (; index < indices.size(); index++) {
                 auto [mmer, pos] = kmer_list[indices[index]];
                 m_kmer_lookup.Get(anchor_list, mmer, pos);

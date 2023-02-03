@@ -4,10 +4,118 @@
 
 #pragma once
 
+#include "AlignmentOutputHandler.h"
 #include <iostream>
 #include "assert.h"
 #include "SamHandler.h"
+
 namespace protal {
+
+    class AlignmentResult {
+        static constexpr int DEFAULT_ALIGNMENT_SCORE = INT32_MIN;
+        static constexpr int DEFAULT_VALUE = UINT32_MAX;
+
+        /* Only stores crucial alignment information, no information about header sequence etc
+         * This is to save space and it is not necessary as this information can be passed down by another function.
+         */
+        int m_alignment_score = DEFAULT_ALIGNMENT_SCORE;
+
+        uint32_t m_taxid = DEFAULT_VALUE;
+        uint32_t m_geneid = DEFAULT_VALUE;
+        int32_t m_genepos = INT32_MAX;
+
+        bool m_forward = false;
+        std::string m_cigar;
+        std::string m_compressed_cigar;
+
+
+
+    public:
+        AlignmentResult(int alignment_score, std::string& cigar, uint32_t taxid, uint32_t geneid, int32_t genepos, bool forward) :
+                m_alignment_score(alignment_score),
+                m_cigar(cigar),
+                m_taxid(taxid),
+                m_geneid(geneid),
+                m_genepos(genepos),
+                m_forward(forward) {};
+
+        AlignmentResult(int alignment_score, std::string&& cigar, uint32_t taxid, uint32_t geneid, int32_t genepos, bool forward) :
+                m_alignment_score(alignment_score),
+                m_cigar(std::move(cigar)),
+                m_taxid(taxid),
+                m_geneid(geneid),
+                m_genepos(genepos),
+                m_forward(forward) {};
+
+        AlignmentResult() {};
+
+        std::string& Cigar() {
+            return m_cigar;
+        }
+
+        std::string Cigar() const {
+            return m_cigar;
+        }
+
+        uint32_t Taxid() const {
+            return m_taxid;
+        }
+
+        uint32_t GeneId() const {
+            return m_geneid;
+        }
+
+        int32_t GenePos() const {
+            return m_genepos;
+        }
+
+        bool Forward() const {
+            return m_forward;
+        }
+
+        int AlignmentScore() const {
+            return m_alignment_score;
+        }
+
+
+        void Set(int score, std::string& cigar) {
+            m_cigar = cigar;
+            m_alignment_score = score;
+        }
+
+        void Set(int score, std::string&& cigar) {
+            m_cigar = cigar;
+            m_alignment_score = score;
+        }
+
+        void Set(size_t taxid, size_t geneid, int32_t abs_pos, bool forward) {
+            m_taxid = taxid;
+            m_geneid = geneid;
+            m_genepos = abs_pos;
+            m_forward = forward;
+        }
+
+
+        void Reset() {
+            m_alignment_score = DEFAULT_ALIGNMENT_SCORE;
+            m_cigar.clear();
+        }
+
+        bool IsSet() const {
+            return m_alignment_score != DEFAULT_ALIGNMENT_SCORE;
+        }
+
+        std::string ToString() const {
+            std::string str = "";
+            str += std::to_string(AlignmentScore()) + '\t';
+            str += Cigar() + '\t';
+            str += std::to_string(Taxid()) + '\t';
+            str += std::to_string(GeneId()) + '\t';
+            str += std::to_string(GenePos()) + '\t';
+            str += std::to_string(Forward());
+            return str;
+        }
+    };
 
     static bool NextCompressedCigar(int& pos, const std::string& ccigar, int& count, char& operation) {
         if (pos == ccigar.length()) return false;
@@ -580,5 +688,24 @@ namespace protal {
             Utils::Input();
         }
     }
+    static int Bitscore(PairedAlignment const& a) {
+        AlignmentInfo info1;
+        AlignmentInfo info2;
+        GetAlignmentInfo(info1, a.first.Cigar());
+        GetAlignmentInfo(info2, a.second.Cigar());
 
+        auto score1 = CigarScore(a.first.Cigar(), 2, 3, 1, 2);
+        auto score2 = CigarScore(a.second.Cigar(), 2, 3, 1, 2);
+
+        return score1 + score2;
+    }
+
+
+    int MAPQv1(PairedAlignmentResultList& paired_alignment_results) {
+        auto best_score = Bitscore(paired_alignment_results[0]);
+        auto second_best_score = paired_alignment_results.size() > 1 ? Bitscore(paired_alignment_results[1]) : 0;
+
+        //Assumes alignments come sorted and best is on top
+        return 40.0 * (1.0-static_cast<double>(second_best_score)/best_score) * log10(static_cast<double>(best_score));
+    }
 }

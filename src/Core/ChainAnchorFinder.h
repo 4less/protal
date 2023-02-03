@@ -40,8 +40,17 @@ namespace protal {
 
         size_t m_min_successful_lookups = 4;
         size_t m_max_seed_size = 10;
+        size_t m_lookup_index = 0;
 
-        using RecoverySet = tsl::robin_set<std::pair<uint32_t, uint32_t>>;
+        GenomeLoader& m_genome_loader;
+        std::string* m_fwd = nullptr;
+        std::string m_rev = "";
+
+        ChainAnchorList m_anchors;
+
+
+        using RecoverySet = tsl::robin_set<uint64_t>;
+        RecoverySet m_recovery;
 
         inline void FindSeeds(KmerList &kmer_list, SeedList& seeds) {
             m_lookups.clear();
@@ -55,8 +64,8 @@ namespace protal {
             uint32_t previous_size = 0;
             uint32_t successful_lookups = 0;
             uint32_t total_lookups = 0;
-            for (auto i = 0; i < m_lookups.size(); i++) {
-                auto& lookup = m_lookups[i];
+            for (m_lookup_index = 0; m_lookup_index < m_lookups.size(); m_lookup_index++) {
+                auto& lookup = m_lookups[m_lookup_index];
                 m_kmer_lookup.GetFromLookup(seeds, lookup);
                 total_lookups++;
                 successful_lookups += (seeds.size() > previous_size);
@@ -65,11 +74,6 @@ namespace protal {
                 }
                 previous_size = seeds.size();
             }
-//            std::cout << successful_lookups << "/" << total_lookups << ": " << seeds.size() << std::endl;
-        }
-
-        void RecoverAnchors(ChainAnchorList& anchors, bool expect_fwd, RecoverySet& recover) {
-
         }
 
 
@@ -101,7 +105,7 @@ namespace protal {
             return a.Front().readpos > a.Back().readpos;
         }
 
-        static inline void ReverseSeed(Seed& seed, size_t& read_length, size_t k, size_t subk = 16) {
+        static inline void ReverseSeed(Seed& seed, size_t read_length, size_t k, size_t subk = 16) {
 //            std::cout << "Reverse: " << read_length << ", " << seed.readpos << ", " << k << " = " << (read_length - seed.readpos - k) << std::endl;
             seed.readpos = read_length - seed.readpos - k;
 //            seed.readpos = read_length - seed.readpos + 1;
@@ -111,6 +115,28 @@ namespace protal {
                 ReverseSeed(seed, read_length, m_k);
             }
             std::reverse(seeds.begin(), seeds.end());
+        }
+
+        Anchor ExtractAndExtendAnchorFromSeed(Seed& seed, std::string& fwd, std::string& rev) {
+            auto& genome = m_genome_loader.GetGenome(seed.taxid);
+            auto& gene = genome.GetGeneOMP(seed.geneid);
+
+            ChainLink fwd_link = ChainLink(seed.genepos, seed.readpos, m_k);
+            ReverseSeed(seed, fwd.length(), m_k);
+            ChainLink rev_link = ChainLink(seed.genepos, seed.readpos, m_k);
+
+            ExtendSeed(fwd_link, fwd, gene.Sequence());
+            ExtendSeed(rev_link, rev, gene.Sequence());
+
+//            std::cout << "Fwd_extension: " << fwd_link.length << std::endl;
+//            std::cout << "Rev_extension: " << rev_link.length << std::endl;
+
+            ChainAlignmentAnchor anchor{seed.taxid, seed.geneid, fwd_link.length > rev_link.length };
+            anchor.chain.emplace_back(fwd_link.length > rev_link.length ? fwd_link : rev_link);
+            anchor.total_length = fwd_link.length > rev_link.length ? fwd_link.length : rev_link.length;
+//            std::cout << anchor.total_length << std::endl;
+
+            return anchor;
         }
 
         Anchor ExtractAnchor(SeedList &seeds, size_t read_length) {
@@ -237,16 +263,153 @@ namespace protal {
         Benchmark m_bm_seed_subsetting{"Subset Seeds"};
         Benchmark m_bm_processing{"Sorting Seeds"};
         Benchmark m_bm_pairing{"Pairing"};
+        Benchmark m_bm_extend_anchors{"Extending Anchors"};
         Benchmark m_bm_sorting_anchors{"Sorting Anchors"};
+        Benchmark m_bm_recovering_anchors{"Recovering Anchors"};
 
-        ChainAnchorFinder(KmerLookup& lookup, size_t k, size_t min_successful_lookups, size_t max_seed_size) :
-                m_kmer_lookup(lookup), m_max_seed_size(max_seed_size), m_min_successful_lookups(min_successful_lookups), m_k(k) {
+        size_t recovered_count = 0;
+        size_t total_count = 0;
+
+        ChainAnchorFinder(KmerLookup& lookup, size_t k, size_t min_successful_lookups, size_t max_seed_size, GenomeLoader& genome_loader) :
+                m_kmer_lookup(lookup), m_max_seed_size(max_seed_size), m_min_successful_lookups(min_successful_lookups),
+                m_k(k), m_genome_loader(genome_loader) {
         };
 
         ChainAnchorFinder(ChainAnchorFinder const& other) :
-                m_kmer_lookup(other.m_kmer_lookup), m_max_seed_size(other.m_max_seed_size), m_min_successful_lookups(other.m_min_successful_lookups), m_k(other.m_k) {};
+                m_kmer_lookup(other.m_kmer_lookup), m_max_seed_size(other.m_max_seed_size),
+                m_min_successful_lookups(other.m_min_successful_lookups), m_k(other.m_k),
+                m_genome_loader(other.m_genome_loader) {};
 
-        void operator () (KmerList& kmer_list, SeedList& seeds, ChainAnchorList& anchors, size_t read_length) {
+
+        size_t RecoverAnchors(ChainAnchorList& own_anchors, RecoverySet& recover, size_t align_top) {
+            m_bm_recovering_anchors.Start();
+            m_seed_tmp.clear();
+            m_anchors.clear();
+            size_t recovered = 0;
+            for (auto& ele : m_recovery) {
+                auto find = recover.find(ele);
+                if (find != recover.end()) {
+                    recover.erase(ele);
+                }
+            }
+            for (auto i = 0; i < own_anchors.size(); i++) {
+                auto& own_anchor = own_anchors[i];
+                auto key = (static_cast<uint64_t>(own_anchor.taxid) << 40llu) | (static_cast<uint64_t>(own_anchor.geneid) << 20llu);
+                if (recover.contains(key)) {
+                    if (i >= align_top) {
+                        m_anchors.emplace_back(own_anchor);
+                        own_anchors.erase(own_anchors.begin() + i);
+                        recovered++;
+                    }
+                    recover.erase(key);
+                    i--;
+                }
+            }
+
+
+            total_count++;
+            if (recover.size() == 0) {
+                if (!m_anchors.empty()) {
+                    m_anchors.insert(m_anchors.end(), own_anchors.begin(), own_anchors.end());
+                    std::swap(m_anchors, own_anchors);
+                }
+                return recovered;
+            }
+            recovered_count++;
+
+            size_t to_recover = recover.size();
+            for (; m_lookup_index < m_lookups.size(); m_lookup_index++) {
+                auto& pointers = m_lookups[m_lookup_index];
+                m_kmer_lookup.RecoverFromLookup(m_seed_tmp, pointers, recover);
+                if (to_recover != recover.size()) {
+                    recovered++;
+                    to_recover = recover.size();
+                }
+                if (!m_seed_tmp.empty() && m_recovery.empty()) break;
+            }
+
+            for (auto& seed : m_seed_tmp) {
+                auto anchor = ExtractAndExtendAnchorFromSeed(seed, *m_fwd, m_rev);
+                m_anchors.emplace_back(anchor);
+            }
+
+            if (!m_anchors.empty()) {
+                m_anchors.insert(m_anchors.end(), own_anchors.begin(), own_anchors.end());
+                std::swap(m_anchors, own_anchors);
+            }
+
+
+            m_bm_recovering_anchors.Stop();
+            return recovered;
+        }
+
+        RecoverySet& BestAnchors() {
+            return m_recovery;
+        }
+
+        static std::pair<size_t, size_t> ExtendSeed(ChainLink& s, std::string const& query, std::string const& gene, uint16_t query_left_limit=0, uint16_t query_right_limit=0) {
+            size_t extension_left = 0;
+            size_t extension_right = 0;
+            if (query_right_limit == 0) query_right_limit = query.length();
+
+            for (int qpos = s.readpos - 1, rpos = s.genepos - 1;
+                 qpos >= query_left_limit && rpos >= 0 && query[qpos] == gene[rpos];
+                 qpos--, rpos--) {
+                extension_left++;
+            }
+            for (int qpos = s.readpos + s.length, rpos = s.genepos + s.length;
+                 qpos < query_right_limit && rpos < gene.length() && query[qpos] == gene[rpos];
+                 qpos++, rpos++) {
+                extension_right++;
+            }
+
+            assert(s.ReadStart() >= extension_left);
+            assert(s.GeneStart() >= extension_left);
+            assert(s.ReadEnd() + extension_right <= query.length());
+            assert(s.GeneEnd() + extension_right <= gene.length());
+
+            s.ExtendLength(extension_left, extension_right);
+            return { extension_left, extension_right };
+        }
+
+        void ExtendSeed1(ChainLink& seed, ChainLink* prev, ChainLink* next, std::string const& query, std::string const& ref) {
+            auto [lefta, righta] = ExtendSeed(seed, query, ref,
+                                              (prev != nullptr ? prev->readpos + prev->length : 0),
+                                              (next != nullptr ? next->readpos : ref.length()));
+
+        }
+
+        void ExtendSeed2(ChainLink& seed, std::string const& query, std::string const& ref) {
+            auto [lefta, righta] = ExtendSeed1(seed, nullptr, nullptr, query, ref);
+        }
+
+        void ExtendAnchor(ChainAlignmentAnchor& anchor, std::string const& query) {
+            auto& genome = m_genome_loader.GetGenome(anchor.taxid);
+            auto& gene = genome.GetGeneOMP(anchor.geneid);
+
+            for (auto i = 0; i < anchor.chain.size(); i++) {
+                auto& seed = anchor.chain[i];
+                ExtendSeed1(seed,
+                           (i > 0) ? &anchor.chain[i-1] : nullptr,
+                           (i+1) < anchor.chain.size() ? &anchor.chain[i+1] : nullptr,
+                           query, gene.Sequence());
+
+                if (i > 0 && seed.OverlapsWithLeft(anchor.chain[i-1])) {
+                    anchor.chain[i-1].Merge(seed.readpos, seed.length);
+                    anchor.chain.erase(anchor.chain.begin() + i);
+                    i--;
+                }
+            }
+            anchor.UpdateLength();
+        }
+
+        void operator () (KmerList& kmer_list, SeedList& seeds, ChainAnchorList& anchors, std::string& query) {
+            auto read_length = query.length();
+            m_fwd = &query;
+            m_rev = KmerUtils::ReverseComplement(query);
+
+            m_recovery.clear();
+
             m_bm_seeding.Start();
             FindSeeds(kmer_list, seeds);
 //            FindSeeds2(kmer_list, seeds);
@@ -260,12 +423,22 @@ namespace protal {
             FindPairs(seeds, anchors, read_length);
             m_bm_pairing.Stop();
 
+            m_bm_extend_anchors.Start();
+            for (auto& anchor : anchors) {
+                ExtendAnchor(anchor, anchor.forward ? *m_fwd : m_rev);
+            }
+            m_bm_extend_anchors.Stop();
+
             m_bm_sorting_anchors.Start();
             std::sort(anchors.begin(), anchors.end() ,
                       [](Anchor const& a, Anchor const& b) {
                 return a.total_length > b.total_length;
             });
             m_bm_sorting_anchors.Stop();
+
+            for (int i = 0; i < 3 && i < anchors.size(); i++) {
+                m_recovery.insert((static_cast<uint64_t>(anchors[i].taxid) << 40llu) | (static_cast<uint64_t>(anchors[i].geneid) << 20llu));
+            }
         }
     };
 

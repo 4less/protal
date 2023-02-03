@@ -27,6 +27,10 @@ namespace protal {
             value |= genepos;
         }
 
+        inline uint64_t MaskPosition() {
+            return value & (((1llu << (taxid_bits + geneid_bits)) - 1) << genepos_bits);
+        }
+
         void Get(uint64_t &taxid, uint64_t &geneid, uint64_t &genepos) const {
             taxid = (value >> (geneid_bits + genepos_bits)) & ((1u << taxid_bits) - 1);
             geneid = (value >> (genepos_bits)) & ((1u << geneid_bits) - 1);

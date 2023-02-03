@@ -166,7 +166,7 @@ namespace protal {
 ////            m_sm = std::make_shared<Seedmap>(Seedmap());
 ////            m_sm->Load(ifs);
 //        }
-        using RecoverySet = tsl::robin_set<std::pair<uint32_t, uint32_t>>;
+        using RecoverySet = tsl::robin_set<uint64_t>;
 
         KmerLookupSM(Seedmap& map, size_t max_ubiquity=128) :
                 m_sm(map), m_flex_k(map.m_flex_k), m_flex_k_bits(map.m_flex_k_bits), m_flex_k_half(map.m_flex_k/2),
@@ -228,8 +228,16 @@ namespace protal {
             }
         }
 
-        inline void RecoverFromLookup(LookupList& result, LookupPointer& pointers) {
-
+        inline void RecoverFromLookup(LookupList& result, LookupPointer& pointers, RecoverySet& recovery) {
+            for (auto iter = pointers.values_begin; iter < pointers.values_end; iter++) {
+                if (recovery.contains(iter->MaskPosition())) {
+//                    std::cout << "Recovery: " << iter->ToString() << std::endl;
+                    auto [taxid, geneid, genepos] = iter->Get();
+                    result.emplace_back(LookupResult(taxid, geneid, genepos, pointers.read_pos + m_flex_k_half));
+                    recovery.erase(recovery.find(iter->MaskPosition()));
+                    return;
+                }
+            }
         }
 
         inline void Get(LookupList& result, size_t &kmer, uint32_t readpos, RecoverySet* choose=nullptr, LookupList* recovered_results=nullptr) {

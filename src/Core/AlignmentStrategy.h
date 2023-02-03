@@ -278,40 +278,30 @@ namespace protal {
         }
 
 
+        void ExtendAnchor(ChainAlignmentAnchor& anchor, std::string const& ref) {
+            auto& genome = m_genome_loader.GetGenome(anchor.taxid);
+            auto& gene = genome.GetGeneOMP(anchor.geneid);
+
+            for (auto i = 0; i < anchor.chain.size(); i++) {
+                auto& seed = anchor.chain[i];
+                auto [lefta, righta] = ExtendSeed(seed, ref, gene.Sequence(),
+                                                  ((i > 0) ? anchor.chain[i-1].readpos + anchor.chain[i-1].length : 0),
+                                                  ((i+1) < anchor.chain.size() ? anchor.chain[i+1].readpos : ref.length()));
+
+                if (i > 0 && seed.OverlapsWithLeft(anchor.chain[i-1])) {
+                    anchor.chain[i-1].Merge(seed.readpos, seed.length);
+                    anchor.chain.erase(anchor.chain.begin() + i);
+                    i--;
+                }
+            }
+        }
+
+
 
         void ExtendAllAnchors(AlignmentAnchorList const& anchors, std::string const& fwd, std::string const& rev) {
             for (auto anchor : anchors) {
-                // copy anchor;
                 bool reversed = !anchor.forward;
-                auto query = reversed ? rev : fwd;
-
-                // Get Resources
-                auto& genome = m_genome_loader.GetGenome(anchor.taxid);
-                auto& gene = genome.GetGeneOMP(anchor.geneid);
-
-//                std::cout << anchor.ToString() << std::endl;
-//                std::cout << anchor.ToVisualString() << std::endl;
-//                std::cout << query << " " << (reversed ? "reversed" : "forward") << std::endl;
-                for (auto i = 0; i < anchor.chain.size(); i++) {
-                    auto& seed = anchor.chain[i];
-//                    std::cout << gene.Sequence().substr(seed.genepos > seed.readpos ? seed.genepos - seed.readpos : 0, 150) << std::endl;
-                    auto [lefta, righta] = ExtendSeed(seed, query, gene.Sequence(), ((i > 0) ? anchor.chain[i-1].readpos + anchor.chain[i-1].length : 0), ((i+1) < anchor.chain.size() ? anchor.chain[i+1].readpos : query.length()));
-                    dummy += lefta + righta;
-                    if (i > 0 && seed.OverlapsWithLeft(anchor.chain[i-1])) {
-//                        std::cout << "Before merge" << std::endl;
-//                        std::cout << i << ": " << seed.ToString() << std::endl;
-//                        std::cout << anchor.ToVisualString() << std::endl;
-
-                        anchor.chain[i-1].Merge(seed.readpos, seed.length);
-                        anchor.chain.erase(anchor.chain.begin() + i);
-//                        std::cout << "After merge" << std::endl;
-//                        std::cout << anchor.ToVisualString() << std::endl;
-                        i--;
-                    }
-                }
-//                std::cout << anchor.ToVisualString() << std::endl;
-//                std::cout << anchor.ToVisualString2() << std::endl;
-//                Utils::Input();
+                ExtendAnchor(anchor, reversed ? rev : fwd);
             }
         }
 
@@ -608,7 +598,7 @@ namespace protal {
         }
 
 
-        void operator() (AlignmentAnchorList& anchors, AlignmentResultList& results, std::string& sequence) {
+        void operator() (AlignmentAnchorList& anchors, AlignmentResultList& results, std::string& sequence, size_t align_top) {
 
             constexpr bool alignment_verbose = false;
 
@@ -619,21 +609,8 @@ namespace protal {
 
             size_t read_len = sequence.length();
 
-            std::sort(anchors.begin(), anchors.end(), [](CAlignmentAnchor const& a, CAlignmentAnchor const& b) {
-                return a.total_length > b.total_length;
-            });
 
-            int take_top = m_align_top;
-            int last_score = 0;
-
-
-            bm_seedext.Start();
-            ExtendAllAnchors(anchors, fwd, rev);
-            std::sort(anchors.begin(), anchors.end(), [](CAlignmentAnchor& a, CAlignmentAnchor& b) {
-                return a.UpdateLength() > b.UpdateLength();
-            });
-            bm_seedext.Stop();
-
+            int take_top = align_top;
 
             Anchor* last_anchor = nullptr;
 
@@ -644,10 +621,10 @@ namespace protal {
 
                 auto& read = anchor.forward ? fwd : rev;
 
-                AlignAnchor(anchor, m_alignment_result, m_info, fwd, rev, m_fastalign);
+                auto success = AlignAnchor(anchor, m_alignment_result, m_info, fwd, rev, m_fastalign);
 //                std::cout << m_alignment_result.ToString() << std::endl;
 
-                if (CigarANI(m_info.cigar) >= m_max_score_ani) {
+                if (success && CigarANI(m_info.cigar) >= m_max_score_ani) {
                     results.emplace_back(m_alignment_result);
                     total_alignments++;
                 }

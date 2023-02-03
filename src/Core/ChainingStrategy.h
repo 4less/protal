@@ -61,7 +61,7 @@ namespace protal {
 //            std::cout << "Length after: " << length << std::endl;
         }
 
-        std::string ToString() {
+        std::string ToString() const {
             return "(RGL " + std::to_string(readpos) + "," + std::to_string(genepos) + ',' + std::to_string(length) + ')';
         }
     };
@@ -115,7 +115,7 @@ namespace protal {
             return total_length;
         }
 
-        std::string ToString() {
+        std::string ToString() const {
             std::string str = "";
             str += "[ChainAnchor " + std::to_string(taxid) + "," + std::to_string(geneid) + "  ";
             size_t prev_end = 0;

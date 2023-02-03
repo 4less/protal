@@ -30,5 +30,7 @@ namespace protal {
             return (CompressedCigarScore(sam1.m_cigar) + CompressedCigarScore(sam2.m_cigar)) /
                 (mismatch_penalty * (info1.clipped_alignment_length * info2.clipped_alignment_length));
         }
+
+
     };
 }

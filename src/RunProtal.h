@@ -92,7 +92,7 @@ namespace protal {
             genomes.WriteSamHeader(sam_output);
 
             // AnchorFinder
-            AnchorFinder anchor_finder(kmer_lookup, mmer_size, 4, 20);
+            AnchorFinder anchor_finder(kmer_lookup, mmer_size, 4, 20, genomes);
 
             // AlignmentHandler approach
             SimpleAlignmentHandler alignment_handler(genomes, aligner, kmer_size, options.GetAlignTop(), options.GetMaxScoreAni(), options.FastAlign());

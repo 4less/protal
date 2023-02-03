@@ -17,6 +17,7 @@
 #include "AlignmentOutputHandler.h"
 #include "CoreBenchmark.h"
 #include "ChainAnchorFinder.h"
+#include "ScoreAlignments.h"
 
 namespace protal::classify {
 
@@ -87,7 +88,7 @@ namespace protal::classify {
 
                 // Calculate Anchors
 //                std::cout << record.id << std::endl;
-                anchor_finder(kmers, seeds, anchors, record.sequence.length());
+                anchor_finder(kmers, seeds, anchors, record.sequence);
                 thread_statistics.total_anchors += anchors.size();
 
 //                std::cout << "Anchor length: " << anchors.size() << std::endl;
@@ -97,7 +98,7 @@ namespace protal::classify {
 
                 // Do Alignment
                 bm_alignment.Start();
-                alignment_handler(anchors, alignment_results, record.sequence);
+                alignment_handler(anchors, alignment_results, record.sequence, options.GetAlignTop());
                 bm_alignment.Stop();
 
 //                Utils::Input();
@@ -188,7 +189,14 @@ namespace protal::classify {
             bool paired = false;
             size_t read2_index = 0;
             for (auto& alignment2 : read2) {
-                if (alignment1.Taxid() == alignment2.Taxid()) {
+                if (alignment1.Taxid() == alignment2.Taxid() && alignment1.GeneId() == alignment2.GeneId()) {
+                    if (!CorrectOrientation(alignment1, alignment2)) {
+                        std::cout << "Discard: " << std::endl;
+                        std::cout << alignment1.ToString() << std::endl;
+                        std::cout << alignment2.ToString() << std::endl;
+                        continue;
+                    }
+
                     pairs.emplace_back(PairedAlignment{ alignment1, alignment2 });
                     selected2[read2_index] = true;
                     paired = true;
@@ -242,7 +250,8 @@ namespace protal::classify {
 
             // Extract variables from kmi_global
             KmerHandler kmer_handler(kmer_handler_global);
-            AnchorFinder anchor_finder(anchor_finder_global);
+            AnchorFinder anchor_finder1(anchor_finder_global);
+            AnchorFinder anchor_finder2(anchor_finder_global);
             AlignmentHandler alignment_handler(alignment_handler_global);
 
             // Alignment data output handler (set with flag)
@@ -308,8 +317,33 @@ namespace protal::classify {
                 }
 
                 // Calculate Anchors
-                anchor_finder(kmers1, seeds1, anchors1, record1.sequence.length());
-                anchor_finder(kmers2, seeds2, anchors2, record2.sequence.length());
+                anchor_finder1(kmers1, seeds1, anchors1, record1.sequence);
+                anchor_finder2(kmers2, seeds2, anchors2, record2.sequence);
+
+//                std::cout << "Anchors1" << std::endl;
+//                for (auto& a : anchors1) {
+//                    std::cout << a.ToString() << std::endl;
+//                }
+//                std::cout << "Anchors2" << std::endl;
+//                for (auto& a : anchors2) {
+//                    std::cout << a.ToString() << std::endl;
+//                }
+
+                auto recover1 = anchor_finder1.RecoverAnchors(anchors1, anchor_finder2.BestAnchors(), options.GetAlignTop());
+                auto recover2 = anchor_finder2.RecoverAnchors(anchors2, anchor_finder1.BestAnchors(), options.GetAlignTop());
+//
+//                std::cout << "Anchors1 after" << std::endl;
+//                for (auto& a : anchors1) {
+//                    std::cout << a.ToString() << std::endl;
+//                }
+//                std::cout << "Anchors2 after" << std::endl;
+//                for (auto& a : anchors2) {
+//                    std::cout << a.ToString() << std::endl;
+//                }
+//
+//                if (recover1 || recover2) {
+//                    Utils::Input();
+//                }
 
                 seed_sizes.AddObservation(seeds1.size());
                 seed_sizes.AddObservation(seeds2.size());
@@ -321,8 +355,8 @@ namespace protal::classify {
 
                 // Do Alignment
                 bm_alignment.Start();
-                alignment_handler(anchors1, alignment_results1, record1.sequence);
-                alignment_handler(anchors2, alignment_results2, record2.sequence);
+                alignment_handler(anchors1, alignment_results1, record1.sequence, options.GetAlignTop() + recover1);
+                alignment_handler(anchors2, alignment_results2, record2.sequence, options.GetAlignTop() + recover2);
                 bm_alignment.Stop();
 
                 thread_statistics.total_alignments += alignment_results1.size();
@@ -336,7 +370,6 @@ namespace protal::classify {
 //                SortAlignmentPairs2(paired_alignment_results);
                 SortAlignmentPairs3(paired_alignment_results);
 
-
                 bm_output.Start();
                 // Output alignments
                 output_handler(paired_alignment_results, record1, record2, record_id);
@@ -347,6 +380,8 @@ namespace protal::classify {
                 if constexpr (benchmark_active) {
                     thread_core_benchmark(seeds1, anchors1, alignment_results1, record1.id);
                     thread_core_benchmark(seeds2, anchors2, alignment_results2, paired_alignment_results, record1.id);
+#pragma omp critical(write)
+                    thread_core_benchmark.ErrorOutput(seeds1, seeds2, anchors1, anchors2, alignment_results1, alignment_results2, paired_alignment_results, record1, record2);
                 }
 
                 if constexpr(debug == DEBUG_VERBOSE) {
@@ -362,18 +397,29 @@ namespace protal::classify {
             }
 #pragma omp critical(statistics)
             {
-                anchor_finder_global.m_bm_seeding.Join(anchor_finder.m_bm_seeding);
-                anchor_finder_global.m_bm_seed_subsetting.Join(anchor_finder.m_bm_seed_subsetting);
-                anchor_finder_global.m_bm_processing.Join(anchor_finder.m_bm_processing);
-                anchor_finder_global.m_bm_pairing.Join(anchor_finder.m_bm_pairing);
-                anchor_finder_global.m_bm_sorting_anchors.Join(anchor_finder.m_bm_sorting_anchors);
+                anchor_finder_global.m_bm_seeding.Join(anchor_finder1.m_bm_seeding);
+                anchor_finder_global.m_bm_seeding.Join(anchor_finder2.m_bm_seeding);
+                anchor_finder_global.m_bm_seed_subsetting.Join(anchor_finder1.m_bm_seed_subsetting);
+                anchor_finder_global.m_bm_seed_subsetting.Join(anchor_finder2.m_bm_seed_subsetting);
+                anchor_finder_global.m_bm_processing.Join(anchor_finder1.m_bm_processing);
+                anchor_finder_global.m_bm_processing.Join(anchor_finder2.m_bm_processing);
+                anchor_finder_global.m_bm_pairing.Join(anchor_finder1.m_bm_pairing);
+                anchor_finder_global.m_bm_pairing.Join(anchor_finder2.m_bm_pairing);
+                anchor_finder_global.m_bm_sorting_anchors.Join(anchor_finder1.m_bm_sorting_anchors);
+                anchor_finder_global.m_bm_sorting_anchors.Join(anchor_finder2.m_bm_sorting_anchors);
+                anchor_finder_global.m_bm_recovering_anchors.Join(anchor_finder1.m_bm_recovering_anchors);
+                anchor_finder_global.m_bm_recovering_anchors.Join(anchor_finder2.m_bm_recovering_anchors);
+                anchor_finder_global.m_bm_extend_anchors.Join(anchor_finder1.m_bm_extend_anchors);
+                anchor_finder_global.m_bm_extend_anchors.Join(anchor_finder2.m_bm_extend_anchors);
+                anchor_finder_global.recovered_count += anchor_finder1.recovered_count;
+                anchor_finder_global.recovered_count += anchor_finder2.recovered_count;
+                anchor_finder_global.total_count += anchor_finder1.total_count;
+                anchor_finder_global.total_count += anchor_finder2.total_count;
 
                 bm_alignment_global.Join(bm_alignment);
                 bm_output_global.Join(bm_output);
                 alignment_handler_global.bm_alignment.Join(alignment_handler.bm_alignment);
 
-                alignment_handler_global.bm_seedext.Join(alignment_handler.bm_seedext);
-                alignment_handler_global.dummy += alignment_handler.dummy;
 
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
@@ -384,6 +430,7 @@ namespace protal::classify {
                 if constexpr (benchmark_active) {
                     benchmark_global.Join(thread_core_benchmark);
                 }
+                std::cout << "Dummy: " << anchor_finder1.dummy << std::endl;
             }
         }
 
@@ -402,17 +449,21 @@ namespace protal::classify {
         anchor_finder_global.m_bm_processing.PrintResults();
         anchor_finder_global.m_bm_pairing.PrintResults();
         anchor_finder_global.m_bm_sorting_anchors.PrintResults();
+        anchor_finder_global.m_bm_recovering_anchors.PrintResults();
+        anchor_finder_global.m_bm_extend_anchors.PrintResults();
         bm_alignment_global.PrintResults();
         bm_output_global.PrintResults();
         alignment_handler_global.bm_alignment.PrintResults();
-        alignment_handler_global.bm_seedext.PrintResults();
         std::cout << "----------------------------------------------------\n" << std::endl;
+
+        std::cout << "Reads that had anchors recovered: " << static_cast<double>(anchor_finder_global.recovered_count) / anchor_finder_global.total_count << std::endl;
 
         std::ofstream time_os(options.GetOutputPrefix() + "_runtime.tsv", std::ios::out);
         time_os << anchor_finder_global.m_bm_seeding.GetName() << '\t' << anchor_finder_global.m_bm_seeding.GetDuration(Time::seconds) << '\n';
         time_os << anchor_finder_global.m_bm_processing.GetName() << '\t' << anchor_finder_global.m_bm_processing.GetDuration(Time::seconds) << '\n';
         time_os << anchor_finder_global.m_bm_pairing.GetName() << '\t' << anchor_finder_global.m_bm_pairing.GetDuration(Time::seconds) << '\n';
         time_os << anchor_finder_global.m_bm_sorting_anchors.GetName() << '\t' << anchor_finder_global.m_bm_sorting_anchors.GetDuration(Time::seconds) << '\n';
+        time_os << anchor_finder_global.m_bm_extend_anchors.GetName() << '\t' << anchor_finder_global.m_bm_extend_anchors.GetDuration(Time::seconds) << '\n';
         time_os << bm_alignment_global.GetName() << '\t' << bm_alignment_global.GetDuration(Time::seconds) << '\n';
         time_os << bm_output_global.GetName() << '\t' << bm_output_global.GetDuration(Time::seconds) << '\n';
         time_os.close();

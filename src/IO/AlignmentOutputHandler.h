@@ -19,111 +19,9 @@
 #include "AlignmentUtils.h"
 
 namespace protal {
-    class AlignmentResult {
-        static constexpr int DEFAULT_ALIGNMENT_SCORE = INT32_MIN;
-        static constexpr int DEFAULT_VALUE = UINT32_MAX;
-
-        /* Only stores crucial alignment information, no information about header sequence etc
-         * This is to save space and it is not necessary as this information can be passed down by another function.
-         */
-        int m_alignment_score = DEFAULT_ALIGNMENT_SCORE;
-
-        uint32_t m_taxid = DEFAULT_VALUE;
-        uint32_t m_geneid = DEFAULT_VALUE;
-        int32_t m_genepos = INT32_MAX;
-
-        bool m_forward = false;
-        std::string m_cigar;
-        std::string m_compressed_cigar;
-
-
-
-    public:
-        AlignmentResult(int alignment_score, std::string& cigar, uint32_t taxid, uint32_t geneid, int32_t genepos, bool forward) :
-                m_alignment_score(alignment_score),
-                m_cigar(cigar),
-                m_taxid(taxid),
-                m_geneid(geneid),
-                m_genepos(genepos),
-                m_forward(forward) {};
-
-        AlignmentResult(int alignment_score, std::string&& cigar, uint32_t taxid, uint32_t geneid, int32_t genepos, bool forward) :
-                m_alignment_score(alignment_score),
-                m_cigar(std::move(cigar)),
-                m_taxid(taxid),
-                m_geneid(geneid),
-                m_genepos(genepos),
-                m_forward(forward) {};
-
-        AlignmentResult() {};
-
-        std::string& Cigar() {
-            return m_cigar;
-        }
-
-        std::string Cigar() const {
-            return m_cigar;
-        }
-
-        uint32_t Taxid() const {
-            return m_taxid;
-        }
-
-        uint32_t GeneId() const {
-            return m_geneid;
-        }
-
-        int32_t GenePos() const {
-            return m_genepos;
-        }
-
-        bool Forward() const {
-            return m_forward;
-        }
-
-        int AlignmentScore() const {
-            return m_alignment_score;
-        }
-
-
-        void Set(int score, std::string& cigar) {
-            m_cigar = cigar;
-            m_alignment_score = score;
-        }
-
-        void Set(int score, std::string&& cigar) {
-            m_cigar = cigar;
-            m_alignment_score = score;
-        }
-
-        void Set(size_t taxid, size_t geneid, int32_t abs_pos, bool forward) {
-            m_taxid = taxid;
-            m_geneid = geneid;
-            m_genepos = abs_pos;
-            m_forward = forward;
-        }
-
-
-        void Reset() {
-            m_alignment_score = DEFAULT_ALIGNMENT_SCORE;
-            m_cigar.clear();
-        }
-
-        bool IsSet() const {
-            return m_alignment_score != DEFAULT_ALIGNMENT_SCORE;
-        }
-
-        std::string ToString() {
-            std::string str = "";
-            str += std::to_string(AlignmentScore()) + '\t';
-            str += Cigar() + '\t';
-            str += std::to_string(Taxid()) + '\t';
-            str += std::to_string(GeneId()) + '\t';
-            str += std::to_string(GenePos()) + '\t';
-            str += std::to_string(Forward());
-            return str;
-        }
-    };
+    static bool CorrectOrientation(AlignmentResult const& a1, AlignmentResult const& a2) {
+        return a1.Forward() != a2.Forward();
+    }
 
     static int ScorePairedAlignment(AlignmentResult const& a, AlignmentResult const& b) {
         int score = 0;
@@ -164,18 +62,6 @@ namespace protal {
         return Score(info1, info2);
     }
 
-
-    static int Bitscore(PairedAlignment const& a) {
-        AlignmentInfo info1;
-        AlignmentInfo info2;
-        GetAlignmentInfo(info1, a.first.Cigar());
-        GetAlignmentInfo(info2, a.second.Cigar());
-
-        auto score1 = CigarScore(a.first.Cigar(), 1, 3, 1, 2);
-        auto score2 = CigarScore(a.second.Cigar(), 1, 3, 1, 2);
-
-        return score1 + score2;
-    }
 
     static bool PairedAlignmentComparator(PairedAlignment const& a, PairedAlignment const& b) {
         // Return true if a > b
@@ -504,6 +390,11 @@ namespace protal {
 
             std::string alignment_data_str = "";
 
+
+            int mapq = MAPQv1(alignment_results);
+
+
+
             size_t output_counter = 0;
             for (auto& [ar1, ar2] :  alignment_results) {
                 bool both = ar1.IsSet() && ar2.IsSet();
@@ -513,7 +404,6 @@ namespace protal {
                 int adjusted_score = 0;
 
                 if (ar1.IsSet()) {
-
                     GetExtendedAlignmentInfo(m_info, ar1.Cigar(), record1.sequence, record2.quality);
                     ArtoSAM(m_sam1, ar1, m_info, record1);
                     Flag::SetPairedEnd(m_sam1.m_flag, true, both, true);
@@ -521,11 +411,10 @@ namespace protal {
                     Flag::SetRead1ReverseComplement(m_sam1.m_flag, ar1.Forward());
                     Flag::SetNotPrimaryAlignment(m_sam1.m_flag, !first);
 
-//                    std::cout << "1: " << m_info.ToString() << std::endl;
-
                     alignment_length += m_info.alignment_length;
                     alignment_score += m_info.alignment_score;
-
+                    m_sam1.m_mapq = first ? mapq : 0;
+//                    std::cout << "m_sam1.m_mapq " << m_sam1.m_mapq << std::endl;
                 }
                 if (ar2.IsSet()) {
                     auto len = std::count_if(ar2.Cigar().begin(), ar2.Cigar().end(), [](char c) {
@@ -546,10 +435,10 @@ namespace protal {
                     Flag::SetRead2ReverseComplement(m_sam2.m_flag, ar2.Forward());
                     Flag::SetNotPrimaryAlignment(m_sam2.m_flag, !first);
 
-//                    std::cout << "2: " << m_info.ToString() << std::endl;
-
                     alignment_length += m_info.alignment_length;
                     alignment_score += m_info.alignment_score;
+                    m_sam2.m_mapq = first ? mapq : 0;
+//                    std::cout << "m_sam2.m_mapq " << m_sam2.m_mapq << std::endl;
                 }
                 if (both) {
                     m_sam1.m_rnext = m_sam2.m_rname;
@@ -572,6 +461,23 @@ namespace protal {
                     break;
                 }
             }
+
+
+//            if (record1.id == "3935_51-48/1") {
+//                for (auto& [ar1, ar2] :  alignment_results) {
+//                    if (ar1.IsSet()) {
+//                        std::cout << ar1.ToString() << std::endl;
+//                    }
+//                    if (ar2.IsSet()) {
+//                        std::cout << ar2.ToString() << std::endl;
+//                    }
+//                    std::cout << " --- " << std::endl;
+//                }
+//                std::cout << "mapq: " << mapq << std::endl;
+//                std::cout << m_sam1.ToString() << std::endl;
+//                std::cout << m_sam1.ToString() << std::endl;
+//                exit(9);
+//            }
         }
     };
 }

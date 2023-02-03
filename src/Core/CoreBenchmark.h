@@ -33,6 +33,8 @@ namespace protal {
         size_t m_correct_without_pair = 0;
 
     public:
+        size_t equally_good_best_count = 0;
+
         CoreBenchmark() {};
 
         CoreBenchmark(CoreBenchmark const& other) :
@@ -158,6 +160,64 @@ namespace protal {
             m_alignment_bce.fn += !found;
         };
 
+        void ErrorOutput(SeedList const& seeds1, SeedList const& seeds2, AlignmentAnchorList const& anchors1, AlignmentAnchorList const& anchors2, AlignmentResultList const& alignment1, AlignmentResultList const& alignment2, PairedAlignmentResultList const& alignments, FastxRecord& record1, FastxRecord& record2) {
+            auto [tax_id_truth, gene_id_truth] = CoreBenchmark::HeaderToTruth(record1.id);
+            size_t true_taxid = tax_id_truth;
+            size_t true_geneid = gene_id_truth;
+
+            if (alignments.empty()) {
+                return;
+            }
+            auto& best_alignment = alignments[0];
+            auto best_taxid = best_alignment.first.IsSet() ? best_alignment.first.Taxid() : best_alignment.second.Taxid();
+            auto best_geneid = best_alignment.first.IsSet() ? best_alignment.first.GeneId() : best_alignment.second.GeneId();
+
+            bool equally_good_best = alignments.size() > 1 && Bitscore(alignments[0]) == Bitscore(alignments[1]);
+            equally_good_best_count += equally_good_best;
+
+            if (!equally_good_best && (best_taxid != true_taxid || best_geneid != true_geneid)) {
+                std::cerr << "Truth: " << true_taxid << " Gene: " << true_geneid << std::endl;
+                std::cerr << "Best : " << best_taxid << " Gene: " << best_geneid << std::endl;
+                std::cerr << "Seeds1:" << std::endl;
+                for (auto& seed : seeds1) {
+                    std::cerr << seed.ToString() << std::endl;
+                }
+                std::cerr << "Seeds2:" << std::endl;
+                for (auto& seed : seeds2) {
+                    std::cerr << seed.ToString() << std::endl;
+                }
+                std::cerr << "Anchors1:" << std::endl;
+                for (auto& anchor : anchors1) {
+                    std::cerr << anchor.ToString() << std::endl;
+                }
+                std::cerr << "Anchors2:" << std::endl;
+                for (auto& anchor : anchors2) {
+                    std::cerr << anchor.ToString() << std::endl;
+                }
+                std::cerr << "Alignments1:" << std::endl;
+                for (auto& alignment : alignment1) {
+                    std::cerr << alignment.ToString() << std::endl;
+                }
+                std::cerr << "Alignments2:" << std::endl;
+                for (auto& alignment : alignment2) {
+                    std::cerr << alignment.ToString() << std::endl;
+                }
+                std::cerr << "Paired Alignments:" << std::endl;
+                std::cerr << "Truth: " << true_taxid << " Gene: " << true_geneid << std::endl;
+                std::cerr << "Best : " << best_taxid << " Gene: " << best_geneid << std::endl;
+                for (auto& [ar1, ar2] : alignments) {
+                    std::cerr << "BitScore: " << Bitscore({ ar1,  ar2}) << std::endl;
+                    if (ar1.IsSet()) {
+                        std::cerr << "1: " << ar1.ToString() << std::endl;
+                    }
+                    if (ar2.IsSet()) {
+                        std::cerr << "2: " << ar2.ToString() << std::endl;
+                    }
+                    std::cerr << "-----" << std::endl;
+                }
+            }
+        }
+
         void AddPairedAlignmentResults(PairedAlignmentResultList const& alignments, size_t true_taxid, size_t true_geneid) {
             if (alignments.empty()) {
                 m_alignment_pe_bce.fn++;
@@ -165,10 +225,14 @@ namespace protal {
                 return;
             }
 
+            bool equally_good_best = alignments.size() > 1 && Bitscore(alignments[0]) == Bitscore(alignments[1]);
+
             auto& best_alignment = alignments[0];
             auto best_taxid = best_alignment.first.IsSet() ? best_alignment.first.Taxid() : best_alignment.second.Taxid();
             auto best_geneid = best_alignment.first.IsSet() ? best_alignment.first.GeneId() : best_alignment.second.GeneId();
-            if (best_taxid == true_taxid && best_geneid == true_geneid) {
+            if (equally_good_best) {
+                m_best_alignment_pe_bce.tn++;
+            } else if (best_taxid == true_taxid && best_geneid == true_geneid) {
                 m_best_alignment_pe_bce.tp++;
             } else {
                 m_best_alignment_pe_bce.fp++;
@@ -216,6 +280,7 @@ namespace protal {
             m_total_reads += other.m_total_reads;
             m_total_pairs += other.m_total_pairs;
             m_correct_without_pair += other.m_correct_without_pair;
+            equally_good_best_count += other.equally_good_best_count;
         }
 
         void operator() (SeedList const& seeds, AlignmentAnchorList const& anchors, AlignmentResultList const& alignments, std::string const& header) {
@@ -270,6 +335,8 @@ namespace protal {
             std::cout << "Total reads:                 " << m_total_reads << std::endl;
             std::cout << "Total pairs:                 " << m_total_pairs << std::endl;
             std::cout << "Total best PE is not paired: " << m_correct_without_pair << std::endl;
+            std::cout << "Equally good best:           " << equally_good_best_count << std::endl;
+            std::cout << "Equally good best rate:      " << static_cast<double>(equally_good_best_count)/m_total_pairs << std::endl;
         }
 
         void Print() {

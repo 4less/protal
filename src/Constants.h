@@ -109,8 +109,8 @@ namespace protal {
      */
     template <typename T>
     concept AnchorFinderConcept =
-    requires(T t, KmerList k, SeedList s, AlignmentAnchorList a, size_t l) {
-        { t(k, s, a, l) } -> std::same_as<void>;
+    requires(T t, KmerList k, SeedList s, AlignmentAnchorList a, std::string str) {
+        { t(k, s, a, str) } -> std::same_as<void>;
     };
 
     /*
@@ -120,8 +120,8 @@ namespace protal {
      */
     template <typename T>
     concept AlignmentHandlerConcept =
-    requires(T t, AlignmentAnchorList a, AlignmentResultList r, std::string s) {
-        { t(a, r, s) } -> std::same_as<void>;
+    requires(T t, AlignmentAnchorList a, AlignmentResultList r, std::string s, size_t top) {
+        { t(a, r, s, top) } -> std::same_as<void>;
     };
 
     /*
