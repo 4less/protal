@@ -614,8 +614,17 @@ namespace protal {
                 PostProcessAlignment(m_aligner.GetAligner().getAlignmentCigar(), info, read.length(),
                                      gene.Sequence().length(), m_alignment_orientation.reference_start, 0, abs_pos);
                 info.UpdateScore();
-
                 alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward);
+
+
+                if (info.cigar.length() - info.insertions != read.length()) {
+                    std::cout << "dove_left_required:  " << dove_left_required << " -> " << (m_alignment_orientation.reference_dove_left * 2) << std::endl;
+                    std::cout << "dove_right_required: " << dove_right_required << " -> " << (m_alignment_orientation.reference_dove_right * 2) << std::endl;
+                    std::cout << info.cigar << std::endl;
+                    std::cout << info.ToString() << std::endl;
+                    m_aligner.PrintAlignment();
+                    Utils::Input();
+                }
             }
             return true;
         }

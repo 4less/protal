@@ -64,6 +64,8 @@ namespace protal {
             ResetCigarStats();
             compressed_cigar.clear();
 
+            bool swap_indel = true;
+
             char last_instruction = ' ';
             size_t instruction_counter = 0;
 
@@ -72,9 +74,13 @@ namespace protal {
                 // Compressed cigar
                 if (c != last_instruction) {
                     if (instruction_counter > 0) {
-                        compressed_cigar += std::to_string(instruction_counter) + last_instruction;
                         insertion_blocks += last_instruction == 'I';
                         deletion_blocks += last_instruction == 'D';
+                        if (swap_indel) {
+                            if (last_instruction == 'D') last_instruction = 'I';
+                            else if (last_instruction == 'I') last_instruction = 'D';
+                        }
+                        compressed_cigar += std::to_string(instruction_counter) + last_instruction;
                     }
                     last_instruction = c;
                     instruction_counter = 1;
@@ -92,9 +98,13 @@ namespace protal {
 
             // Get remainder of operations
             if (instruction_counter > 0) {
-                compressed_cigar += std::to_string(instruction_counter) + last_instruction;
                 insertion_blocks += last_instruction == 'I';
                 deletion_blocks += last_instruction == 'D';
+                if (swap_indel) {
+                    if (last_instruction == 'D') last_instruction = 'I';
+                    else if (last_instruction == 'I') last_instruction = 'D';
+                }
+                compressed_cigar += std::to_string(instruction_counter) + last_instruction;
             }
             alignment_length = cigar.length() - softclips;
         }
