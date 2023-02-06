@@ -13,8 +13,6 @@
 using namespace::wfa;
 
 namespace protal {
-
-
     class WFA2Wrapper {
         WFAlignerGapAffine m_aligner;
 
@@ -70,11 +68,33 @@ namespace protal {
             m_status = m_aligner.alignEnd2End(query, ref);
         }
 
+        void Alignment(const char* query, size_t query_length, const char* ref, size_t ref_length, int max_score=INT32_MAX) {
+            m_aligner.setMaxAlignmentScore(max_score);
+            m_status = m_aligner.alignEnd2End(query, query_length, ref, ref_length);
+        }
+
+        void AlignmentEndsFree(std::string_view query, std::string_view ref, int max_score=INT32_MAX) {
+            seq1 = query;
+            seq2 = ref;
+            m_aligner.setMaxAlignmentScore(max_score);
+        }
+
         void Alignment(std::string &query, std::string &ref, int q_begin_free, int q_end_free, int r_begin_free, int r_end_free, int max_score=INT32_MAX) {
             seq1 = query;
             seq2 = ref;
             m_aligner.setMaxAlignmentScore(max_score);
             m_status = m_aligner.alignEndsFree(query, q_begin_free, q_end_free, ref, r_begin_free, r_end_free);
+        }
+
+        void Alignment(std::string_view &query, std::string_view &ref, int q_begin_free, int q_end_free, int r_begin_free, int r_end_free, int max_score=INT32_MAX) {
+            m_aligner.setMaxAlignmentScore(max_score);
+            m_status = m_aligner.alignEndsFree(query.cbegin(), query.length(), q_begin_free, q_end_free, ref.cbegin(), ref.length(), r_begin_free, r_end_free);
+        }
+
+        void Alignment(const char* query, size_t query_len, const char* ref, size_t ref_length, int q_begin_free, int q_end_free, int r_begin_free, int r_end_free, int max_score=INT32_MAX) {
+            m_aligner.setMaxAlignmentScore(max_score);
+            m_status = m_aligner.alignEndsFree(query, query_len, q_begin_free, q_end_free, ref, ref_length, r_begin_free, r_end_free);
+//            m_status = m_aligner.alignEndsFree(query, q_begin_free, q_end_free, ref, ref_length, r_begin_free, r_end_free);
         }
 
         void PrintCigar(std::ostream &os = std::cout) {

@@ -166,6 +166,22 @@ namespace protal {
             size_t true_geneid = gene_id_truth;
 
             if (alignments.empty()) {
+                std::cerr << "Seeds1:" << std::endl;
+                for (auto& seed : seeds1) {
+                    std::cerr << seed.ToString() << std::endl;
+                }
+                std::cerr << "Seeds2:" << std::endl;
+                for (auto& seed : seeds2) {
+                    std::cerr << seed.ToString() << std::endl;
+                }
+                std::cerr << "Anchors1:" << std::endl;
+                for (auto& anchor : anchors1) {
+                    std::cerr << anchor.ToString() << std::endl;
+                }
+                std::cerr << "Anchors2:" << std::endl;
+                for (auto& anchor : anchors2) {
+                    std::cerr << anchor.ToString() << std::endl;
+                }
                 return;
             }
             auto& best_alignment = alignments[0];

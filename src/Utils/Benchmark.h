@@ -24,32 +24,35 @@ namespace protal {
         time_point<high_resolution_clock> start_time;
 
     public:
-        Benchmark(string name) : name(name) {
-            Start();
+        Benchmark(string name, size_t threads_sampled=1) : name(name), threads_sampled(threads_sampled) {
+            //Start();
         }
 
         std::string GetName() const {
             return name;
         }
 
-        void Start() {
+        void AddObservation() {
+            samplings++;
+        }
+
+        void Start(bool new_sample=true) {
+            samplings += new_sample;
             start_time = high_resolution_clock::now();
         }
 
         void Stop() {
 //            if (time_sum != 0) return;
-            samplings++;
             auto stop_time = high_resolution_clock::now();
             auto duration = duration_cast<std::chrono::microseconds>(stop_time - start_time);
 //            std::cout << "Duration count : " << duration.count() << std::endl;
             time_sum += duration.count();
-//            std::cout << "time_sum : " << time_sum << std::endl;
         }
 
         uint64_t GetDuration(Time format) {
-            if (time_sum == 0) {
-                Stop();
-            }
+//            if (time_sum == 0) {
+//                Stop();
+//            }
 
             switch (format) {
                 case Time::microseconds:
@@ -68,10 +71,9 @@ namespace protal {
             return 0L;
         }
 
-        void Join(Benchmark const& other) {
-            if (time_sum > 0) threads_sampled++;
+        void Join(Benchmark const& other, bool add_thread=true) {
+            if (add_thread && time_sum > 0) threads_sampled++;
             time_sum += other.time_sum;
-
         }
 
         void PrintResults() {
@@ -98,6 +100,7 @@ namespace protal {
             if (mins) std::cout << mins << "m ";
             if (secs) std::cout << secs << "s ";
             if (msecs) std::cout << msecs << "ms";
+            if (!hours && !mins && !secs && !msecs) std::cout << " less than 0ms";
             if (samplings > 1) std::cout << " (" << std::to_string(samplings) << ")";
             if (threads_sampled > 1) std::cout << " mean over " << threads_sampled << " threads";
             std::cout << std::endl;

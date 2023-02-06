@@ -58,12 +58,13 @@ namespace protal {
 
             // Benchmark Load Time
             Benchmark bm_load_index("Load Index");
+            bm_load_index.Start();
             // Load Index
             Seedmap map;
             std::ifstream idx_in(options.GetIndexFile(), std::ios::binary);
             map.Load(idx_in);
             idx_in.close();
-            // Print Load Time
+            bm_load_index.Stop();
             bm_load_index.PrintResults();
 
 
@@ -98,6 +99,7 @@ namespace protal {
             SimpleAlignmentHandler alignment_handler(genomes, aligner, kmer_size, options.GetAlignTop(), options.GetMaxScoreAni(), options.FastAlign());
 
             Benchmark bm_classify("Run classify");
+            bm_classify.Start();
             if (options.PairedMode()) {
                 using OutputHandler = ProtalPairedOutputHandler;
                 OutputHandler output_handler(sam_output, options.GetMaxOut(), 1024*512, 1024*1024*16, 0.8);
@@ -146,7 +148,7 @@ namespace protal {
             // Close output streams;
             sam_output.close();
 
-
+            bm_classify.Stop();
             bm_classify.PrintResults();
 
             std::cout << "Loaded genomes: " << genomes.GetLoadedGenomeCount() << std::endl;
@@ -156,6 +158,7 @@ namespace protal {
     static void Run(int argc, char *argv[]) {
         PrintLogo();
         Benchmark bm_total("Run protal");
+        bm_total.Start();
 
         using AlignmentBenchmark = CoreBenchmark;
 
@@ -250,13 +253,9 @@ namespace protal {
             profile.WriteSparseProfile(taxonomy, filter, os);
             os.close();
 
-//            std::cout << profile.ToString() << std::endl;
-//            for (auto& [key, taxon] : profile.GetTaxa()) {
-//                std::cout << taxon.ToString() << std::endl;
-//            }
         }
 
-
+        bm_total.Stop();
         bm_total.PrintResults();
     }
 }

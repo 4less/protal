@@ -4,44 +4,175 @@
 
 #pragma once
 
-#include "AlignmentOutputHandler.h"
+//#include "AlignmentOutputHandler.h"
 #include <iostream>
 #include "assert.h"
 #include "SamHandler.h"
 
 namespace protal {
+    struct AlignmentInfo {
+        uint16_t matches = 0;
+        uint16_t mismatches = 0;
+        uint16_t deletions = 0;
+        uint16_t insertions = 0;
+        uint16_t insertion_blocks = 0;
+        uint16_t deletion_blocks = 0;
+        uint16_t softclips = 0;
+        uint16_t hardclips = 0;
+
+        int alignment_score = 0;
+        uint32_t gene_alignment_start = 0;
+        uint32_t alignment_length = 0;
+        float alignment_ani = 0.0f;
+
+        std::string cigar;
+        std::string compressed_cigar;
+
+        // Deprecated
+        uint32_t read_start_offset = 0;
+        uint16_t cigar_start = 0;
+        uint16_t cigar_end = 0;
+        uint16_t cigar_start_read = 0;
+        uint16_t cigar_end_read = 0;
+        uint16_t cigar_start_gene = 0;
+        uint16_t cigar_end_gene = 0;
+
+        void Reset() {
+            read_start_offset = 0;
+            gene_alignment_start = 0;
+            alignment_length = 0;
+            alignment_ani = 0.0f;
+
+            matches = 0;
+            mismatches = 0;
+            deletions = 0;
+            insertions = 0;
+            insertion_blocks = 0;
+            deletion_blocks = 0;
+            softclips = 0;
+            hardclips = 0;
+            alignment_score = 0;
+
+            cigar_start = 0;
+            cigar_end = 0;
+
+            cigar.clear();
+            compressed_cigar.clear();
+        }
+
+        void GetInstructionCountsAndCompress() {
+            ResetCigarStats();
+            compressed_cigar.clear();
+
+            char last_instruction = ' ';
+            size_t instruction_counter = 0;
+
+            for (auto i = 0; i < cigar.length(); i++) {
+                auto c = cigar[i];
+                // Compressed cigar
+                if (c != last_instruction) {
+                    if (instruction_counter > 0) {
+                        compressed_cigar += std::to_string(instruction_counter) + last_instruction;
+                        insertion_blocks += last_instruction == 'I';
+                        deletion_blocks += last_instruction == 'D';
+                    }
+                    last_instruction = c;
+                    instruction_counter = 1;
+                } else {
+                    instruction_counter++;
+                }
+                // compressed cigar end
+                insertions += c == 'I';
+                deletions += c == 'D';
+                matches += c == 'M';
+                mismatches += c == 'X';
+                softclips += c == 'S';
+                hardclips += c == 'H';
+            }
+
+            // Get remainder of operations
+            if (instruction_counter > 0) {
+                compressed_cigar += std::to_string(instruction_counter) + last_instruction;
+                insertion_blocks += last_instruction == 'I';
+                deletion_blocks += last_instruction == 'D';
+            }
+            alignment_length = cigar.length() - softclips;
+        }
+
+
+        void ResetCigarStats() {
+            matches = 0;
+            mismatches = 0;
+            deletions = 0;
+            insertions = 0;
+            insertion_blocks = 0;
+            deletion_blocks = 0;
+            softclips = 0;
+            hardclips = 0;
+        }
+
+        std::string ToString() const {
+            std::string str = "Read Offset: " + std::to_string(read_start_offset);
+            str += ", Gene Start: " + std::to_string(gene_alignment_start);
+            str += ", AL: " + std::to_string(alignment_length);
+            str += ", AS: " + std::to_string(Score());
+            str += ", ANI: " + std::to_string(alignment_ani);
+            str += ", matches: " + std::to_string(matches);
+            str += ", mismatches: " + std::to_string(mismatches);
+            str += ", deletions: " + std::to_string(deletions);
+            str += ", insertions: " + std::to_string(insertions);
+            str += ", insertion_blocks: " + std::to_string(insertion_blocks);
+            str += ", deletion_blocks: " + std::to_string(deletion_blocks);
+            str += ", softclips: " + std::to_string(softclips);
+            str += ", hardclips: " + std::to_string(hardclips);
+            str += ", cigar_start_read: " + std::to_string(cigar_start_read);
+            str += ", cigar_end_read: " + std::to_string(cigar_end_read);
+            str += ", cigar_start_ref: " + std::to_string(cigar_start_gene);
+            str += ", cigar_end_ref: " + std::to_string(cigar_end_gene);
+            return str;
+        }
+//
+//        std::string GetClippedCigar() const {
+//            return cigar.substr(cigar_start, cigar_end - cigar_start);
+//        }
+//
+//        size_t GetClippedCigarLength() const {
+//            return cigar_end - cigar_start;
+//        }
+
+        int GetEffectiveAlignmentLength() const {
+            return cigar.length() - softclips;
+        }
+
+        int Score(int match_score = 0, int mismatch_penalty = 4, int gap_open_penalty = 6, int gap_extend_penalty = 2) const {
+            return (matches * match_score) - (mismatch_penalty * mismatches + gap_open_penalty * (insertion_blocks + deletion_blocks) + gap_extend_penalty * (insertions + deletions));
+        }
+
+        void UpdateScore(int match_score = 0, int mismatch_penalty = 4, int gap_open_penalty = 6, int gap_extend_penalty = 2) {
+            alignment_score = Score(match_score, mismatch_penalty, gap_open_penalty, gap_extend_penalty);
+        }
+
+        double GetProxyANI(int match_score = 0, int mismatch_penalty = 4, int gap_open_penalty = 6, int gap_extend_penalty = 2) const {
+            auto score = match_score == 0 ?
+                    1.0 + (static_cast<double>(Score(match_score, mismatch_penalty, gap_open_penalty, gap_extend_penalty)) / (mismatch_penalty * GetEffectiveAlignmentLength())) :
+                         static_cast<double>(Score(match_score, mismatch_penalty, gap_open_penalty, gap_extend_penalty)) / (GetEffectiveAlignmentLength() * match_score);
+            return static_cast<double>(score);
+        }
+    };
 
     class AlignmentResult {
-        static constexpr int DEFAULT_ALIGNMENT_SCORE = INT32_MIN;
         static constexpr int DEFAULT_VALUE = UINT32_MAX;
-
-        /* Only stores crucial alignment information, no information about header sequence etc
-         * This is to save space and it is not necessary as this information can be passed down by another function.
-         */
-        int m_alignment_score = DEFAULT_ALIGNMENT_SCORE;
 
         uint32_t m_taxid = DEFAULT_VALUE;
         uint32_t m_geneid = DEFAULT_VALUE;
         int32_t m_genepos = INT32_MAX;
 
         bool m_forward = false;
-        std::string m_cigar;
-        std::string m_compressed_cigar;
 
-
+        AlignmentInfo m_info;
 
     public:
-        AlignmentResult(int alignment_score, std::string& cigar, uint32_t taxid, uint32_t geneid, int32_t genepos, bool forward) :
-                m_alignment_score(alignment_score),
-                m_cigar(cigar),
-                m_taxid(taxid),
-                m_geneid(geneid),
-                m_genepos(genepos),
-                m_forward(forward) {};
-
-        AlignmentResult(int alignment_score, std::string&& cigar, uint32_t taxid, uint32_t geneid, int32_t genepos, bool forward) :
-                m_alignment_score(alignment_score),
-                m_cigar(std::move(cigar)),
+        AlignmentResult(int alignment_score, uint32_t taxid, uint32_t geneid, int32_t genepos, bool forward) :
                 m_taxid(taxid),
                 m_geneid(geneid),
                 m_genepos(genepos),
@@ -50,11 +181,11 @@ namespace protal {
         AlignmentResult() {};
 
         std::string& Cigar() {
-            return m_cigar;
+            return m_info.cigar;
         }
 
         std::string Cigar() const {
-            return m_cigar;
+            return m_info.cigar;
         }
 
         uint32_t Taxid() const {
@@ -74,18 +205,15 @@ namespace protal {
         }
 
         int AlignmentScore() const {
-            return m_alignment_score;
+            return m_info.Score();
         }
 
-
-        void Set(int score, std::string& cigar) {
-            m_cigar = cigar;
-            m_alignment_score = score;
+        AlignmentInfo & GetAlignmentInfo() {
+            return m_info;
         }
 
-        void Set(int score, std::string&& cigar) {
-            m_cigar = cigar;
-            m_alignment_score = score;
+        const AlignmentInfo& GetAlignmentInfo() const {
+            return m_info;
         }
 
         void Set(size_t taxid, size_t geneid, int32_t abs_pos, bool forward) {
@@ -95,14 +223,12 @@ namespace protal {
             m_forward = forward;
         }
 
-
-        void Reset() {
-            m_alignment_score = DEFAULT_ALIGNMENT_SCORE;
-            m_cigar.clear();
+        bool IsSet() const {
+            return m_taxid != DEFAULT_VALUE;
         }
 
-        bool IsSet() const {
-            return m_alignment_score != DEFAULT_ALIGNMENT_SCORE;
+        void Reset() {
+            m_taxid = DEFAULT_VALUE;
         }
 
         std::string ToString() const {
@@ -150,6 +276,8 @@ namespace protal {
         int16_t mismatches = 0;
         int16_t matches = 0;
 
+        std::string compressed_cigar;
+
         void Reset() {
             clipped_alignment_length = 0;
             unclipped_alignment_length = 0;
@@ -191,37 +319,6 @@ namespace protal {
     };
 
 
-
-    struct AlignmentInfo {
-        uint32_t read_start_offset = 0;
-        uint32_t gene_start_offset = 0;
-        uint32_t alignment_length = 0;
-        float alignment_ani = 0.0f;
-
-        uint16_t mismatches = 0;
-        uint16_t deletions = 0;
-        uint16_t insertions = 0;
-        uint16_t iblocks = 0;
-        uint16_t dblocks = 0;
-        int16_t alignment_score = 0;
-        int16_t alignment_qscore = 0;
-        int16_t mismatch_quality_sum = 0;
-
-        std::string cigar;
-        std::string compressed_cigar;
-
-        std::string ToString() const {
-            std::string str = "Read Offset: " + std::to_string(read_start_offset);
-            str += ", Gene Start: " + std::to_string(gene_start_offset);
-            str += ", AL: " + std::to_string(alignment_length);
-            str += ", AS: " + std::to_string(alignment_score);
-            str += ", QS: " + std::to_string(alignment_qscore);
-            str += ", MMQS: " + std::to_string(mismatch_quality_sum);
-            str += ", ANI: " + std::to_string(alignment_ani);
-            str += ", CCIG: " + compressed_cigar;
-            return str;
-        }
-    };
 
     struct AlignmentPair {
         std::optional<SamEntry> first;
@@ -293,6 +390,48 @@ namespace protal {
         return (static_cast<double>(matches) / (matches + mismatches + indel));
     }
 
+
+    static void ExtractCigarInfo(std::string cigar, CigarInfo& info) {
+        info.Reset();
+        if (cigar.empty()) return;
+
+        int instruction_counter = 0;
+        char last_instruction = ' ';
+
+        info.compressed_cigar = "";
+
+        for (auto i = 0; i < cigar.length(); i++) {
+            char c = cigar[i];
+            // Compressed cigar
+            if (cigar[i] != last_instruction) {
+                if (instruction_counter > 0) {
+                    info.compressed_cigar += std::to_string(instruction_counter) + last_instruction;
+                }
+                last_instruction = cigar[i];
+                instruction_counter = 1;
+            } else {
+                instruction_counter++;
+            }
+            // compressed cigar end
+
+            bool insertion = c == 'I';
+            bool deletion = c == 'D';
+            bool match = c == 'M';
+            bool mismatch = c == 'X';
+            bool hardclipped = c == 'H';
+            bool softclipped = c == 'S';
+
+            info.insertions += insertion;
+            info.deletions += deletion;
+            info.matches += match;
+            info.hardclipped += hardclipped;
+            info.softclipped += softclipped;
+        }
+        auto alignment_length = cigar.length() + info.deletions - info.insertions;
+        info.unclipped_alignment_length = alignment_length;
+        info.clipped_alignment_length = alignment_length - info.softclipped - info.hardclipped;
+    }
+
     static void CompressedCigarInfo(std::string cigar, CigarInfo& info) {
         info.Reset();
         if (cigar.empty()) return;
@@ -327,8 +466,6 @@ namespace protal {
 
         info.clipped_alignment_length = total_count - info.softclipped;
         info.unclipped_alignment_length = total_count;
-
-//            std::cout << total_count << " " << info.Score() << " " << info.Ani() << std::endl;
     }
 
     static int CompressedCigarScore(std::string cigar, int mismatch_pen = 4, int gapopen_pen = 6, int gapext_pen = 2, int match_score = 0) {
@@ -338,7 +475,6 @@ namespace protal {
         int count;
         char c;
         int digit_start = -1;
-
 
         for (auto i = 0; i < cigar.length(); i++) {
             if (!std::isdigit(cigar[i])) {
@@ -370,256 +506,127 @@ namespace protal {
         return score;
     }
 
-    static void GetExtendedAlignmentInfo(AlignmentInfo& info, std::string const& cigar, std::string& sequence, std::string& quality, int dove_left_read=0, int dove_left_reference=0, int dove_right_read=0, int dove_right_reference=0, int mismatch_pen = 4, int mismatch_pen_min = 2, int mismatch_pen_max = 6, int gapopen_pen = 6, int gapext_pen = 2) {
-        size_t alignment_start = 0;
-        size_t alignment_length = 0;
-        size_t indel_count = 0;
-        size_t match_count = 0;
-        size_t mismatch_count = 0;
 
-        info.compressed_cigar = "";
-        info.deletions = 0;
-        info.insertions = 0;
+    static std::tuple<uint32_t, uint32_t, uint32_t, uint32_t> GetLeadingTrailingIndels(std::string const& cigar) {
+        uint32_t del_left = 0;
+        uint32_t del_right = 0;
+        uint32_t ins_left = 0;
+        uint32_t ins_right = 0;
 
-        int cigar_start_read = 0;
-        while (cigar[cigar_start_read] == 'D' && cigar_start_read < dove_left_read) {
-            cigar_start_read++;
-            assert(cigar_start_read < cigar.length());
-        }
-
-        int cigar_start_gene = 0;
-        while (cigar[cigar_start_gene] == 'I' && cigar_start_gene < dove_left_reference) {
-            cigar_start_gene++;
-            assert(cigar_start_gene < cigar.length());
-        }
-
-        int cigar_end_read = cigar.length() - 1;
-        assert(cigar_end_read < cigar.length() && cigar_end_read >= 0);
-        while (cigar[cigar_end_read] == 'D' && cigar_end_read >= (cigar.length() - dove_right_read)) {
-            cigar_end_read--;
-            assert(cigar_end_read < cigar.length() && cigar_end_read >= 0);
-        }
-
-        int cigar_end_gene = cigar.length() - 1;
-//            std::cout << "Old cigar end: " << cigar_end_gene << std::endl;
-        assert(cigar_end_gene < cigar.length() && cigar_end_gene >= 0);
-        while (cigar[cigar_end_gene] == 'I' && cigar_end_gene >= (cigar.length() - dove_right_reference)) {
-            cigar_end_gene--;
-            assert(cigar_end_gene < cigar.length() && cigar_end_gene >= 0);
-        }
-//            std::cout << "New cigar end: " << cigar_end_gene << std::endl;
-
-        cigar_end_read++;
-        cigar_end_gene++;
-
-        int cigar_start = std::max(cigar_start_read, cigar_start_gene);
-        int cigar_end = std::min(cigar_end_read, cigar_end_gene);
-//            std::cout << cigar_start_read << ", "  << cigar_start_gene << ", " << cigar_end_read << ", " << cigar_end_gene << std::endl;
-//            std::cout << "Cigar start: " << cigar_start << ",  Cigar end: " << cigar_end << std::endl;
-        info.cigar = cigar.substr(cigar_start, cigar_end - cigar_start);
-
-        // Get compressed cigar
-        char last_instruction = ' ';
-        size_t instruction_counter = 0;
-
-        int mismatch_pen_diff = mismatch_pen_max - mismatch_pen_min;
-        int ascore = 0;
-        int qascore = 0;
-
-        int mismatch_quality_sum = 0;
-
-        info.compressed_cigar = "";
-        for (auto i = 0; i < info.cigar.length(); i++) {
-            char c = info.cigar[i];
-            // Compressed cigar
-            if (info.cigar[i] != last_instruction) {
-                if (instruction_counter > 0) {
-                    info.compressed_cigar += std::to_string(instruction_counter) + last_instruction;
-
-                    if (last_instruction == 'X') {
-                        ascore -= mismatch_pen * instruction_counter;
-                        qascore -= mismatch_pen * instruction_counter;
-                    }
-                    if (last_instruction == 'I' || last_instruction == 'D') {
-                        info.iblocks += (last_instruction == 'I');
-                        info.dblocks += (last_instruction == 'D');
-                        ascore -= (gapopen_pen + (instruction_counter-1) * gapext_pen);
-                        qascore -= (gapopen_pen + (instruction_counter-1) * gapext_pen);
-                    }
-                }
-                last_instruction = info.cigar[i];
-                instruction_counter = 1;
-            } else {
-                instruction_counter++;
-            }
-            // compressed cigar end
-
-            bool insertion = c == 'I';
-            bool deletion = c == 'D';
-            info.insertions += insertion;
-            info.deletions += deletion;
-
-            indel_count += deletion || insertion;
-            match_count += c == 'M';
-            mismatch_count  += c == 'X';
-
-            if (c == 'X') {
-                int pos = cigar_start_read + i;
-                mismatch_quality_sum += quality[pos];
-//                std::cout << "X: " << sequence[pos] << " " << quality[pos] << " " << std::to_string(quality[pos]) << std::endl;
-            }
-
-            alignment_length += deletion;
-            alignment_length -= (insertion ||  c == 'H' || c == 'S');
-            alignment_length++;
-        }
-
-        // Get remainder of operations
-        if (instruction_counter > 0) {
-            info.compressed_cigar += std::to_string(instruction_counter) + last_instruction;
-            if (last_instruction == 'X') {
-                ascore -= mismatch_pen * instruction_counter;
-                qascore -= mismatch_pen * instruction_counter;
-            }
-            if (last_instruction == 'I' || last_instruction == 'D') {
-                ascore -= (gapopen_pen + (instruction_counter-1) * gapext_pen);
-                qascore -= (gapopen_pen + (instruction_counter-1) * gapext_pen);
-            }
-        }
-
-        info.alignment_score = ascore;
-        info.alignment_qscore = qascore;
-        info.mismatch_quality_sum = mismatch_quality_sum;
-
-        info.read_start_offset = cigar_start_read;
-        info.gene_start_offset = cigar_start_gene;
-
-        info.alignment_length = alignment_length;
-        info.alignment_ani = (static_cast<double>(match_count) / (match_count + mismatch_count + indel_count));
+        while (cigar[del_left] == 'D') del_left++;
+        while (cigar[cigar.length() - 1 - del_right] == 'D') del_right++;
+        while (cigar[ins_left] == 'I') ins_left++;
+        while (cigar[cigar.length() - 1 - ins_right] == 'I') ins_right++;
+        return { del_left, del_right, ins_left, ins_right };
     }
 
-
-    static void GetAlignmentInfo(AlignmentInfo& info, std::string const& cigar, int dove_left_read=0, int dove_left_reference=0, int dove_right_read=0, int dove_right_reference=0, int mismatch_pen = 4, int mismatch_pen_min = 2, int mismatch_pen_max = 6, int gapopen_pen = 6, int gapext_pen = 2) {
-        size_t alignment_start = 0;
-        size_t alignment_length = 0;
-        size_t indel_count = 0;
-        size_t match_count = 0;
-        size_t mismatch_count = 0;
-
-        info.compressed_cigar = "";
-        info.deletions = 0;
-        info.insertions = 0;
-
-        int cigar_start_read = 0;
-        while (cigar[cigar_start_read] == 'D' && cigar_start_read < dove_left_read) {
-            cigar_start_read++;
-            assert(cigar_start_read < cigar.length());
-        }
-
-        int cigar_start_gene = 0;
-        while (cigar[cigar_start_gene] == 'I' && cigar_start_gene < dove_left_reference) {
-            cigar_start_gene++;
-            assert(cigar_start_gene < cigar.length());
-        }
-
-        int cigar_end_read = cigar.length() - 1;
-        assert(cigar_end_read < cigar.length() && cigar_end_read >= 0);
-        while (cigar[cigar_end_read] == 'D' && cigar_end_read >= (cigar.length() - dove_right_read)) {
-            cigar_end_read--;
-            assert(cigar_end_read < cigar.length() && cigar_end_read >= 0);
-        }
-
-        int cigar_end_gene = cigar.length() - 1;
-//            std::cout << "Old cigar end: " << cigar_end_gene << std::endl;
-        assert(cigar_end_gene < cigar.length() && cigar_end_gene >= 0);
-        while (cigar[cigar_end_gene] == 'I' && cigar_end_gene >= (cigar.length() - dove_right_reference)) {
-            cigar_end_gene--;
-            assert(cigar_end_gene < cigar.length() && cigar_end_gene >= 0);
-        }
-//            std::cout << "New cigar end: " << cigar_end_gene << std::endl;
-
-        cigar_end_read++;
-        cigar_end_gene++;
-
-        int cigar_start = std::max(cigar_start_read, cigar_start_gene);
-        int cigar_end = std::min(cigar_end_read, cigar_end_gene);
-//            std::cout << cigar_start_read << ", "  << cigar_start_gene << ", " << cigar_end_read << ", " << cigar_end_gene << std::endl;
-//            std::cout << "Cigar start: " << cigar_start << ",  Cigar end: " << cigar_end << std::endl;
-        info.cigar = cigar.substr(cigar_start, cigar_end - cigar_start);
-
-        // Get compressed cigar
-        char last_instruction = ' ';
-        size_t instruction_counter = 0;
-
-        int mismatch_pen_diff = mismatch_pen_max - mismatch_pen_min;
-        int ascore = 0;
-        int qascore = 0;
-
-        info.compressed_cigar = "";
-        for (auto i = 0; i < info.cigar.length(); i++) {
-            char c = info.cigar[i];
-            // Compressed cigar
-            if (info.cigar[i] != last_instruction) {
-                if (instruction_counter > 0) {
-                    info.compressed_cigar += std::to_string(instruction_counter) + last_instruction;
-
-                    if (last_instruction == 'X') {
-                        ascore -= mismatch_pen * instruction_counter;
-                        qascore -= mismatch_pen * instruction_counter;
-                    }
-                    if (last_instruction == 'I' || last_instruction == 'D') {
-                        ascore -= (gapopen_pen + (instruction_counter-1) * gapext_pen);
-                        qascore -= (gapopen_pen + (instruction_counter-1) * gapext_pen);
-                    }
-                }
-                last_instruction = info.cigar[i];
-                instruction_counter = 1;
-            } else {
-                instruction_counter++;
-            }
-            // compressed cigar end
-
-            bool insertion = c == 'I';
-            bool deletion = c == 'D';
-            info.insertions += insertion;
-            info.deletions += deletion;
-
-            indel_count += deletion || insertion;
-            match_count += c == 'M';
-            mismatch_count  += c == 'X';
-
-            alignment_length += deletion;
-            alignment_length -= (insertion ||  c == 'H' || c == 'S');
-            alignment_length++;
-        }
-
-        // Get remainder of operations
-        if (instruction_counter > 0) {
-            info.compressed_cigar += std::to_string(instruction_counter) + last_instruction;
-            if (last_instruction == 'X') {
-                ascore -= mismatch_pen * instruction_counter;
-                qascore -= mismatch_pen * instruction_counter;
-            }
-            if (last_instruction == 'I' || last_instruction == 'D') {
-                ascore -= (gapopen_pen + (instruction_counter-1) * gapext_pen);
-                qascore -= (gapopen_pen + (instruction_counter-1) * gapext_pen);
-            }
-        }
-
-        info.alignment_score = ascore;
-        info.alignment_qscore = qascore;
-
-        info.read_start_offset = cigar_start_read;
-        info.gene_start_offset = cigar_start_gene;
-
-        info.alignment_length = alignment_length;
-        info.alignment_ani = (static_cast<double>(match_count) / (match_count + mismatch_count + indel_count));
+    /**
+     * Turn leading or trailing bases into softclip characters. With WFA this is necessary,
+     * as WFA never outputs S or H for Softclipped/Hardclipped respectively.
+     * @param cigar (uncompressed)
+     * @param left (leading deletions)
+     * @param right (trailing deletions)
+     */
+    static void Softclip(std::string& cigar, int left, int right) {
+        for (auto i = 0; i < left; i++) cigar[i] = 'S';
+        for (auto i = 0; i < right; i++) cigar[cigar.length() - 1 - i] = 'S';
     }
 
-    static AlignmentInfo GetAlignmentInfo(std::string const& cigar) {
+    /**
+     * Hardclipping is only to clip away leading and trailing
+     * Insertions as they do not belong to the core read. These insertions and deletions occur
+     * when more reference is provided for an ends-free alignment to allow for insertions and deletions
+     * within the alignment.
+     * @param cigar (uncompressed)
+     * @param left (leading insertions)
+     * @param right (trailing insertions)
+     * @return New clipped cigar string
+     */
+    static std::string Hardclip(std::string const& cigar, int left, int right) {
+        return cigar.substr(left, cigar.length() - left - right);
+    }
+
+    static void PostProcessAlignment(std::string const& cigar, AlignmentInfo& info, size_t read_length, size_t total_reference_length, int reference_start_pos, int reference_end_pos, int relative_read_position) {
+        auto [del_left, del_right, ins_left, ins_right] = GetLeadingTrailingIndels(cigar);
+
+        size_t new_cigar_start = ins_left;
+        size_t new_cigar_end = cigar.length() - ins_right;
+
+        info.cigar = Hardclip(cigar, ins_left, ins_right);
+        Softclip(info.cigar, del_left, del_right);
+
+        info.gene_alignment_start = reference_start_pos + ins_left;
+        info.GetInstructionCountsAndCompress();
+        info.alignment_ani = (static_cast<double>(info.matches) / (info.matches + info.mismatches + info.insertions + info.deletions));
+    }
+
+    static AlignmentInfo GetAlignmentInfo(std::string const& cigar){
         AlignmentInfo info;
-        GetAlignmentInfo(info, cigar);
+        info.cigar = cigar;
+        info.GetInstructionCountsAndCompress();
         return info;
+    }
+
+    static AlignmentInfo GetAlignmentInfo(std::string&& cigar){
+        AlignmentInfo info;
+        info.cigar = cigar;
+        info.GetInstructionCountsAndCompress();
+        return info;
+    }
+
+    static void PrintAlignment(std::string const& cigar, std::string& query, std::string const& reference, std::ostream &out = std::cout) {
+        int qpos = 0;
+        int rpos = 0;
+//        std::cout << sam.ToString() << std::endl;
+//        std::cout << "Reflength: " << reference.length() << std::endl;
+//        std::cout << sam.m_seq << std::endl;
+//        std::cout << reference.substr(rpos, 50) << std::endl;
+
+
+
+        std::string query_str = "";
+        std::string ref = "";
+
+        std::string align = "";
+        std::string cigar_str = "";
+        int cpos = 0;
+        bool has_indel = false;
+        bool faulty = false;
+        auto i = 0;
+        for (auto c : cigar) {
+            align += c == 'M' ? '|' : ' ';
+            cigar_str += c;
+
+            if (c == 'M') {
+                if (query[qpos + i] != reference[rpos+i]) {
+                    faulty = true;
+                }
+            }
+
+            if (c == 'I') {
+                query_str += '-';
+                ref += reference[rpos];
+                rpos++;
+                has_indel = true;
+            } else if (c == 'D' || c == 'S') {
+                query_str += query[qpos];
+                ref += '-';
+                qpos++;
+
+                has_indel = true;
+            } else {
+                query_str += query[qpos];
+                ref += reference[rpos];
+
+                qpos++;
+                rpos++;
+            }
+            i++;
+        }
+        if (faulty) {
+            exit(3);
+            Utils::Input();
+        }
     }
 
     static void PrintAlignment(SamEntry const& sam, std::string const& reference, std::ostream &out = std::cout) {
@@ -689,14 +696,8 @@ namespace protal {
         }
     }
     static int Bitscore(PairedAlignment const& a) {
-        AlignmentInfo info1;
-        AlignmentInfo info2;
-        GetAlignmentInfo(info1, a.first.Cigar());
-        GetAlignmentInfo(info2, a.second.Cigar());
-
-        auto score1 = CigarScore(a.first.Cigar(), 2, 3, 1, 2);
-        auto score2 = CigarScore(a.second.Cigar(), 2, 3, 1, 2);
-
+        auto score1 = a.first.IsSet() ? a.first.GetAlignmentInfo().Score(2, 3, 1, 2) : 0;
+        auto score2 = a.second.IsSet() ? a.second.GetAlignmentInfo().Score(2, 3, 1, 2) : 0;
         return score1 + score2;
     }
 

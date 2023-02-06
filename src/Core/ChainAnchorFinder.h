@@ -280,6 +280,9 @@ namespace protal {
                 m_min_successful_lookups(other.m_min_successful_lookups), m_k(other.m_k),
                 m_genome_loader(other.m_genome_loader) {};
 
+        void NextObservationBM() {
+            m_bm_seeding.AddObservation();
+        }
 
         size_t RecoverAnchors(ChainAnchorList& own_anchors, RecoverySet& recover, size_t align_top) {
             m_bm_recovering_anchors.Start();
