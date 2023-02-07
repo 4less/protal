@@ -12,11 +12,12 @@
 
 namespace protal {
     class Gene {
+        static const size_t DEFAULT = UINT64_MAX;
     private:
         size_t m_id = 0;
         std::string m_sequence = "";
         size_t m_start_byte;
-        size_t m_length;
+        size_t m_length = DEFAULT;
         std::ifstream* m_is = nullptr;
 
         void Load(std::string& into, size_t start_byte, size_t length) {
@@ -39,7 +40,7 @@ namespace protal {
         }
 
         bool IsSet() const {
-            return m_id != 0 || m_length != 0;
+            return (m_id != 0 || m_length > 0) && m_length != DEFAULT;
         }
 
         bool IsLoaded() const {

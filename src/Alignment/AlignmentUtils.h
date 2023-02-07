@@ -21,7 +21,7 @@ namespace protal {
         uint16_t hardclips = 0;
 
         int alignment_score = 0;
-        uint32_t gene_alignment_start = 0;
+        int gene_alignment_start = 0;
         uint32_t alignment_length = 0;
         float alignment_ani = 0.0f;
 
@@ -60,11 +60,18 @@ namespace protal {
             compressed_cigar.clear();
         }
 
+        bool Valid(size_t read_length) {
+            auto len = std::count_if(cigar.begin(), cigar.end(), [](char c) {
+                return c != 'D';
+            });
+            return len != read_length;
+        }
+
         void GetInstructionCountsAndCompress() {
             ResetCigarStats();
             compressed_cigar.clear();
 
-            bool swap_indel = true;
+            bool swap_indel = false;
 
             char last_instruction = ' ';
             size_t instruction_counter = 0;
@@ -559,13 +566,22 @@ namespace protal {
     static void PostProcessAlignment(std::string const& cigar, AlignmentInfo& info, size_t read_length, size_t total_reference_length, int reference_start_pos, int reference_end_pos, int relative_read_position) {
         auto [del_left, del_right, ins_left, ins_right] = GetLeadingTrailingIndels(cigar);
 
-        size_t new_cigar_start = ins_left;
-        size_t new_cigar_end = cigar.length() - ins_right;
+//        size_t new_cigar_start = ins_left;
+//        size_t new_cigar_end = cigar.length() - ins_right;
 
-        info.cigar = Hardclip(cigar, ins_left, ins_right);
-        Softclip(info.cigar, del_left, del_right);
+//        info.cigar = Hardclip(cigar, ins_left, ins_right);
+//        Softclip(info.cigar, del_left, del_right);
 
         info.gene_alignment_start = reference_start_pos + ins_left;
+
+        size_t new_cigar_start = del_left;
+        size_t new_cigar_end = cigar.length() - del_right;
+
+        info.cigar = Hardclip(cigar, del_left, del_right);
+        Softclip(info.cigar, ins_left, ins_right);
+
+        info.gene_alignment_start = reference_start_pos + del_left;
+//        std::cout << "GENE ALIGNMENT START " << info.gene_alignment_start << " from: " << reference_start_pos << " " << del_left << std::endl;
         info.GetInstructionCountsAndCompress();
         info.alignment_ani = (static_cast<double>(info.matches) / (info.matches + info.mismatches + info.insertions + info.deletions));
     }

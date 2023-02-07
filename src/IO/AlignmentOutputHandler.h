@@ -100,10 +100,10 @@ namespace protal {
     }
 
     static void ArtoSAM(SamEntry &sam, AlignmentResult const& ar, AlignmentInfo &info, FastxRecord &record) {
-        sam.m_qname = record.id;
+        sam.m_qname = record.id.substr(0, record.id.length()-2);
         sam.m_flag = 0;
         sam.m_rname = std::to_string(ar.Taxid()) + "_" + std::to_string(ar.GeneId());
-        sam.m_pos = ar.GenePos() + info.gene_alignment_start;
+        sam.m_pos = info.gene_alignment_start + 1;
         sam.m_mapq = ar.AlignmentScore();
         sam.m_cigar = info.compressed_cigar;
         sam.m_rnext = "*";
@@ -315,8 +315,8 @@ namespace protal {
                 auto& info = ar.GetAlignmentInfo();
                 ArtoSAM(m_sam, ar, info, record);
                 Flag::SetPairedEnd(m_sam.m_flag, false, false, first_pair, !first_pair);
-                Flag::SetRead2Unmapped(m_sam.m_flag, true);
-                Flag::SetRead1ReverseComplement(m_sam.m_flag, ar.Forward());
+                Flag::SetReadUnmapped(m_sam.m_flag, true);
+                Flag::SetReadReverseComplement(m_sam.m_flag, ar.Forward());
                 Flag::SetNotPrimaryAlignment(m_sam.m_flag, !first);
 
                 alignments++;
@@ -399,8 +399,8 @@ namespace protal {
                     auto& info = ar1.GetAlignmentInfo();
                     ArtoSAM(m_sam1, ar1, info, record1);
                     Flag::SetPairedEnd(m_sam1.m_flag, true, both, true);
-                    Flag::SetRead2Unmapped(m_sam1.m_flag, !ar2.IsSet());
-                    Flag::SetRead1ReverseComplement(m_sam1.m_flag, ar1.Forward());
+                    Flag::SetReadUnmapped(m_sam1.m_flag, false);
+                    Flag::SetReadReverseComplement(m_sam1.m_flag, !ar1.Forward());
                     Flag::SetNotPrimaryAlignment(m_sam1.m_flag, !first);
 
 
@@ -410,7 +410,7 @@ namespace protal {
                 }
                 if (ar2.IsSet()) {
                     auto len = std::count_if(ar2.Cigar().begin(), ar2.Cigar().end(), [](char c) {
-                        return c != 'I';
+                        return c != 'D';
                     });
 
                     if (len != record2.sequence.length()) {
@@ -427,8 +427,8 @@ namespace protal {
                     auto& info = ar2.GetAlignmentInfo();
                     ArtoSAM(m_sam2, ar2, info, record2);
                     Flag::SetPairedEnd(m_sam2.m_flag, true, both, false, true);
-                    Flag::SetRead1Unmapped(m_sam2.m_flag, !ar1.IsSet());
-                    Flag::SetRead2ReverseComplement(m_sam2.m_flag, ar2.Forward());
+                    Flag::SetReadUnmapped(m_sam2.m_flag, false);
+                    Flag::SetReadReverseComplement(m_sam2.m_flag, !ar2.Forward());
                     Flag::SetNotPrimaryAlignment(m_sam2.m_flag, !first);
 
                     alignment_length += info.alignment_length;
@@ -436,10 +436,14 @@ namespace protal {
                     m_sam2.m_mapq = first ? mapq : 0;
                 }
                 if (both) {
-                    m_sam1.m_rnext = m_sam2.m_rname;
-                    m_sam2.m_rnext = m_sam1.m_rname;
+                    m_sam1.m_rnext = "=";
+                    m_sam2.m_rnext = "=";
                     m_sam1.m_pnext = m_sam2.m_pos;
                     m_sam2.m_pnext = m_sam1.m_pos;
+                    Flag::SetMateReverseComplement(m_sam1.m_flag, (FLAG_t)!ar2.Forward());
+                    Flag::SetMateReverseComplement(m_sam2.m_flag, (FLAG_t)!ar1.Forward());
+                    Flag::SetMateUnmapped(m_sam1.m_flag, false);
+                    Flag::SetMateUnmapped(m_sam2.m_flag, false);
                 }
 
                 first = false;

@@ -65,7 +65,7 @@ namespace protal {
             seq1 = query;
             seq2 = ref;
             m_aligner.setMaxAlignmentScore(max_score);
-            m_status = m_aligner.alignEnd2End(query, ref);
+            m_status = m_aligner.alignEnd2End(ref, query);
         }
 
         void Alignment(const char* query, size_t query_length, const char* ref, size_t ref_length, int max_score=INT32_MAX) {
@@ -87,8 +87,10 @@ namespace protal {
         }
 
         void Alignment(std::string_view &query, std::string_view &ref, int q_begin_free, int q_end_free, int r_begin_free, int r_end_free, int max_score=INT32_MAX) {
+            seq1 = query;
+            seq2 = ref;
             m_aligner.setMaxAlignmentScore(max_score);
-            m_status = m_aligner.alignEndsFree(query.cbegin(), query.length(), q_begin_free, q_end_free, ref.cbegin(), ref.length(), r_begin_free, r_end_free);
+            m_status = m_aligner.alignEndsFree(ref.cbegin(), ref.length(), r_begin_free, r_end_free, query.cbegin(), query.length(), q_begin_free, q_end_free);
         }
 
         void Alignment(const char* query, size_t query_len, const char* ref, size_t ref_length, int q_begin_free, int q_end_free, int r_begin_free, int r_end_free, int max_score=INT32_MAX) {
@@ -127,7 +129,8 @@ namespace protal {
                 std::cerr << "seq1 or seq2 not initialized (string_view in WFA2Wrapper)";
             }
 
-            m_aligner.cigarPrintPretty(stdout, seq1, seq2);
+//            m_aligner.cigarPrintPretty(stdout, seq1, seq2);
+            m_aligner.cigarPrintPretty(stdout, seq2, seq1);
         }
     };
 }

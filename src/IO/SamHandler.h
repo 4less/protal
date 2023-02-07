@@ -24,7 +24,7 @@ namespace protal {
     public:
         static void SetPairedEnd(FLAG_t &flag, bool ispaired, bool bothalign, bool is_read1=false, bool is_read2=false) {
             flag |= ispaired;
-            flag |= (bothalign << 1);
+//            flag |= (bothalign << 1);
             flag |= (is_read1 << 6);
             flag |= (is_read2 << 7);
         }
@@ -33,19 +33,19 @@ namespace protal {
             flag |= (both_align << 1);
         }
 
-        static void SetRead1Unmapped(FLAG_t &flag, bool unmapped) {
-            flag |= (unmapped << 2);
-        }
-
-        static void SetRead2Unmapped(FLAG_t &flag, bool unmapped) {
+        static void SetMateUnmapped(FLAG_t &flag, bool unmapped) {
             flag |= (unmapped << 3);
         }
 
-        static void SetRead1ReverseComplement(FLAG_t &flag, bool rc) {
+        static void SetReadUnmapped(FLAG_t &flag, bool unmapped) {
+            flag |= (unmapped << 2);
+        }
+
+        static void SetReadReverseComplement(FLAG_t &flag, bool rc) {
             flag |= (rc << 4);
         }
 
-        static void SetRead2ReverseComplement(FLAG_t &flag, bool rc) {
+        static void SetMateReverseComplement(FLAG_t &flag, bool rc) {
             flag |= (rc << 5);
         }
 
