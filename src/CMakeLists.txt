@@ -59,6 +59,15 @@ add_library(protal_lib
         SNPs/SNP.h
         SNPs/SNPUtils.h
         Test.h
+        SequenceUtils/SequenceRange.h
+        SequenceUtils/SequenceRange.cpp
+        SequenceUtils/SequenceRangeHandler.h
+        SequenceUtils/SequenceRangeHandler.cpp
+        Profiling/Strain.h
+        SequenceUtils/Variant.h
+        SequenceUtils/VariantHandler.h
+        Strains/Distances.h
+        IO/TaxonStatisticsOutput.h
         )
 
 
@@ -163,6 +172,7 @@ target_link_libraries(protal_lib
         stdc++fs
         wfa_lib
         gzstream_lib
+        cPMML
 #        hts_lib
         #fmt_lib
         )

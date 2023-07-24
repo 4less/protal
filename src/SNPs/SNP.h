@@ -40,29 +40,16 @@ namespace protal {
             }
         }
 
-//        SNP(SNPFlag type, Orientation orientation, Base reference, Base qual, FirstRead isfirst,
-//            SSize ssize, ReadId readid, TaxId taxid, GeneId geneid, SNPPos snppos) :
-//                m_type(type),
-//                m_orientation(orientation),
-//                m_reference(reference),
-//                m_quality(qual),
-//                m_first_read(isfirst),
-//                m_structural_size(ssize),
-//                m_readid(readid),
-//                m_taxid(taxid),
-//                m_geneid(geneid),
-//                m_snp_pos(snppos) {}
-
-
 
         std::string ToString() const {
             std::string str;
+            str += '{';
             if (type == 1) {
-                str += "SNP\t";
+                str += "SNP ";
             } else if (type == 2) {
-                str += "INS\t";
+                str += "INS ";
             } else if (type == 4) {
-                str += "DEL\t";
+                str += "DEL ";
             }
             str += std::to_string(readid) + '\t';
             str += std::to_string(taxid) + '\t';
@@ -77,6 +64,7 @@ namespace protal {
                 str += *structural + '\t';
                 str += to_string(structural_size);
             }
+            str += '}';
 
             return str;
         }

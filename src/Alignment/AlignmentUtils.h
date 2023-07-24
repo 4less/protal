@@ -655,9 +655,9 @@ namespace protal {
         }
     }
 
-    static void PrintAlignment(SamEntry const& sam, std::string const& reference, std::ostream &out = std::cout) {
+    static bool PrintAlignment(SamEntry const& sam, std::string const& reference, std::ostream &out = std::cout) {
         int qpos = 0;
-        int rpos = sam.m_pos;
+        int rpos = sam.m_pos - 1;
 
         int count = 0;
         char op = ' ';
@@ -688,15 +688,17 @@ namespace protal {
                 }
             }
 
-            if (op == 'I') {
+            if (op == 'D') {
                 query += std::string(count, '-');
                 ref += reference.substr(rpos, count);
                 rpos += count;
                 hasid = true;
-            } else if (op == 'D' || op == 'S') {
+            } else if (op == 'I' || op == 'S') {
                 query += sam.m_seq.substr(qpos, count);
                 ref += std::string(count, '-');
                 qpos += count;
+                // Maybe it can fix the problems
+                //rpos += count;
 
                 hasid = true;
             } else {
@@ -717,22 +719,43 @@ namespace protal {
         out << "-------------------------" << std::endl;
 
         if (faulty) {
-            exit(3);
-            Utils::Input();
+            std::cout << "Faulty within print" << std::endl;
+            return false;
         }
+        return true;
     }
+
     static int Bitscore(PairedAlignment const& a) {
         auto score1 = a.first.IsSet() ? a.first.GetAlignmentInfo().Score(2, 3, 1, 2) : 0;
         auto score2 = a.second.IsSet() ? a.second.GetAlignmentInfo().Score(2, 3, 1, 2) : 0;
         return score1 + score2;
     }
 
+    int MAPQv1(int s1, int s2) {
+        //Assumes alignments come sorted and best is on top
+        return 40.0 * (1.0-static_cast<double>(s2)/s1) * log10(static_cast<double>(s1));
+    }
+
+    int MAPQv2(int s1, int s2) {
+        //Assumes alignments come sorted and best is on top
+        if (s1 ==  s2) return 0;
+        return 1 + (40.0 * (1.0-static_cast<double>(s2)/s1) * log10(static_cast<double>(s1)));
+    }
 
     int MAPQv1(PairedAlignmentResultList& paired_alignment_results) {
         auto best_score = Bitscore(paired_alignment_results[0]);
         auto second_best_score = paired_alignment_results.size() > 1 ? Bitscore(paired_alignment_results[1]) : 0;
 
         //Assumes alignments come sorted and best is on top
-        return 40.0 * (1.0-static_cast<double>(second_best_score)/best_score) * log10(static_cast<double>(best_score));
+        return MAPQv2(best_score, second_best_score);
+    }
+
+    std::tuple<int, int, int> MAPQv1Debug(PairedAlignmentResultList& paired_alignment_results) {
+        auto best_score = Bitscore(paired_alignment_results[0]);
+        auto second_best_score = paired_alignment_results.size() > 1 ? Bitscore(paired_alignment_results[1]) : 0;
+
+        auto mapq = MAPQv2(best_score, second_best_score);
+        //Assumes alignments come sorted and best is on top
+        return {mapq, best_score, second_best_score};
     }
 }

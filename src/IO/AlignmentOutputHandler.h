@@ -17,6 +17,7 @@
 #include "SNP.h"
 #include <htslib/sam.h>
 #include "AlignmentUtils.h"
+#include "SNPUtils.h"
 
 namespace protal {
     static bool CorrectOrientation(AlignmentResult const& a1, AlignmentResult const& a2) {
@@ -272,20 +273,23 @@ namespace protal {
         SamEntry m_sam;
 
         AlignmentInfo m_info;
+        GenomeLoader& m_genomes;
 
         double m_min_cigar_ani = 0;
     public:
         size_t alignments = 0;
 
-        ProtalOutputHandler(std::ostream& sam_os, size_t varkit_buffer_capacity, size_t sam_buffer_capacity, double min_cigar_ani=0.0f) :
+        ProtalOutputHandler(std::ostream& sam_os, size_t varkit_buffer_capacity, size_t sam_buffer_capacity, GenomeLoader& genomes, double min_cigar_ani=0.0f) :
                 m_sam_os(sam_os),
                 m_sam_output(sam_buffer_capacity),
-                m_min_cigar_ani(min_cigar_ani) {}
+                m_min_cigar_ani(min_cigar_ani),
+                m_genomes(genomes) {}
 
         ProtalOutputHandler(ProtalOutputHandler const& other) :
                 m_sam_os(other.m_sam_os),
                 m_sam_output(other.m_sam_output.Capacity()),
-                m_min_cigar_ani(other.m_min_cigar_ani) {}
+                m_min_cigar_ani(other.m_min_cigar_ani),
+                m_genomes(other.m_genomes) {}
 
         ~ProtalOutputHandler() {
 #pragma omp critical(sam_output)
@@ -333,31 +337,37 @@ namespace protal {
     /*
      * Protal Output Handler
      */
+    template<bool DEBUG=false>
     class ProtalPairedOutputHandler {
     private:
         std::ostream& m_sam_os;
+//        ogzstream& ogz;
         BufferedStringOutput m_sam_output;
         SamEntry m_sam1;
         SamEntry m_sam2;
 
         AlignmentInfo m_info;
 
+        GenomeLoader& m_genomes;
+
         size_t m_max_out = 1;
         double m_min_cigar_ani = 0;
     public:
         size_t alignments = 0;
 
-        ProtalPairedOutputHandler(std::ostream& sam_os, size_t max_out, size_t varkit_buffer_capacity, size_t sam_buffer_capacity, double min_cigar_ani=0.0f) :
+        ProtalPairedOutputHandler(std::ostream& sam_os, size_t max_out, size_t varkit_buffer_capacity, size_t sam_buffer_capacity, GenomeLoader& genomes, double min_cigar_ani=0.0f) :
                 m_sam_os(sam_os),
                 m_sam_output(sam_buffer_capacity),
                 m_min_cigar_ani(min_cigar_ani),
-                m_max_out(max_out) {}
+                m_max_out(max_out),
+                m_genomes(genomes) {}
 
         ProtalPairedOutputHandler(ProtalPairedOutputHandler const& other) :
                 m_sam_os(other.m_sam_os),
                 m_sam_output(other.m_sam_output.Capacity()),
                 m_min_cigar_ani(other.m_min_cigar_ani),
-                m_max_out(other.m_max_out) {}
+                m_max_out(other.m_max_out),
+                m_genomes(other.m_genomes) {}
 
         ~ProtalPairedOutputHandler() {
 #pragma omp critical(sam_output)
@@ -385,7 +395,27 @@ namespace protal {
 
             int mapq = MAPQv1(alignment_results);
 
+            auto& any = best.first.IsSet() ? best.first : best.second;
 
+            constexpr bool debug = true;
+
+            if constexpr (DEBUG) {
+                auto [mapqs, s1, s2] = MAPQv1Debug(alignment_results);
+                std::vector<std::string> tokens;
+                LineSplitter::Split(record1.id, "-", tokens);
+                auto true_ref = tokens[0];
+
+                auto ref = std::to_string(any.Taxid()) + "_" + std::to_string(any.GeneId());
+                bool is_correct = ref == true_ref;
+#pragma omp critical(errout)
+                std::cerr << int(is_correct) << '\t' << mapqs << '\t' << s1 << '\t' << s2 << '\t' << record1.id << std::endl;
+            }
+
+
+            SNPList snps;
+
+            bool valid1 = false;
+            bool valid2 = false;
 
             size_t output_counter = 0;
             for (auto& [ar1, ar2] :  alignment_results) {
@@ -407,6 +437,8 @@ namespace protal {
                     alignment_length += info.alignment_length;
                     alignment_score += info.Score();
                     m_sam1.m_mapq = first ? mapq : 0;
+
+                    valid1 = ExtractSNPs(m_sam1, m_genomes.GetGenome(ar1.Taxid()).GetGene(ar1.GeneId()).Sequence(), snps, ar1.Taxid(), ar1.GeneId(), 0);
                 }
                 if (ar2.IsSet()) {
                     auto len = std::count_if(ar2.Cigar().begin(), ar2.Cigar().end(), [](char c) {
@@ -420,6 +452,7 @@ namespace protal {
                             std::cout << "Len: " << len << std::endl;
                             std::cout << record2.sequence << std::endl;
                             std::cout << ar2.Cigar() << std::endl;
+
                         }
 //                        exit(11);
                     }
@@ -434,6 +467,8 @@ namespace protal {
                     alignment_length += info.alignment_length;
                     alignment_score += info.alignment_score;
                     m_sam2.m_mapq = first ? mapq : 0;
+
+                    valid2 = ExtractSNPs(m_sam2, m_genomes.GetGenome(ar2.Taxid()).GetGene(ar2.GeneId()).Sequence(), snps, ar2.Taxid(), ar2.GeneId(), 0);
                 }
                 if (both) {
                     m_sam1.m_rnext = "=";
@@ -444,6 +479,28 @@ namespace protal {
                     Flag::SetMateReverseComplement(m_sam2.m_flag, (FLAG_t)!ar1.Forward());
                     Flag::SetMateUnmapped(m_sam1.m_flag, false);
                     Flag::SetMateUnmapped(m_sam2.m_flag, false);
+                }
+
+                if ((ar1.IsSet() && !valid1) || (ar1.IsSet() && !valid2)) {
+                    if (ar1.IsSet() && !valid1) {
+#pragma omp critical(err_out)
+                        {
+                            std::cerr << record1.to_string() << std::endl;
+                            std::cerr << m_sam1.ToString() << std::endl;
+                            std::string const& reference = m_genomes.GetGenome(ar1.Taxid()).GetGene(ar1.GeneId()).Sequence();
+                            PrintAlignment(m_sam1, reference, std::cerr);
+                        }
+                    }
+                    if (ar2.IsSet() && !valid2) {
+#pragma omp critical(err_out)
+                        {
+                            std::cerr << record2.to_string() << std::endl;
+                            std::cerr << m_sam2.ToString() << std::endl;
+                            auto& reference = m_genomes.GetGenome(ar2.Taxid()).GetGene(ar2.GeneId()).Sequence();
+                            PrintAlignment(m_sam2, reference, std::cerr);
+                        }
+                    }
+                    return;
                 }
 
                 first = false;

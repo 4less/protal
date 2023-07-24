@@ -187,7 +187,7 @@ namespace protal {
             return true;
         }
 
-        if (Flag::IsPairBothAlign(sam1.m_flag)) {
+        if (Flag::IsPaired(sam1.m_flag)) {
             if (!std::getline(file, line)) return false;
 //            std::cout << "yes two" << std::endl;
             LineSplitter::Split(line, delim, tokens);

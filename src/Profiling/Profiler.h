@@ -16,6 +16,10 @@
 #include "SNPUtils.h"
 #include "ProfilerOptions.h"
 #include "ScoreAlignments.h"
+#include "Strain.h"
+#include "gzstream/gzstream.h"
+#include "cPMML.h"
+//#include "/usr/local/include/cPMML.h"
 
 namespace protal {
 
@@ -37,23 +41,51 @@ namespace protal {
     }
 
     namespace profiler {
+        // Forward declaration
+        class TaxonFilterForest;
+        class TaxonFilter;
+
         struct MicrobialProfile;
         struct Gene;
         struct Taxon;
 
         using GeneMap = tsl::sparse_map<uint32_t, Gene>;
         using TaxonMap = tsl::sparse_map<uint32_t, Taxon>;
+        using GeneRef = protal::Gene;
 
+        using TaxonFilterObj = TaxonFilterForest;
 
         // Data structures
 
         class Gene {
         public:
-            using SNPs = std::vector<SNP>;
+//            using SNPs = std::vector<SNP>;
+
             size_t m_mapped_reads = 0;
+            size_t m_mapped_length = 0;
+            size_t m_mapq_sum = 0;
+            double m_ani_sum = 0;
+
             size_t m_gene_length = 0;
             std::vector<SamEntry*> m_sams;
-            SNPs m_snps;
+            StrainLevelContainer m_strain_level;
+
+//            SNPs m_snps;
+
+            GeneRef* m_gene_ref = nullptr;
+
+//            std::string& m_sequence;
+
+
+            Gene(protal::Gene& gene_ref) :
+                    m_gene_ref(&gene_ref),
+                    m_strain_level(gene_ref) {
+            };
+
+            Gene& operator=(const Gene& other) {
+                m_gene_ref = other.m_gene_ref;
+                return *this;
+            }
 
             void AddRead(GenePos pos) {
                 m_mapped_reads++;
@@ -63,9 +95,50 @@ namespace protal {
                 m_sams.clear();
             }
 
-            void AddSam(SamEntry &sam) {
-                m_sams.emplace_back(&sam);
-//                m_mapped_reads++;
+            const StrainLevelContainer& GetStrainLevel() const {
+                return m_strain_level;
+            }
+
+            StrainLevelContainer& GetStrainLevel() {
+                return m_strain_level;
+            }
+
+            std::string GetStatisticsString() {
+                std::string s = "";
+                auto cov_vec = m_strain_level.GetSequenceRangeHandler().GetCoverageVector();
+                auto cov_sum = std::accumulate(cov_vec.begin(), cov_vec.end(), 0);
+                auto cov = m_strain_level.GetSequenceRangeHandler().CoveredPortion();
+                s += std::to_string(m_mapped_reads) + '\t';
+                s += std::to_string(cov_sum) + '\t';
+                s += std::to_string(m_gene_length) + '\t';
+                s += std::to_string(m_ani_sum) + '\t';
+                s += std::to_string(m_mapq_sum) + '\t';
+                s += std::to_string(m_ani_sum/static_cast<double>(m_mapped_reads)) + '\t';
+                s += std::to_string(m_mapq_sum/static_cast<double>(m_mapped_reads)) + '\t';
+                s += std::to_string(m_strain_level.GetSequenceRangeHandler().CoveredPortion()) + '\t';
+                s += std::to_string(m_strain_level.GetSequenceRangeHandler().CoveredPortion()/static_cast<double>(m_gene_length));
+//                s += std::to_string(m_strain_level.GetSequenceRangeHandler().CoveredPortion(5)) + '\t';
+//                s += std::to_string(m_strain_level.GetSequenceRangeHandler().CoveredPortion(5)/static_cast<double>(m_gene_length));
+                return s;
+            }
+
+            void AddSam(SamEntry const& sam, size_t read_id, double ani=0.0, bool store_sam=true, bool extract_snps=true) {
+                if (store_sam) {
+                    m_sams.emplace_back(const_cast<SamEntry*>(&sam));
+                }
+
+
+                m_strain_level.AddSam(sam, read_id);
+//                if (extract_snps) {
+//                    ExtractSNPs(sam, m_gene_ref->Sequence(), m_snps, 0, 0, read_id);
+//                }
+
+                size_t length = AlignmentLengthRef(sam.m_cigar);
+
+                m_mapped_reads++;
+                m_mapped_length += length;
+                m_mapq_sum += sam.m_mapq;
+                m_ani_sum += ani;
             }
 
             void SetLength(size_t length) {
@@ -73,17 +146,57 @@ namespace protal {
             }
 
             double VerticalCoverage() const {
-//                std::cout << static_cast<double>(m_mapped_reads * 150) << "/" << static_cast<double>(m_gene_length) << std::endl;
-                return static_cast<double>(m_mapped_reads * 150)/static_cast<double>(m_gene_length);
+
+
+                if (m_mapped_length/10 < m_sams.size()) {
+
+
+                    std::cout << "VerticalCoverage()" << std::endl;
+                    std::cout << static_cast<double>(m_mapped_length) << "/" << static_cast<double>(m_gene_length) << std::endl;
+                    std::cout << "Read num: " << m_sams.size() << std::endl;
+                    std::cout << "Mapped reads: " << m_mapped_reads << std::endl;
+                    std::cout << "Gene length: " << m_gene_ref->Sequence().length() << std::endl;
+
+                    for (auto sam : m_sams) {
+                        std::cout << sam->ToString() << std::endl;
+                    }
+
+                    Utils::Input();
+                }
+                return static_cast<double>(m_mapped_length)/static_cast<double>(m_gene_length);
             }
 
-            SNPs& GetSNPs() {
-                return m_snps;
+//            SNPs& GetSNPs() {
+//                return m_snps;
+//            }
+//
+//            const SNPs& GetSNPs() const {
+//                return m_snps;
+//            }
+
+            std::string ToString() const {
+                std::string str = "{";
+                str += std::to_string(m_mapped_reads) + ",";
+                str += std::to_string(static_cast<double>(m_mapq_sum)/m_mapped_reads) + ",";
+                str += std::to_string(m_ani_sum/m_mapped_reads) + "}";
+
+
+                return str;
+            }
+
+            std::string ToString2() const {
+                std::string str;
+                str += std::to_string(m_mapped_reads) + "\t";
+                str += std::to_string(static_cast<double>(m_mapq_sum)/m_mapped_reads) + "\t";
+                str += std::to_string(m_ani_sum/m_mapped_reads) + "\t";
+//                str += std::to_string(m_snps.size());
+                return str;
             }
         };
 
         class Taxon {
         private:
+            size_t m_id;
             std::string m_name;
             size_t m_total_hits = 0;
             size_t m_unique_hits = 0;
@@ -103,27 +216,42 @@ namespace protal {
                     if (!m_genome.GetGene(geneid).IsLoaded()) {
                         m_genome.GetGene(geneid).Load();
                     }
-                    m_genes[geneid] = Gene();
-                    m_genes[geneid].SetLength(m_genome.GetGene(geneid).Sequence().length());
+                    auto& g = m_genome.GetGene(geneid);
+                    m_genes.insert( { geneid, profiler::Gene(g) } );
+                    m_genes.at(geneid).SetLength(m_genome.GetGene(geneid).Sequence().length());
                 }
 
-                m_genes[geneid].AddRead(genepos);
+                m_genes.at(geneid).AddRead(genepos);
                 m_total_hits++;
                 m_ani_sum += ani;
                 m_unique_hits += unique;
             }
 
-            void AddSam(GeneId geneid, SamEntry sam, double score, bool unique, int read_id) {
+            const GeneMap& GetGenes() const {
+                return m_genes;
+            }
+
+            GeneMap& GetGenes() {
+                return m_genes;
+            }
+
+            void ClearSams() {
+                for (auto& [id, _] : m_genes) m_genes.at(id).ClearSams();
+            }
+
+            void AddSam(GeneId geneid, SamEntry const& sam, double score, bool unique, size_t read_id) {
                 if (!m_genes.contains(geneid)) {
                     if (!m_genome.GetGene(geneid).IsLoaded()) {
                         m_genome.GetGene(geneid).Load();
                     }
-                    m_genes[geneid] = Gene();
-                    m_genes[geneid].SetLength(m_genome.GetGene(geneid).Sequence().length());
+                    auto& g = m_genome.GetGene(geneid);
+                    m_genes.insert( { geneid, profiler::Gene(g) } );
+                    m_genes.at(geneid).SetLength(m_genome.GetGene(geneid).Sequence().length());
                 }
 
-//                m_genes[geneid].AddRead(sam.m_pos);
-                m_genes[geneid].AddSam(sam);
+
+
+                m_genes.at(geneid).AddSam(sam, read_id, score);
                 m_total_hits++;
                 m_ani_sum += score;
                 m_mapq_sum += sam.m_mapq;
@@ -149,12 +277,26 @@ namespace protal {
                 return m_ani_sum/m_total_hits;
             }
 
+            double GetMeanMAPQ() const {
+                return m_mapq_sum/m_total_hits;
+            }
+
             size_t TotalHits() const {
                 return m_total_hits;
             }
 
+            size_t TotalLength() const {
+                return std::accumulate(m_genes.begin(), m_genes.end(), 0, [](size_t acc, std::pair<uint32_t, Gene> const& pair){
+                    return acc + pair.second.m_mapped_length;
+                });
+            }
+
             size_t UniqueHits() const {
                 return m_unique_hits;
+            }
+
+            void SetId(size_t id) {
+                m_id = id;
             }
 
             void SetName(std::string name) {
@@ -182,6 +324,14 @@ namespace protal {
                 return stdev;
             }
 
+            static double Median(std::vector<double> const& v) {
+                if (v.empty()) return 0;
+                size_t mid_index = v.size()/2;
+                return v.size() % 2 == 1 ?
+                    v.at(mid_index) :
+                    (v.at(mid_index - 1) + v.at(mid_index)) / 2;
+            }
+
             double VerticalCoverage(bool force=false) {
                 if (m_vcov == -1 || force) {
                     std::vector<double> vcovs;
@@ -192,13 +342,8 @@ namespace protal {
 
                     if (vcovs.empty()) return 0.0;
 
-                    size_t mid_index = vcovs.size()/2;
-                    m_vcov = vcovs.size() % 2 == 1 ?
-                                  vcovs.at(mid_index) :
-                                  (vcovs.at(mid_index - 1) + vcovs.at(mid_index)) / 2;
+                    m_vcov = Median(vcovs);
                 }
-
-
                 return m_vcov;
             }
 
@@ -211,37 +356,96 @@ namespace protal {
                     std::cerr << geneid << " not in genes " << std::endl;
                     exit(9);
                 }
-                return m_genes[geneid];
+                return m_genes.at(geneid);
             }
 
             double GetAbundance(double total_vertical_coverage) {
                 return VerticalCoverage()/total_vertical_coverage;
             }
 
+
             std::string ToString() const {
                 std::string str;
 
-                str += m_name + "{ ";
+                str += std::to_string(m_id);
+                str += "\t{ ";
                 str += "Genes: " + std::to_string(m_genes.size()) + ", ";
                 str += "Total Hits: " + std::to_string(m_total_hits) + ", ";
-                str += "MeanANI: " + std::to_string(m_ani_sum/(double)m_total_hits);
+                str += "MeanMAPQ: " + std::to_string(GetMeanMAPQ()) + ", ";
+                str += "VCOV: " + std::to_string(VerticalCoverage()) + ", ";
                 str += " }";
+
+                return str;
+            }
+
+            std::string ToString() {
+                std::string str;
+
+                str += std::to_string(m_id);
+                str += "\t{ ";
+                str += "Genes: " + std::to_string(m_genes.size()) + ", ";
+                str += "Total Hits: " + std::to_string(m_total_hits) + ", ";
+                str += "MeanMAPQ: " + std::to_string(GetMeanMAPQ()) + ", ";
+                str += "VCOV: " + std::to_string(VerticalCoverage(true)) + ", ";
+                str += " }";
+
+                return str;
+            }
+
+            std::string& GetName() {
+                return m_name;
+            }
+
+            const std::string& GetName() const {
+                return m_name;
+            }
+
+            std::string ToString(taxonomy::IntTaxonomy& taxonomy) const {
+                std::string str;
+                auto& genes = m_genome.GetGeneList();
+                auto total_gene_length = std::accumulate(genes.begin(), genes.end(), 0, [](size_t acc, protal::Gene const& gene){
+                    return acc + (gene.IsSet() ? gene.GetLength() : 0);
+                });
+
+                str += taxonomy.Get(m_id).scientific_name;
+                str += "\t" + std::to_string(m_id) + "\t";
+                str += "{ ";
+                str += "Genes: " + std::to_string(m_genes.size()) + ", ";
+                str += "Total Hits: " + std::to_string(m_total_hits) + ", ";
+                str += "Total MGenome: " + std::to_string(total_gene_length) + ", ";
+                str += "MeanANI: " + std::to_string(m_ani_sum/(double)m_total_hits) + ", ";
+                str += "MeanMAPQ: " + std::to_string(GetMeanMAPQ()) + ", ";
+                str += "VCOV: " + std::to_string(VerticalCoverage()) + ", ";
+                str += " }";
+
+//                for (auto& [id, gene] : m_genes) {
+//                    auto& variant_handler = gene.GetStrainLevel().GetVariantHandler();
+//                    str += "\tGene\t" + std::to_string(id) + "\t" + gene.ToString2() + '\n';
+//                    for (auto& [key, bin] : variant_handler.GetVariants()) {
+//                        str += std::to_string(key) + '\t' + variant_handler.VariantBinToString(bin) + '\n';
+////                        str += "\t\t" + snp.ToString() + '\n';
+//                    }
+//                }
 
                 return str;
             }
         };
 
+
+
         class TaxonFilter {
             double m_min_mean_ani = 0.94;
             double m_min_gene_presence = 0.7;
             size_t m_min_reads = 50;
+            size_t m_min_mean_mapq = 5;
             double m_min_uniqueness = 0.1;
         public:
             TaxonFilter() {}
-            TaxonFilter(double min_mean_ani, double min_gene_presence, double min_reads) :
+            TaxonFilter(double min_mean_ani, double min_gene_presence, double min_reads, size_t min_mean_mapq) :
                     m_min_mean_ani(min_mean_ani),
                     m_min_gene_presence(min_gene_presence),
-                    m_min_reads(min_reads) {
+                    m_min_reads(min_reads),
+                    m_min_mean_mapq(min_mean_mapq) {
             }
 
             static double ExpectedGenes(size_t marker_genes_count, size_t mapped_reads) {
@@ -260,7 +464,8 @@ namespace protal {
                 bool pass = // Currently mix of expected gene presence, min ani and min gene presence
                         taxon.GetMeanANI() >= m_min_mean_ani &&
                         taxon.TotalHits() >= m_min_reads &&
-                        ExpectedGenePresenceRatio(taxon) >= m_min_gene_presence;
+                        ExpectedGenePresenceRatio(taxon) >= m_min_gene_presence &&
+                        taxon.GetMeanMAPQ() >= m_min_mean_mapq;
                 return pass;
             }
 
@@ -274,6 +479,9 @@ namespace protal {
                 if (ExpectedGenePresenceRatio(taxon) < m_min_gene_presence) {
                     std::cout << "GenePresence: " << ExpectedGenePresenceRatio(taxon) << " < " << m_min_gene_presence << " (min)" << std::endl;
                 }
+                if (taxon.GetMeanMAPQ() < m_min_mean_mapq) {
+                    std::cout << "MeanMAPQ: " << taxon.GetMeanMAPQ() << " < " << m_min_mean_mapq << " (min)" << std::endl;
+                }
             }
 
             bool Pass(Taxon const& taxon) const {
@@ -281,6 +489,31 @@ namespace protal {
             }
         };
 
+        class TaxonFilterForest {
+            cpmml::Model m_model{};
+            double m_threshold = 0.5;
+
+            mutable std::unordered_map<std::string, std::string> m_sample;
+
+
+        public:
+
+            TaxonFilterForest(const std::string& path) : m_model(path) {
+                //m_model = cpmml::Model(path, false);
+            }
+
+            bool Pass(Taxon const& taxon) const {
+                // "present_genes", "total_hits", "unique_hits", "mean_ani", "expected_gene_presence"
+                m_sample["present_genes"] = std::to_string(taxon.PresentGenes());
+                m_sample["total_hits"] = std::to_string(taxon.TotalHits());
+                m_sample["unique_hits"] = std::to_string(taxon.UniqueHits());
+                m_sample["expected_gene_presence"] = std::to_string(TaxonFilter::ExpectedGenePresence(taxon));
+                m_sample["mean_ani"] = std::to_string(taxon.GetMeanANI());
+                m_sample["mean_mapq"] = std::to_string(taxon.GetMeanMAPQ());
+                auto prediction_str = m_model.predict(m_sample);
+                return prediction_str == "TRUE";
+            }
+        };
 
         class MicrobialProfile {
         public:
@@ -300,19 +533,73 @@ namespace protal {
                 if (!m_taxa.contains(taxid)) {
                     auto& genome = m_genome_loader.GetGenome(taxid);
                     m_taxa.insert( { taxid, Taxon(genome) } );
+                    m_taxa.at(taxid).SetId(taxid);
                     m_taxa.at(taxid).SetName(std::to_string(taxid));
                 }
                 auto& taxon = m_taxa.at(taxid);
-//                taxon.AddHit(geneid, sam.m_pos, score, unique);
-                taxon.AddSam(geneid, sam, score, unique, 0);
+                unique = sam.m_mapq > 20;
+                taxon.AddSam(geneid, sam, score, unique, read_id);
 
-                // Experimental
-                ExtractSNPs(sam, taxon.GetGenome().GetGene(geneid).Sequence(), taxon.GetGene(geneid).GetSNPs(), taxid, geneid);
             }
 
             void SetName(std::string name) {
                 m_name = name;
             }
+
+            const std::string& GetName() const {
+                return m_name;
+            }
+
+            std::string& GetName() {
+                return m_name;
+            }
+
+            void PostProcessSNPs() {
+                size_t min_observations = 3;
+                size_t min_observations_fwdrev = 2;
+                double min_frequency = 0.2;
+                size_t min_avg_quality = 10;
+
+
+                for (auto& [tid, _] : m_taxa) {
+                    auto& taxon = m_taxa.at(tid);
+                    for (auto& [gid, __] : taxon.GetGenes()) {
+                        auto& gene = taxon.GetGenes().at(gid);
+                        auto& strain_handler = gene.GetStrainLevel();
+                        strain_handler.PostProcess(min_observations, min_observations_fwdrev, min_frequency, min_avg_quality);
+                    }
+                }
+            }
+
+            std::unordered_set<size_t> GetKeySet(std::optional<TaxonFilter> filter={}) {
+                std::unordered_set<size_t> keys;
+                for (auto& [id, taxon] : m_taxa) {
+                    if (filter.has_value() && !filter->Pass(taxon)) continue;
+                    keys.insert(id);
+                }
+                return keys;
+            }
+
+            std::string ToString(taxonomy::IntTaxonomy& taxonomy, std::optional<TaxonFilterObj> filter={}) {
+                std::string str;
+
+                str += m_name + '\t';
+                str += std::to_string(m_taxa.size());
+                if (filter.has_value()) {
+                    str += " (Filtered)";
+                }
+                str += '\n';
+                for (auto [id, _] : m_taxa) {
+                    auto& taxon = m_taxa.at(id);
+                    if (filter.has_value() && !filter->Pass(taxon)) continue;
+                    taxon.VerticalCoverage(true);
+                    str += taxon.ToString(taxonomy) + '\n';
+                }
+
+                return str;
+            }
+
+
 
             std::string ToString() {
                 std::string str;
@@ -330,10 +617,19 @@ namespace protal {
                 return m_taxa;
             }
 
+            const TaxonMap& GetTaxa() const {
+                return m_taxa;
+            }
 
-            void AnnotateWithTruth(TruthSet const& set) {
+            void ClearSams() {
+                for (auto& [id, _] : m_taxa) m_taxa.at(id).ClearSams();
+            }
+
+            void AnnotateWithTruth(TruthSet const& set, TaxonFilterObj& filter, std::string& output) {
+                std::ofstream os(output, std::ios::out);
+
 //                std::cout << "Truth: ________________" << std::endl;
-                TaxonFilter filter(0.95, 0.7, 70);
+
                 for (auto& [key, taxon] : m_taxa) {
                     bool positive = set.contains(key);
                     bool prediction = filter.Pass(taxon);
@@ -341,27 +637,36 @@ namespace protal {
 //                    if (!positive && !prediction) continue;
 
 
-                    std::cerr << "ANNOTATED\t" << positive << "\t";
-                    std::cerr << key << "\t";
-                    std::cerr << taxon.PresentGenes() << "\t";
-                    std::cerr << taxon.TotalHits() << "\t";
-                    std::cerr << taxon.UniqueHits() << "\t";
-                    std::cerr << taxon.GetMeanANI() << "\t";
-                    std::cerr << TaxonFilter::ExpectedGenePresence(taxon) << '\t';
-                    std::cerr << TaxonFilter::ExpectedGenePresenceRatio(taxon) << '\t';
-                    std::cerr << taxon.Uniqueness() << '\t';
-                    std::cerr << taxon.VCovStdDev() << '\t';
-                    std::cerr << prediction << std::endl;
+                    os << positive << "\t";
+                    os << prediction << "\t";
+                    os << key << "\t";
+                    os << taxon.PresentGenes() << "\t";
+                    os << taxon.TotalHits() << "\t";
+                    os << taxon.UniqueHits() << "\t";
+                    os << taxon.GetMeanANI() << "\t";
+                    os << TaxonFilter::ExpectedGenePresence(taxon) << '\t';
+                    os << TaxonFilter::ExpectedGenePresenceRatio(taxon) << '\t';
+                    os << taxon.Uniqueness() << '\t';
+                    os << taxon.GetMeanMAPQ() << '\t';
+                    os << taxon.VCovStdDev() << std::endl;
 
-                    if (prediction && taxon.GetMeanANI() < 0.95) {
-                        exit(19);
-                    }
+//
+//                    if (prediction && taxon.GetMeanANI() < 0.95) {
+//                        exit(19);
+//                    }
                 }
+
+                os.close();
             }
 
-            void WriteSparseProfile(taxonomy::IntTaxonomy& taxonomy, TaxonFilter const& filter, std::ostream &os=std::cout) {
-
+            void WriteSparseProfile(taxonomy::IntTaxonomy& taxonomy, TaxonFilterObj const& filter, std::ostream &os_filtered=std::cout, std::ostream* os_total=nullptr, std::ostream* os_dismissed=nullptr) {
                 bool one_pass = false;
+
+                std::string gene_covs_str = "";
+                std::string gene_cov_ratios_str = "";
+                std::vector<size_t> gene_covs(120, 0);
+                std::vector<double> gene_cov_ratios(120, 0.0);
+
 
                 double total_vcov = 0;
                 for (auto& pair : m_taxa) {
@@ -370,42 +675,70 @@ namespace protal {
                     pair.second.TotalHits();
                     bool prediction = filter.Pass(taxon);
                     if (!prediction) continue;
-//                    std::cout << "Taxon vertical coverage:  " << taxon.VerticalCoverage() << std::endl;
                     total_vcov += taxon.VerticalCoverage();
                 }
 
-//                std::cout << "total_vcov: " << total_vcov << std::endl;
-
                 for (auto& [key, _] : m_taxa) {
+                    // this is necessary as taxon cannot be constant
                     auto& taxon = m_taxa.at(key);
                     bool prediction = filter.Pass(taxon);
-                    if (!prediction) {
-                        std::cout << "dismiss: " << taxon.ToString() << " because: " << std::endl;
-                        filter.PrintViolatingValues(taxon);
-                        continue;
+                    one_pass |= prediction;
+
+                    gene_covs_str.clear();
+                    gene_cov_ratios_str.clear();
+                    std::fill(gene_covs.begin(), gene_covs.end(), 0);
+                    std::fill(gene_cov_ratios.begin(), gene_cov_ratios.end(), 0.0);
+
+
+
+                    for (auto& [id, _] : taxon.GetGenes()) {
+                        auto& gene = taxon.GetGenes().at(id);
+                        size_t cov = gene.GetStrainLevel().GetSequenceRangeHandler().CoveredPortion();
+                        double ratio = static_cast<double>(cov) / gene.m_gene_length;
+                        gene_covs[id] = cov;
+                        gene_cov_ratios[id] = ratio;
+
+                        auto stats_line = gene.GetStatisticsString();
+                        *os_dismissed << key << '\t';
+                        *os_dismissed << taxonomy.LineageStr(key) << '\t';
+                        *os_dismissed << taxon.GetName() << '\t';
+                        *os_dismissed << id << '\t';
+                        *os_dismissed << stats_line << '\n';
+
                     }
 
-                    one_pass = true;
+                    gene_covs_str = std::accumulate(gene_covs.begin(), gene_covs.end(), std::string{}, [](std::string acc, size_t val) {
+                        return(acc + "\t" + std::to_string(val));
+                    });
+                    gene_cov_ratios_str = std::accumulate(gene_cov_ratios.begin(), gene_cov_ratios.end(), std::string{}, [](std::string acc, double val) {
+                        return(acc + "\t" + std::to_string(val));
+                    });
+
+                    double mean_gene_covs = std::accumulate(gene_covs.begin(), gene_covs.end(), 0) /
+                                            static_cast<double>(taxon.GetGenes().size());
+                    double mean_gene_cov_ratios = std::accumulate(gene_cov_ratios.begin(), gene_cov_ratios.end(), 0) /
+                                            static_cast<double>(taxon.GetGenes().size());
 
                     auto node = taxonomy.Get(key);
-                    os << node.rep_genome << '\t' << "d__Bacteria|" << taxonomy.LineageStr(key) << '\t' << taxon.GetAbundance(total_vcov) << std::endl;
+
+                    if (prediction) {
+                        os_filtered << node.rep_genome << '\t' << "d__Bacteria|" << taxonomy.LineageStr(key) << '\t' << taxon.GetAbundance(total_vcov) << std::endl;
+                    }
+
+
+                    // Print all outputs
+                    if (os_total) {
+                        *os_total << (prediction ? "1" : "0") << "\t" << node.rep_genome << '\t' << "d__Bacteria|" << taxonomy.LineageStr(key) << '\t' << (prediction ? taxon.GetAbundance(total_vcov) : 0);
+                        *os_total << '\t' << taxon.ToString(taxonomy);
+                        *os_total << '\t' << taxon.VerticalCoverage();
+                        *os_total << '\t' << mean_gene_covs << '\t' << mean_gene_cov_ratios << '\t' << gene_covs_str << '\t' << gene_cov_ratios_str << std::endl;
+                    }
                 }
 
-                if (!one_pass) {
-                    for (auto &[key, taxon] : m_taxa) {
-                        bool prediction = filter.Pass(taxon);
 
-                        std::cerr << key << "\t";
-                        std::cerr << taxon.PresentGenes() << "\t";
-                        std::cerr << taxon.TotalHits() << "\t";
-                        std::cerr << taxon.UniqueHits() << "\t";
-                        std::cerr << taxon.GetMeanANI() << "\t";
-                        std::cerr << TaxonFilter::ExpectedGenePresence(taxon) << '\t';
-                        std::cerr << TaxonFilter::ExpectedGenePresenceRatio(taxon) << '\t';
-                        std::cerr << taxon.Uniqueness() << '\t';
-                        std::cerr << taxon.VerticalCoverage() << '\t';
-                        std::cerr << prediction << std::endl;
-                    }
+
+                if (!one_pass) {
+                    std::cout << "No taxon passes criteria" << std::endl;
                 }
             }
 
@@ -429,17 +762,6 @@ namespace protal {
             Profiler(GenomeLoader& genome_loader) :
                     m_genome_loader(genome_loader) {}
 
-            enum ReadEvidenceQuality{
-                EXCELLENT,
-                GOOD,
-                MEDIUM,
-                BAD,
-                SIZE
-            };
-            static const ReadEvidenceQuality quality_enum_list[];
-            static const std::string quality_map[];
-
-
         private:
             GenomeLoader& m_genome_loader;
 
@@ -452,11 +774,15 @@ namespace protal {
             CigarInfo m_info1;
             CigarInfo m_info2;
 
+            size_t m_min_alignment_length = 50;
+            size_t m_min_mapq = 4;
+
         public:
 
             SamPairs m_pairs_unique;
             SamPairList m_pairs_nonunique;
             SamPairs m_pairs_nonunique_best;
+            Benchmark m_post_process_bm{"Post-processing"};
 
             static std::pair<double, int> ScorePairedAlignment(OptIRA const& a, OptIRA const& b, double divide_penalty=2.2, double alone_penalty=2) {
                 int score = 0;
@@ -473,84 +799,10 @@ namespace protal {
                 }
                 return { ani, score };
             }
+
             static std::pair<double, int> ScorePairedAlignment(OptIRAPair const& pair, double divide_penalty=2.2, double alone_penalty=2) {
                 return ScorePairedAlignment(pair.first, pair.second);
             }
-
-
-            void
-            ProcessUnique(std::optional<InternalReadAlignment> const &ira, std::optional<InternalReadAlignment> const &ira2, ReadEvidenceQuality min_qual = ReadEvidenceQuality::GOOD) {
-//                auto [ani, score] = ScorePairedAlignment(ira, ira2);
-//                auto qual = GetReadEvidenceQuality(ani, score);
-//                static int good_qual_counter = 0;
-//                if (ira.has_value()) m_alignments.GetUniqueList(qual).emplace_back(ira.value());
-//                if (ira2.has_value()) m_alignments.GetUniqueList(qual).emplace_back(ira2.value());
-            }
-
-            void ProcessNonUniqueWorker(std::vector<InternalReadAlignment> &non_uniques) {
-//                if (non_uniques.empty()) return;
-//                // Assume scores are
-////                std::sort(non_uniques.begin(), non_uniques.end(),
-////                          [](InternalReadAlignment const &a, InternalReadAlignment const &b) {
-////                              return a.alignment_score > b.alignment_score;
-////                          });
-//                auto &best = non_uniques.front();
-//                auto qual = GetReadEvidenceQuality(best.alignment_ani, best.alignment_score);
-//
-//                m_alignments.GetNonUniqueList(qual).emplace_back(std::move(non_uniques));
-//                non_uniques.clear();
-            }
-
-            void ProcessNonUniqueWorker(InternalNonUniqueReadOptIRAPairList &non_uniques) {
-                if (non_uniques.empty()) return;
-                std::sort(non_uniques.begin(), non_uniques.end(), [](OptIRAPair const &a, OptIRAPair const &b) {
-                    auto status_a = PairedStatus(a);
-                    auto status_b = PairedStatus(b);
-
-                    bool one_paired_one_single =
-                            status_a == PAIRED && (status_b == FIRST_ONLY || status_b == SECOND_ONLY) ||
-                            status_b == PAIRED && (status_a == FIRST_ONLY || status_a == SECOND_ONLY);
-                    if (one_paired_one_single) {
-                        auto pair = status_a == PAIRED ? a : b;
-                        auto single = status_a == PAIRED ? b : a;
-
-                        if (std::max(pair.first.value().alignment_score, pair.second.value().alignment_score) == (single.first.has_value() ? single.first.value().alignment_score : single.second.value().alignment_score)) {
-                            return status_a == PAIRED;
-                        }
-                    }
-                    auto score_a1 = a.first.has_value() ? a.first.value().alignment_ani : 0;
-                    auto score_a2 = a.second.has_value() ? a.second.value().alignment_ani : 0;
-                    auto score_a = std::max(score_a1, score_a2);
-
-                    auto score_b1 = b.first.has_value() ? b.first.value().alignment_ani : 0;
-                    auto score_b2 = b.second.has_value() ? b.second.value().alignment_ani : 0;
-                    auto score_b = std::max(score_b1, score_b2);
-
-
-                    return score_a > score_b;
-                });
-
-                auto &best = non_uniques.front();
-
-                auto [ani, score] = ScorePairedAlignment(best);
-
-//                auto qual = GetReadEvidenceQuality(ani, score);
-
-                for (auto& nu : non_uniques) {
-                    if (nu.first.has_value() && nu.second.has_value() && nu.first->readid != nu.second->readid) {
-                        std::cout << "Error" << std::endl;
-                        exit(9);
-                    }
-                }
-
-                if (!IsAmbiguous(non_uniques)) {
-//                    m_alignments.GetNonUniquePairList(qual).emplace_back(std::move(non_uniques));
-                }
-
-                non_uniques.clear();
-            }
-
-
 
             static bool SameReadId(OptIRA const &ira1, OptIRA const &ira2, OptIRAPair const& pair) {
                 assert(pair.first.has_value() || pair.second.has_value());
@@ -576,55 +828,41 @@ namespace protal {
                 return pairless_header1 == pairless_header2;
             }
 
-            void ProcessNonUnique(std::optional<InternalReadAlignment> const &ira, std::optional<InternalReadAlignment> const &ira2) {
-//                static int good_qual_counter = 0;
-//                static int non_unique_same_id_counter = 0;
-//                if (!m_tmp_pair.empty() && !SameReadId(ira, ira2, m_tmp_pair.front())) {
-//                    ProcessNonUniqueWorker(m_tmp_pair);
-//                    non_unique_same_id_counter++;
+//            void Process(std::optional<InternalReadAlignment> const &ira,
+//                         std::optional<InternalReadAlignment> const &ira2,
+//                         bool unique) {
+//                assert(ira.has_value() || ira2.has_value());
+//                if (unique) {
+//                    ProcessUnique(ira, ira2);
+//                } else {
+////                    ProcessNonUnique(ira, ira2);
 //                }
-////                std::cout << "Emplace back " << static_cast<int64_t>(ira.has_value() ? ira->readid : -1) << " " << static_cast<int64_t>(ira2.has_value() ? ira2->readid : -1) << std::endl;
-//                if (ira.has_value() && ira2.has_value() && ira->readid != ira2->readid) {
-//                    std::cout << "Error" << std::endl;
-//                    exit(9);
+//            }
+
+//            void Process(size_t read_id, SamEntry &sam1, SamEntry &sam2, bool has_sam1, bool has_sam2, bool unique) {
+//                CigarInfo info;
+//                size_t min_alignment_length = 70;
+//                if (has_sam1) {
+//                    CompressedCigarInfo(sam1.m_cigar, info);
+//                    if (info.clipped_alignment_length < min_alignment_length) has_sam1 = false;
 //                }
-//                m_tmp_pair.emplace_back(OptIRAPair { ira, ira2 });
-            }
-
-            void Process(std::optional<InternalReadAlignment> const &ira,
-                         std::optional<InternalReadAlignment> const &ira2,
-                         bool unique) {
-                assert(ira.has_value() || ira2.has_value());
-                if (unique) {
-                    ProcessUnique(ira, ira2);
-                } else {
-                    ProcessNonUnique(ira, ira2);
-                }
-            }
-
-            void Process(size_t read_id, SamEntry &sam1, SamEntry &sam2, bool has_sam1, bool has_sam2, bool unique) {
-                CigarInfo info;
-                size_t min_alignment_length = 70;
-                if (has_sam1) {
-                    CompressedCigarInfo(sam1.m_cigar, info);
-                    if (info.clipped_alignment_length < min_alignment_length) has_sam1 = false;
-                }
-                if (has_sam2) {
-                    CompressedCigarInfo(sam2.m_cigar, info);
-                    if (info.clipped_alignment_length < min_alignment_length) has_sam2 = false;
-                }
-                if (!has_sam1 && !has_sam2) return;
-                OptIRA oira1 = has_sam1 ? OptIRA(InternalReadAlignment(read_id, sam1)) : OptIRA();
-                OptIRA oira2 = has_sam2 ? OptIRA(InternalReadAlignment(read_id, sam2)) : OptIRA();
-                Process(oira1, oira2, unique);
-            }
+//                if (has_sam2) {
+//                    CompressedCigarInfo(sam2.m_cigar, info);
+//                    if (info.clipped_alignment_length < min_alignment_length) has_sam2 = false;
+//                }
+//                if (!has_sam1 && !has_sam2) return;
+//                OptIRA oira1 = has_sam1 ? OptIRA(InternalReadAlignment(read_id, sam1)) : OptIRA();
+//                OptIRA oira2 = has_sam2 ? OptIRA(InternalReadAlignment(read_id, sam2)) : OptIRA();
+//                Process(oira1, oira2, unique);
+//            }
 
 
-            void FromSam(std::string &file_path) {
+            void FromSam(std::string &file_path, bool truth_in_header=false) {
                 m_pairs_unique.clear();
                 m_pairs_nonunique.clear();
                 m_pairs_nonunique_best.clear();
-                std::ifstream file(file_path, std::ios::in);
+//                std::ifstream file(file_path, std::ios::in);
+                igzstream file{ file_path.c_str() };
 
                 std::string delim = "\t";
                 std::string line;
@@ -642,7 +880,7 @@ namespace protal {
 
 
                 if (!std::getline(file, line)) {
-                    std::cerr << "Profile is empty" << std::endl;
+                    std::cerr << "Profile is empty " << file_path << std::endl;
                     exit(9);
                 }
 
@@ -657,8 +895,8 @@ namespace protal {
                 size_t read_id = 0;
                 while (GetSamPair(file, line, tokens, next, next_other, has_next1, has_next2)) {
 
-                    current_qname = has_current1 ? current.m_qname.substr(0, current.m_qname.length()-2) : current_other.m_qname.substr(0, current_other.m_qname.length()-2);
-                    next_qname = has_next1 ? next.m_qname.substr(0, next.m_qname.length()-2) : next_other.m_qname.substr(0, next_other.m_qname.length()-2);
+                    current_qname = has_current1 ? current.m_qname : current_other.m_qname;
+                    next_qname = has_next1 ? next.m_qname : next_other.m_qname;
                     bool unique = current_qname != last_qname && current_qname != next_qname;
                     last_qname = current_qname;
 
@@ -666,6 +904,10 @@ namespace protal {
                         has_current1 ? std::optional<SamEntry>{current} : std::optional<SamEntry>{},
                         has_current2 ? std::optional<SamEntry>{current_other} : std::optional<SamEntry>{}
                     );
+
+//                    std::cout << "----------------------- unique? " << unique << " " << current_qname << " " << last_qname << std::endl;
+//                    if (new_pair.HasFirst()) std::cout << new_pair.First().ToString() << std::endl;
+//                    if (new_pair.HasSecond()) std::cout << new_pair.Second().ToString() << std::endl;
 
                     if (unique) {
                         m_pairs_unique.emplace_back(std::move(new_pair));
@@ -690,6 +932,7 @@ namespace protal {
                         has_current2 ? std::optional<SamEntry>{current_other} : std::optional<SamEntry>{}
                 );
                 current_qname = has_current1 ? current.m_qname : current_other.m_qname;
+
                 bool unique = current_qname != last_qname;
                 if (unique) {
                     m_pairs_unique.emplace_back(std::move(new_pair));
@@ -706,7 +949,9 @@ namespace protal {
                 std::cout << "Non-Uniques:      " << m_pairs_nonunique.size() << std::endl;
                 std::cout << "Non-Uniques best: " << m_pairs_nonunique_best.size() << std::endl;
 
-                OutputErrorData(m_pairs_unique, m_pairs_nonunique);
+                if (truth_in_header) {
+                    OutputErrorData(m_pairs_unique, m_pairs_nonunique);
+                }
             }
 
 
@@ -745,8 +990,9 @@ namespace protal {
 //                    for (auto &snp: snps) {
 //                        std::cout << snp.ToString() << std::endl;
 //                    }
-                    sum += snps.size();
-                    Utils::Input();
+//                    sum += snps.size();
+//                    std::cout << ".........>" << std::endl;
+//                    Utils::Input();
                 }
                 bm.PrintResults();
                 std::cout << "Sum: " << sum << std::endl;
@@ -979,19 +1225,20 @@ namespace protal {
             }
 
 
-            void ProcessMAPQ(MicrobialProfile& profile, ProfilerOptions& options, AlignmentPair& ap, int read_id=0) {
+            void ProcessMAPQ(MicrobialProfile& profile, AlignmentPair& ap, int read_id=0) {
                 bool take_first = false;
                 bool take_second = false;
                 if (ap.HasFirst()) CompressedCigarInfo(ap.First().m_cigar, m_info1);
                 if (ap.HasSecond()) CompressedCigarInfo(ap.Second().m_cigar, m_info2);
 
-                if (ap.Any().m_mapq < options.min_mapq) {
+                if ((ap.HasFirst() && ap.First().m_mapq < m_min_mapq) || (ap.HasSecond() && ap.Second().m_mapq < m_min_mapq)) {
                     return;
                 }
-                if (ap.HasFirst() && m_info1.clipped_alignment_length > options.min_alignment_length) {
+
+                if (ap.HasFirst() && m_info1.clipped_alignment_length > m_min_alignment_length) {
                     take_first = true;
                 }
-                if (ap.HasSecond() && m_info2.clipped_alignment_length > options.min_alignment_length) {
+                if (ap.HasSecond() && m_info2.clipped_alignment_length > m_min_alignment_length) {
                     take_second = true;
                 }
                 if (!take_first && !take_second) return;
@@ -1013,36 +1260,45 @@ namespace protal {
                     auto [tid, geneid] = ExtractTaxidGeneid(ap.First().m_rname);
                     double score = m_score.Score(ap.First());
 
-                    if (options.IsMQ(score)) {
-                        profile.AddSam(tid, geneid, ap.First(), m_info1.Ani(), true, read_id);
-                    }
+                    profile.AddSam(tid, geneid, ap.First(), m_info1.Ani(), true, read_id);
+
+
+
                 } else if (take_second) {
                     auto [tid, geneid] = ExtractTaxidGeneid(ap.Second().m_rname);
                     double score = m_score.Score(ap.Second());
 
-                    if (options.IsMQ(score)) {
-                        profile.AddSam(tid, geneid, ap.Second(), m_info2.Ani(), true, read_id);
-                    }
+                    profile.AddSam(tid, geneid, ap.Second(), m_info2.Ani(), true, read_id);
                 }
+
+//                for (auto& [id, _] : profile.GetTaxa()) {
+//                    auto& taxon = profile.GetTaxa().at(id);
+//                    for (auto& [gid, gene] : taxon.GetGenes()) {
+//                        std::cout << gene.m_sams.front()->ToString() << std::endl;
+////                        for (auto& sam : gene.m_sams) {
+////                            std::cout << sam->ToString() << std::endl;
+////                        }
+//                    }
+//                }
+
             }
 
-            void ProcessUnique(MicrobialProfile& profile, ProfilerOptions& options, AlignmentPair& ap) {
+            void ProcessUnique(MicrobialProfile& profile, AlignmentPair& ap) {
                 bool take_first = false;
                 bool take_second = false;
                 if (ap.HasFirst()) CompressedCigarInfo(ap.First().m_cigar, m_info1);
                 if (ap.HasSecond()) CompressedCigarInfo(ap.Second().m_cigar, m_info2);
 
-
-                if (ap.HasFirst() && m_info1.clipped_alignment_length > options.min_alignment_length) {
+                if (ap.HasFirst() && ap.HasSecond() && (m_info1.clipped_alignment_length + m_info2.clipped_alignment_length) > m_min_alignment_length) {
                     take_first = true;
-                }
-                if (ap.HasSecond() && m_info2.clipped_alignment_length > options.min_alignment_length) {
+                    take_second = true;
+                } else if (ap.HasFirst() && m_info1.clipped_alignment_length > m_min_alignment_length) {
+                    take_first = true;
+                } else if (ap.HasSecond() && m_info2.clipped_alignment_length > m_min_alignment_length) {
                     take_second = true;
                 }
+
                 if (!take_first && !take_second) return;
-
-                std::cout << "Process unique " << take_first << "  " << take_second << std::endl;
-
 
                 if (take_first && take_second) {
                     auto [tid1, geneid1] = ExtractTaxidGeneid(ap.First().m_rname);
@@ -1060,214 +1316,38 @@ namespace protal {
                     auto [tid, geneid] = ExtractTaxidGeneid(ap.First().m_rname);
                     double score = m_score.Score(ap.First());
 
-                    if (options.IsMQ(score)) {
-                        profile.AddSam(tid, geneid, ap.First(), score, true);
-                    }
+                    profile.AddSam(tid, geneid, ap.First(), score, true);
                 } else if (take_second) {
                     auto [tid, geneid] = ExtractTaxidGeneid(ap.Second().m_rname);
                     double score = m_score.Score(ap.Second());
 
-                    if (options.IsMQ(score)) {
-                        profile.AddSam(tid, geneid, ap.Second(), score, true);
-                    }
+                    profile.AddSam(tid, geneid, ap.Second(), score, true);
                 }
             }
 
-            void ProcessNonUnique(MicrobialProfile& profile, ProfilerOptions& options, std::vector<AlignmentPair>& aps) {
-
-            }
-
-
-            MicrobialProfile Profile(ProfilerOptions& options) {
+            MicrobialProfile Profile() {
                 std::cout << "Profile " << m_pairs_unique.size() << std::endl;
                 MicrobialProfile profile(m_genome_loader);
 
-//                for (auto sam_pair : m_pairs_unique) {
-//                    ProcessUnique(profile, options, sam_pair);
-//                }
-//                for (auto sam_pair : m_pairs_nonunique) {
-//                    ProcessNonUnique(profile, options, sam_pair);
-//                }
+                size_t read_id = 0;
 
-                for (auto sam_pair : m_pairs_unique) {
-                    ProcessMAPQ(profile, options, sam_pair);
+                for (auto& sam_pair : m_pairs_unique) {
+                    ProcessMAPQ(profile, sam_pair, read_id++);
                 }
                 for (auto sam_pair : m_pairs_nonunique_best) {
-                    ProcessMAPQ(profile, options, sam_pair);
+                    ProcessMAPQ(profile, sam_pair, read_id++);
                 }
+
+                m_post_process_bm.Start();
+                profile.PostProcessSNPs();
+                m_post_process_bm.Stop();
+
+
+                profile.ClearSams();
+
 
                 return profile;
             }
-
-//            MicrobialProfile ProfileWithTruth(TruthSet const& set) {
-//                MicrobialProfile profile(m_genome_loader);
-//                profile.SetName("Profile");
-//
-//                size_t total_reads_profiled = 0;
-//
-//                size_t uniques_total = 0;
-//                size_t uniques_fp = 0;
-//                size_t nonuniques_total = 0;
-//                size_t nonuniques_fp = 0;
-//
-//                std::cout << "Uniques" << std::endl;
-//                for (int i = 0; i < ReadEvidenceQuality::SIZE; i++) {
-//                    auto qual = quality_enum_list[i];
-//                    auto& uniques = m_alignments.GetUniqueList(qual);
-//                    std::cout << qual << " " << uniques.size() << std::endl;
-//                    for (auto& ira : uniques) {
-//                        total_reads_profiled++;
-//                        if (!set.contains(ira.taxid)) {
-//                            uniques_fp++;
-//                        }
-//                        uniques_total++;
-//                        profile.AddRead(ira, true);
-//                    }
-//
-//                }
-//
-//                std::cout << "Non Unique Pairs" << std::endl;
-//                for (int i = 0; i < ReadEvidenceQuality::SIZE; i++) {
-//                    auto qual = quality_enum_list[i];
-//                    auto& non_uniques = m_alignments.GetNonUniquePairList(qual);
-//                    std::cout << qual << " " << non_uniques.size() << std::endl;
-//                    for (auto& ira_pair_list : non_uniques) {
-//                        bool fp = false;
-//                        if (ira_pair_list.front().first.has_value()) {
-//                            profile.AddRead(ira_pair_list.front().first.value(), false);
-//                            total_reads_profiled++;
-//
-//                            // DEBUG
-//                            if (!set.contains(ira_pair_list.front().first.value().taxid)) {
-//                                fp = true;
-//                                nonuniques_fp++;
-//                            }
-//                            nonuniques_total++;
-//                            //DEBUG
-//                        }
-//                        if (ira_pair_list.front().second.has_value()) {
-//                            profile.AddRead(ira_pair_list.front().second.value(), false);
-//                            total_reads_profiled++;
-//
-//                            // DEBUG
-//                            if (!set.contains(ira_pair_list.front().second.value().taxid)) {
-//                                fp = true;
-//                                nonuniques_fp++;
-//                            }
-//                            nonuniques_total++;
-//                            //DEBUG
-//                        }
-////                        if (fp) {
-////                            std::cout << "Non uniques: " << ira_pair_list.size() << std::endl;
-////                        }
-//                        for (auto& ira_pair : ira_pair_list) {
-////                            if (fp) {
-////                                bool first_correct = ira_pair.first.has_value() && set.contains(ira_pair.first.value().taxid);
-////                                bool second_correct = ira_pair.second.has_value() && set.contains(ira_pair.second.value().taxid);
-////                                std::string tr = first_correct || second_correct ? "true" : "false";
-////                                std::cout << (ira_pair.first.has_value() ? ira_pair.first->ToString() + " " + tr + "\n" : "");
-////                                std::cout << (ira_pair.second.has_value() ? ira_pair.second->ToString() + " " + tr + "\n" : "");
-////                                std::cout << "---" << std::endl;
-////                            }
-//                            if (ira_pair.first.has_value() && ira_pair.second.has_value() && ira_pair.first->readid != ira_pair.second->readid) {
-//                                std::cout << "Erroneous" << std::endl;
-//                                exit(9);
-//                            }
-//                        }
-////                        if (fp) Utils::Input();
-//                    }
-//                }
-//
-//                std::cout << "Non Uniques" << std::endl;
-//                for (int i = 0; i < ReadEvidenceQuality::SIZE; i++) {
-//                    auto qual = quality_enum_list[i];
-//                    auto& non_uniques = m_alignments.GetNonUniqueList(qual);
-//                    std::cout << qual << " " << non_uniques.size() << std::endl;
-//                    for (auto& ira : non_uniques) {
-//                        profile.AddRead(ira.front(), false);
-//                        total_reads_profiled++;
-//                    }
-//                }
-//
-//                std::cout << "Unique fp rate:     " << uniques_fp << "/" << uniques_total << "\t\t" << static_cast<double>(uniques_fp) / static_cast<double>(uniques_total) << std::endl;
-//                std::cout << "Non-Unique fp rate: " << nonuniques_fp << "/" << nonuniques_total << "\t\t" << static_cast<double>(nonuniques_fp) / static_cast<double>(nonuniques_total) << std::endl;
-//
-//                std::cout << "Reads contributed to profiles: " << total_reads_profiled << std::endl;
-//                return profile;
-//            }
-//            MicrobialProfile Profile() {
-//                MicrobialProfile profile(m_genome_loader);
-//                profile.SetName("Profile");
-//
-//                size_t total_reads_profiled = 0;
-//
-//                std::cout << "Uniques" << std::endl;
-//                for (int i = 0; i < ReadEvidenceQuality::SIZE; i++) {
-//                    auto qual = quality_enum_list[i];
-//                    auto& uniques = m_alignments.GetUniqueList(qual);
-//                    std::cout << qual << " " << uniques.size() << std::endl;
-//                    for (auto& ira : uniques) {
-//                        total_reads_profiled++;
-//                        profile.AddRead(ira, true);
-//                    }
-//                }
-//
-//                std::cout << "Non Unique Pairs" << std::endl;
-//                for (int i = 0; i < ReadEvidenceQuality::SIZE; i++) {
-//                    auto qual = quality_enum_list[i];
-//                    auto& non_uniques = m_alignments.GetNonUniquePairList(qual);
-//                    std::cout << qual << " " << non_uniques.size() << std::endl;
-//                    for (auto& ira_pair_list : non_uniques) {
-//                        if (ira_pair_list.front().first.has_value()) {
-//                            profile.AddRead(ira_pair_list.front().first.value(), false);
-//                            total_reads_profiled++;
-//                        }
-//                        if (ira_pair_list.front().second.has_value()) {
-//                            profile.AddRead(ira_pair_list.front().second.value(), false);
-//                            total_reads_profiled++;
-//                        }
-//                        std::cout << "Non uniques: " << ira_pair_list.size() << std::endl;
-//                        for (auto& ira_pair : ira_pair_list) {
-//                            std::cout << (ira_pair.first.has_value() ? ira_pair.first->ToString() : "") << std::endl;
-//                            std::cout << (ira_pair.second.has_value() ? ira_pair.second->ToString() : "") << std::endl;
-//                            std::cout << "---" << std::endl;
-//                            if (ira_pair.first.has_value() && ira_pair.second.has_value() && ira_pair.first->readid != ira_pair.second->readid) {
-//                                std::cout << "Erroneous" << std::endl;
-//                                exit(9);
-//                            }
-//                        }
-//                    }
-//                }
-//
-//                std::cout << "Non Uniques" << std::endl;
-//                for (int i = 0; i < ReadEvidenceQuality::SIZE; i++) {
-//                    auto qual = quality_enum_list[i];
-//                    auto& non_uniques = m_alignments.GetNonUniqueList(qual);
-//                    std::cout << qual << " " << non_uniques.size() << std::endl;
-//                    for (auto& ira : non_uniques) {
-//                        profile.AddRead(ira.front(), false);
-//                        total_reads_profiled++;
-//                    }
-//                }
-//
-//                std::cout << "Reads contributed to profiles: " << total_reads_profiled << std::endl;
-//                return profile;
-//            }
-
-
         };
-//        const Profiler::ReadEvidenceQuality Profiler::quality_enum_list[] = {
-//            Profiler::ReadEvidenceQuality::EXCELLENT,
-//            Profiler::ReadEvidenceQuality::GOOD,
-//            Profiler::ReadEvidenceQuality::MEDIUM,
-//            Profiler::ReadEvidenceQuality::BAD
-//        };
-//
-//        const std::string Profiler::quality_map[] = {
-//            "Excellent",
-//            "Good",
-//            "Medium",
-//            "Bad"
-//        };
     }
 }

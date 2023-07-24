@@ -1,4 +1,4 @@
-# Install script for directory: /usr/users/QIB_fr017/fritsche/CLionProjects/simmatrix/lib/gzstream
+# Install script for directory: /usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/gzstream
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

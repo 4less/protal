@@ -127,8 +127,12 @@ bool BufferedFastxReader::LoadBatch(std::istream &ifs, size_t record_count) {
 
     size_t line_count = 0;
     while (record_count > 0 && ifs) {
+        str_buffer_.clear();
         if (getline(ifs, str_buffer_))
             line_count++;
+        else {
+            break;
+        }
         valid = true;
         if (file_format_ == FORMAT_FASTQ) {
             if (line_count % 4 == 0)
@@ -152,8 +156,13 @@ bool BufferedFastxReader::NextSequence(FastxRecord &seq) {
 
 bool BufferedFastxReader::ReadNextSequence(std::istream &is, FastxRecord &record,
                                            std::string &str_buffer, FileFormat file_format) {
-    if (!getline(is, str_buffer))
+//    if (!getline(is >> std::ws, str_buffer)) {
+    str_buffer.clear();
+
+    if (!getline(is, str_buffer)) {
         return false;
+    }
+
     StripString(str_buffer);
     if (file_format == FORMAT_AUTO_DETECT) {
         switch (str_buffer[0]) {
@@ -173,8 +182,10 @@ bool BufferedFastxReader::ReadNextSequence(std::istream &is, FastxRecord &record
     }
     record.format = file_format;
     if (record.format == FORMAT_FASTQ) {
-        if (str_buffer.empty()) // Allow empty line to end file
+        if (str_buffer.empty()) { // Allow empty line to end file
+            std::cout << "2 false.... " << std::endl;
             return false;
+        }
         if (str_buffer[0] != '@') {
             errx(EX_DATAERR, "malformed FASTQ file (exp. '@', saw \"%s\"), aborting",
                  str_buffer.c_str());
@@ -192,8 +203,9 @@ bool BufferedFastxReader::ReadNextSequence(std::istream &is, FastxRecord &record
         substr_len--;
     if (str_buffer.size() > 1)
         record.id.assign(str_buffer, 1, substr_len);
-    else
+    else {
         return false;
+    }
     
     
     if (record.format == FORMAT_FASTQ) {
@@ -207,6 +219,7 @@ bool BufferedFastxReader::ReadNextSequence(std::istream &is, FastxRecord &record
             return false;
         StripString(str_buffer);
         record.quality.assign(str_buffer);
+
     } else if (record.format == FORMAT_FASTA) {
         record.quality.assign("");
         record.sequence.assign("");

@@ -8,49 +8,53 @@ int main(int argc, char *argv[]) {
     std::cin.tie(NULL);
     std::cout.tie(NULL);
 
+    std::string first2 = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/SRR7280802_1c.fastq";
+    std::string second2 = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/SRR7280802_2c.fastq";
+    std::string first = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/sub1c.fastq";
+    std::string second = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/sub2c.fastq";
 
+//    igzstream is1 { first.c_str() };
+//    igzstream is2 { second.c_str() };
+    std::ifstream is1 { first.c_str() };
+    std::ifstream is2 { second.c_str() };
+    protal::SeqReaderPE reader{is1, is2};
+    FastxRecord record1;
+    FastxRecord record2;
 //
-//    std::string sam_path = "/usr/users/QIB_fr017/fritsche/Projects/data/protal/database/test/gprev/short.sam";
-//
-//    samFile *sam_in = sam_open(sam_path.c_str(), "r");
-//    bam_hdr_t *header = sam_hdr_read(sam_in); //read header
-//    bam1_t *aln = bam_init1();
-//
-//    std::cout << "Header: " << header << std::endl;
-//
-//    std::cout << header->ref_count << std::endl;
-//    std::cout << header->n_targets << std::endl;
-//    std::cout << header->text << std::endl;
-//    std::cout << header->l_text << std::endl;
-//    std::cout << sam_in->state << std::endl;
-//    std::cout << sam_in->line.l << std::endl;
-//
-//    while (sam_read1(sam_in, header, aln) >= 0) {
-//
-//        int32_t pos = aln->core.pos +1; //left most position of alignment in zero based coordianate (+1)
-//        char *chr = header->target_name[aln->core.tid] ; //contig name (chromosome)
-//        uint32_t len = aln->core.l_qseq; //length of the read.
-//
-//        uint8_t *q = bam_get_seq(aln); //quality string
-//        uint32_t q2 = aln->core.qual ; //mapping quality
-//
-//
-//        char *qseq = (char *)malloc(len);
-//
-//        std::cout << "Malloc: " << len << std::endl;
-//        for(int i=0; i< len ; i++){
-//            qseq[i] = seq_nt16_str[bam_seqi(q,i)]; //gets nucleotide id and converts them into IUPAC id.
-//        }
-//
-//        std::cout << bam_get_qname(aln) << std::endl;
-//        printf("%s\t%d\t%d\t%s\t%s\t%d\n",chr,pos,len,qseq,q,q2);
-//
+//    for (std::string line; std::getline(is1, line);) {
+//        std::cout << line << std::endl;
 //    }
 //
-//    bam_destroy1(aln);
-//    sam_close(sam_in);
+//    exit(9);
+//    BufferedFastxReader readerx;
+
+//    while (true) {
+//        bool ok = false;
 //
-//    exit(0);
+//        ok = readerx.LoadBatch(is1, 2048);
+//        if (!ok) break;
+//
+//        // Read records from datablock
+//        while (true) {
+//            // Read from read1
+//            auto valid_fragment = readerx.NextSequence(record1);
+//            if (!valid_fragment) break;
+//
+//            std::cout << record1.to_string() << std::endl;
+//        }
+//    }
+//    exit(12);
+//
+//    while (reader(record1, record2)) {
+//
+//        std::cout << record1.sequence.length() << " " << record1.quality.length() << std::endl;
+//        std::cout << record2.sequence.length() << " " << record2.quality.length() << std::endl;
+//
+//        std::cout << "-----" << std::endl;
+//        std::cout << record1.to_string() << std::endl;
+//        std::cout << record2.to_string() << std::endl;
+//    }
+//    exit(90);
 
 //    test::TestEndsFree();
     protal::Run(argc, argv);

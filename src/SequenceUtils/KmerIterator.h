@@ -257,6 +257,11 @@ namespace protal {
         inline void operator () (std::string_view const& sequence, KmerList& list) {
             list.clear();
             SetSequence(sequence);
+
+            if (m_seq.length() < m_k) {
+                return;
+            }
+
             while (NextWrapper(m_kmer)) {
                 m_mmer = (m_kmer >> m_mshift) & m_mmask;
 
@@ -270,6 +275,11 @@ namespace protal {
         inline void operator () (std::string_view const&& sequence, KmerList& list) {
             list.clear();
             SetSequence(sequence);
+
+            if (m_seq.length() < m_k) {
+                return;
+            }
+
             while (NextWrapper(m_kmer)) {
                 m_mmer = (m_kmer >> m_mshift) & m_mmask;
 

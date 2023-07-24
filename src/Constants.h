@@ -121,7 +121,7 @@ namespace protal {
     template <typename T>
     concept AlignmentHandlerConcept =
     requires(T t, AlignmentAnchorList a, AlignmentResultList r, std::string s, size_t top) {
-        { t(a, r, s, top) } -> std::same_as<void>;
+        { t(a, r, s, top, s) } -> std::same_as<void>;
     };
 
     /*

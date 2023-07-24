@@ -20,11 +20,11 @@ namespace protal {
         string name;
         long time_sum = 0;
         size_t samplings = 0;
-        size_t threads_sampled = 1;
+        size_t threads_sampled = 0;
         time_point<high_resolution_clock> start_time;
 
     public:
-        Benchmark(string name, size_t threads_sampled=1) : name(name), threads_sampled(threads_sampled) {
+        Benchmark(string name, size_t threads_sampled=0) : name(name), threads_sampled(threads_sampled) {
             //Start();
         }
 
@@ -72,13 +72,17 @@ namespace protal {
         }
 
         void Join(Benchmark const& other, bool add_thread=true) {
-            if (add_thread && time_sum > 0) threads_sampled++;
+            if (add_thread && other.samplings > 0) threads_sampled++;
             time_sum += other.time_sum;
         }
 
         void PrintResults() {
             if (time_sum == 0) {
                 Stop();
+            }
+
+            if (samplings > 0) {
+                threads_sampled++;
             }
 
             if (threads_sampled > 1) {

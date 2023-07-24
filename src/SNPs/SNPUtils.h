@@ -6,22 +6,19 @@
 #include "SNP.h"
 #include "SamHandler.h"
 #include "AlignmentUtils.h"
+#include "Variant.h"
+#include "robin_map.h"
 
 namespace protal {
     using SNPList = std::vector<SNP>;
 
-    class SNPNode {
+    using VariantBin = std::vector<Variant>;
+    using Variants = tsl::robin_map<uint32_t, VariantBin>;
 
-    };
-
-    class SNPNetwork {
-        
-    };
-
-    static void ExtractSNPs(SamEntry const& sam, std::string const& reference, SNPList &snps, int taxid, int geneid, int read_id = 0) {
-        snps.clear();
+    static bool ExtractSNPs(SamEntry const& sam, std::string const& reference, SNPList &snps, int taxid, int geneid, int read_id = 0) {
+//        snps.clear();
         int qpos = 0;
-        int rpos = sam.m_pos;
+        int rpos = sam.m_pos - 1;
 
         int count = 0;
         char op = ' ';
@@ -45,7 +42,8 @@ namespace protal {
             is_variant = false;
             if (op == 'M') {
                 for (auto i = 0; i < count; i++) {
-                    if (sam.m_seq[qpos + i] != reference[rpos+i]) {
+                    if (sam.m_seq[qpos + i] != 'N' && reference[rpos+i] != 'N' && sam.m_seq[qpos + i] != reference[rpos+i]) {
+                        std::cerr << sam.m_seq[qpos + i] << "-" << reference[rpos+i] << std::endl;
                         faulty = true;
                     }
                 }
@@ -77,15 +75,24 @@ namespace protal {
                 snps.emplace_back(std::move(snp));
             }
 
-            qpos += (op != 'I') * count;
-            rpos += (!(op == 'D' || op == 'S')) * count;
-        }
-//        for (auto snp : snps) {
-//            std::cout << snp.ToString() << std::endl;
-//        }
+            qpos += (op != 'D') * count;
+            rpos += (!(op == 'I' || op == 'S')) * count;
 
-        if (faulty) {
-            exit(3);
+//            if (faulty) exit(123);
         }
+
+//        if (faulty) {
+//            std::cerr << "FAULTY ---------------------------------" << std::endl;
+//            PrintAlignment(sam, reference, std::cerr);
+//            for (auto snp : snps) {
+//                std::cerr << snp.ToString() << std::endl;
+//            }
+//            std::cerr << sam.m_seq << std::endl;
+//            std::cerr << "Faulty sam: \n" << sam.ToString() << std::endl;
+//            return false;
+//        }
+        return !faulty;
     }
+
+
 }

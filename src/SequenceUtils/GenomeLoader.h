@@ -47,7 +47,9 @@ namespace protal {
             return !m_sequence.empty();
         }
         void Load() {
-            Load(m_sequence, m_start_byte, m_length);
+            if (!IsLoaded()) {
+                Load(m_sequence, m_start_byte, m_length);
+            }
         };
 
         size_t GetLength() const {
@@ -98,6 +100,10 @@ namespace protal {
         void LoadGene(GeneKey key) {
             m_genes[GeneKeyToIndex(key)].Load();
         };
+
+        bool HasGene(GeneKey key) {
+            return GeneKeyToIndex(key) < m_genes.size();
+        }
 
         Gene& GetGene(GeneKey key) {
             return m_genes.at(GeneKeyToIndex(key));
@@ -202,14 +208,25 @@ namespace protal {
             std::sort(keys.begin(), keys.end());
 
             for (auto& key : keys) {
-                m_genomes.at(key).LoadGenome();
+                if (!m_genomes.at(key).IsLoaded()){
+                    m_genomes.at(key).LoadGenome();
+                }
             }
+        }
+
+        bool AllGenomesLoaded() {
+            for (auto& [id, genome] : m_genomes) {
+                if (!genome.IsLoaded()){
+                    return false;
+                }
+            }
+            return true;
         }
 
         Genome& GetGenome(GenomeKey const& key) {
             assert(m_genomes.contains(key));
             if (!m_genomes.contains(key)) {
-                std::cout << key << std::endl;
+                std::cout << "Genomes Key: " << key << std::endl;
                 exit(10);
             }
             return m_genomes.at(key);

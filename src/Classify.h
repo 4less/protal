@@ -99,7 +99,7 @@ namespace protal::classify {
 
                 // Do Alignment
                 bm_alignment.Start();
-                alignment_handler(anchors, alignment_results, record.sequence, options.GetAlignTop());
+                alignment_handler(anchors, alignment_results, record.sequence, options.GetAlignTop(), record.id);
                 bm_alignment.Stop();
 
 //                Utils::Input();
@@ -192,9 +192,9 @@ namespace protal::classify {
             for (auto& alignment2 : read2) {
                 if (alignment1.Taxid() == alignment2.Taxid() && alignment1.GeneId() == alignment2.GeneId()) {
                     if (!CorrectOrientation(alignment1, alignment2)) {
-                        std::cout << "Discard: " << std::endl;
-                        std::cout << alignment1.ToString() << std::endl;
-                        std::cout << alignment2.ToString() << std::endl;
+                        std::cerr << "Discard: " << std::endl;
+                        std::cerr << alignment1.ToString() << std::endl;
+                        std::cerr << alignment2.ToString() << std::endl;
                         continue;
                     }
 
@@ -305,6 +305,7 @@ namespace protal::classify {
                 alignment_results2.clear();
                 paired_alignment_results.clear();
 
+
                 // Retrieve kmers
                 kmer_handler(std::string_view(record1.sequence), kmers1);
 
@@ -346,8 +347,7 @@ namespace protal::classify {
                 auto recover2 = anchor_finder2.RecoverAnchors(anchors2, anchor_finder1.BestAnchors(), options.GetAlignTop());
                 bm_anchor_recovery.Stop();
 
-
-                //                std::cout << "Anchors1 after" << std::endl;
+//                std::cout << "Anchors1 after" << std::endl;
 //                for (auto& a : anchors1) {
 //                    std::cout << a.ToString() << std::endl;
 //                }
@@ -370,8 +370,8 @@ namespace protal::classify {
 
                 // Do Alignment
                 bm_alignment.Start();
-                alignment_handler(anchors1, alignment_results1, record1.sequence, options.GetAlignTop() + recover1);
-                alignment_handler(anchors2, alignment_results2, record2.sequence, options.GetAlignTop() + recover2);
+                alignment_handler(anchors1, alignment_results1, record1.sequence, options.GetAlignTop() + recover1, record1.id);
+                alignment_handler(anchors2, alignment_results2, record2.sequence, options.GetAlignTop() + recover2, record2.id);
                 bm_alignment.Stop();
 
                 thread_statistics.total_alignments += alignment_results1.size();
@@ -461,31 +461,37 @@ namespace protal::classify {
 //        adoh_os.close();
 
         if constexpr (benchmark_active) {
-            std::cout << "\n------------Alignment benchmarks------------------" << std::endl;
-            benchmark_global.WriteRowStats();
-            std::cout << "----------------------------------------------------\n" << std::endl;
-            benchmark_global.WriteRowStatsToFile(options.GetOutputPrefix() + "_benchmark.tsv");
+            if (options.Verbose()) {
+                std::cout << "\n------------Alignment benchmarks------------------" << std::endl;
+                benchmark_global.WriteRowStats();
+                std::cout << "----------------------------------------------------\n" << std::endl;
+            }
+            benchmark_global.WriteRowStatsToFile(options.GetPrefix(options.GetCurrentIndex()) + "_benchmark.tsv");
         }
 
-        std::cout << "---------------Speed benchmarks---------------------" << std::endl;
-        anchor_finder_global.m_bm_seeding.PrintResults();
-        anchor_finder_global.m_bm_seed_subsetting.PrintResults();
-        anchor_finder_global.m_bm_processing.PrintResults();
-        anchor_finder_global.m_bm_pairing.PrintResults();
-        anchor_finder_global.m_bm_sorting_anchors.PrintResults();
-        anchor_finder_global.m_bm_recovering_anchors.PrintResults();
-        anchor_finder_global.m_bm_extend_anchors.PrintResults();
-        bm_anchor_finder_global.PrintResults();
-        bm_anchor_recovery_global.PrintResults();
-        bm_alignment_global.PrintResults();
-        bm_alignment_join_sort_global.PrintResults();
-        bm_output_global.PrintResults();
-        alignment_handler_global.bm_alignment.PrintResults();
-        std::cout << "----------------------------------------------------\n" << std::endl;
+        if (options.Verbose()) {
+            std::cout << "---------------Speed benchmarks---------------------" << std::endl;
+            anchor_finder_global.m_bm_seeding.PrintResults();
+            anchor_finder_global.m_bm_seed_subsetting.PrintResults();
+            anchor_finder_global.m_bm_processing.PrintResults();
+            anchor_finder_global.m_bm_pairing.PrintResults();
+            anchor_finder_global.m_bm_sorting_anchors.PrintResults();
+            anchor_finder_global.m_bm_recovering_anchors.PrintResults();
+            anchor_finder_global.m_bm_extend_anchors.PrintResults();
+            bm_anchor_finder_global.PrintResults();
+            bm_anchor_recovery_global.PrintResults();
+            bm_alignment_global.PrintResults();
+            bm_alignment_join_sort_global.PrintResults();
+            bm_output_global.PrintResults();
+            alignment_handler_global.bm_alignment.PrintResults();
+            std::cout << "----------------------------------------------------\n" << std::endl;
 
-        std::cout << "Reads that had anchors recovered: " << static_cast<double>(anchor_finder_global.recovered_count) / anchor_finder_global.total_count << std::endl;
+            std::cout << "Reads that had anchors recovered: "
+                      << static_cast<double>(anchor_finder_global.recovered_count) / anchor_finder_global.total_count
+                      << std::endl;
+        }
 
-        std::ofstream time_os(options.GetOutputPrefix() + "_runtime.tsv", std::ios::out);
+        std::ofstream time_os(options.GetPrefix(options.GetCurrentIndex()) + "_runtime.tsv", std::ios::out);
         time_os << anchor_finder_global.m_bm_seeding.GetName() << '\t' << anchor_finder_global.m_bm_seeding.GetDuration(Time::seconds) << '\n';
         time_os << anchor_finder_global.m_bm_processing.GetName() << '\t' << anchor_finder_global.m_bm_processing.GetDuration(Time::seconds) << '\n';
         time_os << anchor_finder_global.m_bm_pairing.GetName() << '\t' << anchor_finder_global.m_bm_pairing.GetDuration(Time::seconds) << '\n';
@@ -498,8 +504,8 @@ namespace protal::classify {
         time_os << bm_output_global.GetName() << '\t' << bm_output_global.GetDuration(Time::seconds) << '\n';
         time_os.close();
 
-        seed_sizes_global.ToTSV(options.GetOutputPrefix() + "_seedsizes_histogram.tsv");
-        anchor_sizes_global.ToTSV(options.GetOutputPrefix() + "_anchorsizes_histogram.tsv");
+        seed_sizes_global.ToTSV(options.GetPrefix(options.GetCurrentIndex()) + "_seedsizes_histogram.tsv");
+        anchor_sizes_global.ToTSV(options.GetPrefix(options.GetCurrentIndex()) + "_anchorsizes_histogram.tsv");
 
         return statistics;
     }
