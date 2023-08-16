@@ -679,6 +679,9 @@ std::string protal::taxonomy::IntTaxonomy::LineageStr(int t, const std::vector<s
             result[index] = node.scientific_name;
         }
         nid = pid;
+        if (!map.contains(nid)) {
+            Utils::Input();
+        }
         pid = map.at(nid).parent_id;
     }
 

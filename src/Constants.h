@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include "FastxReader.h"
 
 namespace protal {
     enum DebugLevel {

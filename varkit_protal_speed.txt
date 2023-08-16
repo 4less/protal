@@ -1,0 +1,23 @@
+classified 875613/875639 in 41s 727ms
+classified 875613/875639 in 40s 948ms
+classified 875613/875639 in 46s 492ms
+
+
+Run classify took 14s 828ms (1)
+Run classify took 14s 479ms (1)
+Run classify took 15s 221ms (1)
+
+
+
+
+Benchmark (4 cores 10GB reads)
+varkit: 12m 44s 303ms
+protal: 3m 18s 114ms
+
+On other node:
+protal: 26s 869ms
+varkit: 7m 44s 86ms
+
+again:
+protal: 26s 456ms
+varkit: 7m 43s 617ms

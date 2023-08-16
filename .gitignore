@@ -1,0 +1,11 @@
+/src/wfa*
+/src/cPMML
+/src/fmt
+/src/gzstream
+/src/htslib
+/data/*
+/cmake*
+/lib/htslib-1.16
+.cache
+.fleet
+/tests

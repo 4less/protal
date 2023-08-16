@@ -222,6 +222,19 @@ CoverageVec SequenceRangeHandler::CalculateCoverageVector() {
     return m_cov;
 }
 
+
+CoverageVec SequenceRangeHandler::CalculateCoverageVector2() const {
+    CoverageVec cov;
+    for (auto &range : m_ranges) {
+        if (range.m_start > cov.size()) {
+            cov.resize(range.m_start, 0);
+        }
+        auto rcov = range.CoverageVector();
+        cov.insert(cov.end(), rcov.begin(), rcov.end());
+    }
+    return cov;
+}
+
 size_t SequenceRangeHandler::CoveredPortion(uint16_t min_cov) {
     size_t count = 0;
     for (auto &range : m_ranges) {
@@ -252,8 +265,8 @@ SequenceRangeHandler SequenceRangeHandler::FromCoverageVector(CoverageVec const&
 
 
 SequenceRangeHandler SequenceRangeHandler::Intersect(SequenceRangeHandler &handler, size_t min_coverage, size_t min_sequence_length) {
-    auto cov1 = GetCoverageVector();
-    auto cov2 = handler.GetCoverageVector();
+    auto cov1 = CalculateCoverageVector2();
+    auto cov2 = handler.CalculateCoverageVector2();
     CoverageVec intersection = IntersectCoverageVectors(cov1, cov2, min_coverage);
 
     return FromCoverageVector(intersection, min_sequence_length);

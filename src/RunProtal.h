@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "Profiler.h"
 #include <iostream>
 #include "Utils/Benchmark.h"
 #include "Options.h"
@@ -11,13 +12,18 @@
 #include "Alignment/WFA2Wrapper.h"
 #include "Classify.h"
 #include "ChainAnchorFinder.h"
-//#include "AnchorFinder.h"
-#include "AlignmentStrategy.h"
-#include "gzstream/gzstream.h"
-#include "Profiler.h"
 #include "Taxonomy.h"
+#include "gzstream.h"
+#include "AlignmentStrategy.h"
 #include "TaxonStatisticsOutput.h"
-#include <math.h>
+#include "ProgressBar.h"
+//#include "AnchorFinder.h"
+//#include "AlignmentStrategy.h"
+//#include "gzstream/gzstream.h"
+//#include "Profiler.h"
+//#include "Taxonomy.h"
+//#include "TaxonStatisticsOutput.h"
+//#include <math.h>
 
 namespace protal {
 
@@ -79,12 +85,12 @@ namespace protal {
     template<typename AlignmentBenchmark=NoBenchmark>
     static void RunWrapper(Options& options, ProtalDB& db, AlignmentBenchmark benchmark=NoBenchmark{}) {
 
-
         const size_t mmer_size = 15;
 //        const size_t kmer_size = 27;
         const size_t kmer_size = 31;
         ClosedSyncmer minimizer{mmer_size, 7, 2};
         SimpleKmerHandler iterator{kmer_size, mmer_size, minimizer};
+
 
         if (options.BuildMode()) {
             Benchmark bm_build("Run build");
@@ -143,6 +149,13 @@ namespace protal {
 
                     // TODO implement logger in protal
                     auto sam = options.SamFile(index);
+                    auto dir = std::filesystem::path(sam).parent_path();
+                    if (!std::filesystem::create_directories(dir.string()) && !std::filesystem::exists(dir)) {
+                        std::cout << "Cannot create directories for this path " << sam << std::endl;
+                        exit(2);
+                    };
+
+
                     std::cout << "Process sample " << options.GetSampleId(index) << (std::filesystem::exists(sam) ? " (sam exists)" : " (sam does not exist)") << std::endl;
 
                     // Avoid aligning files that already exist.
@@ -157,6 +170,7 @@ namespace protal {
                     SimpleAlignmentHandler alignment_handler(genomes, aligner, kmer_size, options.GetAlignTop(), options.GetMaxScoreAni(), options.FastAlign());
 
 
+
                     options.SetCurrentIndex(index);
 //                    std::ofstream sam_output(sam, std::ios::out);
                     ogzstream sam_output(sam.c_str());
@@ -164,6 +178,8 @@ namespace protal {
                     igzstream is1 { options.GetFirstFile(index).c_str() };
                     igzstream is2 { options.GetSecondFile(index).c_str() };
                     SeqReaderPE reader{is1, is2};
+
+                    std::cout << "Process: " << options.GetFirstFile(index) << std::endl;
 
                     // Main Run Call. This is where the reads are read and alignment happens
                     if (options.GetMAPQDebugOut()) {
@@ -252,6 +268,7 @@ namespace protal {
 
     using Profile = profiler::MicrobialProfile;
     using Profiles = std::vector<Profile>;
+
     Profiles ProfileWrapper(Options& options, ProtalDB& db) {
         GenomeLoader& genomes = db.GetGenomes();
 
@@ -277,7 +294,16 @@ namespace protal {
 //        std::string model = "/usr/users/QIB_fr017/fritsche/Documents/HPC/group/projects/protal/camisim_all_output/output_flex_r214/profiles/mapq4_2/random_forest_cami_r214.pmml";
         TaxonFilterObj filter(model);
 
+        ProgressBar prog;
+        prog.Reset(options.GetFileCount());
+
+        omp_set_num_threads(options.GetThreads());
+
+        #pragma omp parallel for default(none) firstprivate(filter) shared(options, prog, cout, taxonomy, profiles, genomes)
         for (auto i = 0; i < options.GetFileCount(); i++) {
+#pragma omp critical(progress)
+            prog.UpdateAdd(1);
+
             profiler::Profiler profiler(genomes);
 
             // New Profiler approach
@@ -285,18 +311,32 @@ namespace protal {
             std::vector<std::vector<AlignmentPair>> pairs;
 
             auto sam = options.SamFile(i);
-            std::cout << "Read profile from Sam " << sam << " (exists: " << Utils::exists(options.SamFile(i)) << ")" << std::endl;
             profiler.FromSam(sam);
-
             auto profile = profiler.Profile();
 
-            std::cout << "Print profile" << std::endl;
-            std::cout << profile.ToString(db.GetTaxonomy(), filter) << std::endl;
+//            std::cout << "IS profile sane? " << sam << std::endl;
+//
+//
+//            for (auto& [tid, tax] : profile.GetTaxa()) {
+//                for (auto& [gid, gene] : tax.GetGenes()) {
+//                    for (auto& [k,v] : gene.GetStrainLevel().GetVariantHandler().GetVariants()) {
+//                        for (auto& var : v) {
+//                            if (var.Observations() == 65535) {
+//                                std::cout << tid << std::endl;
+//                                std::cout << gid << std::endl;
+//                                std::cout << var.ToString() << " <--- ProfileWrapper" << std::endl;
+//                                std::cout << "Size: " << var.GetQualListCopy().size() << std::endl;
+//                                for (auto& ve : v) {
+//                                    std::cout << ve.ToString() << std::endl;
+//                                }
+//                                Utils::Input();
+////                                exit(3);
+//                            }
+//                        }
+//                    }
+//                }
+//            }
 
-
-//            profiler.TestSNPUtils(profiler.m_pairs_unique);
-
-//            profiler.FromSam(options.SamFile());
 
             std::optional<TruthSet> truth = options.HasProfileTruths() ?
                                             std::optional<TruthSet>{ protal::GetTruth(options.ProfileTruthFile(i)) } :
@@ -310,15 +350,11 @@ namespace protal {
             }
 
             if (truth.has_value()) {
-//                profiler::TaxonFilter filter(0.95, 0.7, 70, 10);
                 std::string truth_output = options.ProfileFile(i) + ".truth_annotated";
                 profile.AnnotateWithTruth(truth.value(), filter, truth_output);
             }
 
-
-            std::cout << "Save profile to " << options.ProfileFile(i) << std::endl;
             auto dir = std::filesystem::path(options.ProfileFile(i)).parent_path();
-            std::cout << "Create directories " << dir.string() << std::endl;
             if (!std::filesystem::create_directories(dir.string()) && !std::filesystem::exists(dir)) {
                 std::cout << "Cannot create directories for this path " << options.ProfileFile(i) << std::endl;
                 exit(2);
@@ -328,21 +364,33 @@ namespace protal {
             std::ofstream os_total(options.ProfileFile(i) + ".log", std::ios::out);
             std::ofstream os_dismissed(options.ProfileFile(i) + ".gene.log", std::ios::out);
 
-
-            //profile.WriteSparseProfile(taxonomy, filter);
             profile.WriteSparseProfile(taxonomy, filter, os, &os_total, &os_dismissed);
             os.close();
             os_total.close();
             os_dismissed.close();
 
-//            profile.ClearSams();
             profile.SetName(options.GetSampleId(i));
-            profiles.emplace_back(profile);
 
-            profiler.m_post_process_bm.PrintResults();
+#pragma omp critical(add_profiles)
+            profiles.emplace_back(profile);
         }
 
-        std::cout << "Profiles: " << profiles.size() << std::endl;
+//        std::cout << std::endl;
+//
+//        for (auto& profile : profiles) {
+//            for (auto& [tid, tax] : profile.GetTaxa()) {
+//                for (auto& [gid, gene] : tax.GetGenes()) {
+//                    for (auto& [k,v] : gene.GetStrainLevel().GetVariantHandler().GetVariants()) {
+//                        for (auto& var : v) {
+//                            if (var.Observations() == 65535) {
+//                                std::cout << var.ToString() << " <--- ProfileWrapper all profiles" << std::endl;
+//                                exit(3);
+//                            }
+//                        }
+//                    }
+//                }
+//            }
+//        }
         return profiles;
     }
 
@@ -553,14 +601,14 @@ namespace protal {
     }
 
 
-    using StrainResults = tsl::robin_map<size_t, DoubleMatrix>;
+    using StrainResults = tsl::robin_map<size_t, Matrix<double>>;
     using TaxidCounts = tsl::robin_map<uint32_t, uint32_t>;
     using TaxidSet = tsl::robin_set<uint32_t>;
     using TaxidList = std::vector<uint32_t>;
     using OptionalFilter = optional<std::reference_wrapper<const profiler::TaxonFilter>>;
     using SimilarityMatrix = DoubleMatrix;
 
-    TaxidList ExtractTaxa(Profiles const& profiles, std::optional<profiler::TaxonFilter> filter= {}) {
+    TaxidList ExtractTaxa(Profiles const& profiles, std::optional<profiler::TaxonFilterObj> filter= {}) {
         TaxidCounts taxid_counts;
         TaxidSet taxa;
         TaxidList taxid_list;
@@ -620,8 +668,6 @@ namespace protal {
 
 
     static void GetMSAForTaxon (uint32_t taxid, std::string taxon_name, GenomeLoader& loader, Options& options, Profiles& profiles, std::optional<profiler::TaxonFilter> filter={}) {
-
-
         std::cout << "GET MSA FOR TAXON " << taxid << std::endl;
 
         auto min_cov = 2;
@@ -641,8 +687,10 @@ namespace protal {
         std::vector<std::string> partitions;
         size_t partition_start = 0;
         size_t previous_size = 0;
-        std::cout << "Genes ";
+
+        ProgressBar prog(120);
         for (auto geneid = 1; geneid <= 120; geneid++) {
+            prog.UpdateAdd(1);
             MSASequenceItems items;
 
             if (!genome.HasGene(geneid)) break;
@@ -671,15 +719,36 @@ namespace protal {
                     hasone = true;
                     auto& strain = genes.at(geneid).GetStrainLevel();
                     auto snps = SharedAlignmentRegion::GetSNPs(strain.GetVariantHandler());
+
+
                     auto& region = strain.GetSequenceRangeHandler();
                     items.emplace_back( OptionalMSASequenceItem { { std::move(snps), region } } );
                 }
             }
 
             if (hasone) {
-                std::cout << " " << geneid;
-
                 previous_size = msa.front().size();
+
+                std::cout << "GeneID: " << gene.GetId() << std::endl;
+                std::cout << "Profile indices" << std::endl;
+                for (auto i = 0; i < profile_indices.size(); i++) {
+                    std::cout << i << " " << profile_indices[i] << " " << names[i] << std::endl;
+                }
+//                Utils::Input();
+
+                for (auto& opt : items) {
+                    if (!opt.has_value()) continue;
+                    auto& [var, shr] = opt.value();
+                    if (std::any_of(var.begin(), var.end(), [](std::vector<Variant> const& vv) {
+                        return std::any_of(vv.begin(), vv.end(), [](Variant const&  v) {
+                            return v.Observations() == 65535;
+                        });
+                    })) {
+                        std::cout << "Wrong variant 2" << std::endl;
+                        exit(3);
+                    }
+                }
+
                 bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum);
                 if (!result) continue;
                 if (msa.front().size() > partition_start) {
@@ -698,7 +767,6 @@ namespace protal {
             }
 
         }
-        std::cout << " Done ... ";
 
         bool any_good = std::any_of(msa.begin(), msa.end(), [](MSARow const& row){
             return IsRowGood(row, 5000);
@@ -737,19 +805,22 @@ namespace protal {
 
         size_t total_combinations = profiles.size() * profiles.size() - profiles.size() / 2;
         size_t count_combinations = 1;
-//        std::cout << "Combination";
+
+        ProgressBar prog(((profiles.size() * profiles.size()) - profiles.size()) / 2);
         for (auto i = 0; i < profiles.size(); i++) {
             auto& profile1 = profiles[i];
             auto name1 = profile1.GetName();
 
-
             for (auto j = i+1; j < profiles.size(); j++) {
+                prog.UpdateAdd(1);
                 count_combinations++;
 //                std::cout << "\rCombination " << count_combinations << " of " << total_combinations;
                 auto& profile2 = profiles[j];
                 auto name2 = profile2.GetName();
 
                 auto [similarity, shared_length] = GetSimilarity(taxid, profile1, profile2, options, filter);
+
+//                std::cout << name1 << " -- " << name2 <<  " = " << similarity << " over " << shared_length << std::endl;
 
                 if (similarity == NAN || shared_length < min_shared_length) continue;
 
@@ -777,110 +848,124 @@ namespace protal {
     }
 
     static void StrainWrapper2(Options& options, Profiles& profiles, GenomeLoader& loader, taxonomy::IntTaxonomy& taxonomy, std::optional<profiler::TaxonFilterObj> filter={}) {
+        std::cout << "Output " << options.GetOutputDir() << std::endl;
+        auto dir = std::filesystem::path(options.GetOutputDir());
+        if (!std::filesystem::create_directories(dir.string()) && !std::filesystem::exists(dir)) {
+            std::cout << "Cannot create directories for this path " << dir << std::endl;
+            exit(2);
+        };
 
-        auto taxids = ExtractTaxa(profiles);
+        auto taxids = ExtractTaxa(profiles, filter);
 
         for (auto& taxid : taxids) {
             std::cout << "Target taxid: " << taxid << " >> " << taxonomy.Get(taxid).scientific_name << std::endl;
 
-            auto similarities = GetSimilarityMatrixForTaxon(taxid, options, profiles, filter);
-            std::cout << "Got Similarity matrix" << std::endl;
-
-            if (!similarities.AnySet()) continue;
-
-            if (options.Verbose()) {
-                std::cout << "Target taxid: " << taxid << " >> " << taxonomy.Get(taxid).scientific_name << std::endl;
-                similarities.PrintMatrix();
-                std::cout << "------------" << std::endl;
-            }
-
             std::string name = taxonomy.Get(taxid).scientific_name;
             std::replace(name.begin(), name.end(), ' ', '_');
+//
+//            std::cout << "Get Similarity matrix" << std::endl;
+//            auto similarities = GetSimilarityMatrixForTaxon(taxid, options, profiles, filter);
+//
+//            if (!similarities.AnySet()) continue;
+//
+//            if (options.Verbose()) {
+//                std::cout << "Target taxid: " << taxid << " >> " << taxonomy.Get(taxid).scientific_name << std::endl;
+//                similarities.PrintMatrix();
+//                std::cout << "------------" << std::endl;
+//            }
+//
+//
+//            WriteDistanceMatrix(taxid, similarities, options, name);
 
-            WriteDistanceMatrix(taxid, similarities, options, name);
-
+            std::cout << "GetMSAForTaxon " << taxonomy.Get(taxid).ToString() << std::endl;
             GetMSAForTaxon(taxid, name, loader, options, profiles);
+
+            Utils::Input();
         }
         std::cout << "Finish StrainWrapper" << std::endl;
-
-
     }
 
-    static StrainResults StrainWrapper(Options& options, Profiles& profiles, std::optional<profiler::TaxonFilter> filter={}) {
-        std::unordered_set<size_t> taxa1_set;
-
-        auto taxa = ExtractTaxa(profiles, filter);
-
-        StrainResults strain_results;
-        auto min_shared_region = 1500;
-
-        auto sample_size = profiles.size();
-
-        double equality_sum = 0;
-        size_t equality_count = 0;
-
-        for (auto& profile1 : profiles) {
-            auto& taxa_map1 = profile1.GetTaxa();
-            taxa1_set = profile1.GetKeySet(filter);
-
-            for (auto& profile2 : profiles) {
-
-                for (auto& [tid, _] : profile2.GetTaxa()) {
-                    auto& taxon2 = profile2.GetTaxa().at(tid);
-
-                    bool pass_filter = !filter.has_value() || filter.has_value() && filter->Pass(taxon2);
-                    if (!(taxa1_set.contains(tid) && pass_filter)) continue;
-
-                    if (!strain_results.contains(tid)) {
-                        strain_results.insert( { tid, DoubleMatrix(sample_size, sample_size, -1.0) });
-                        strain_results.at(tid).SetColNames(options.GetPrefixes());
-                        strain_results.at(tid).SetRowNames(options.GetPrefixes());
-                    }
-                    auto& matrix = strain_results.at(tid);
 
 
-
-                    auto& taxon1 = profile1.GetTaxa().at(tid);
-
-                    auto [distance, shared_region] = Distance(taxon1, taxon2);
-
-                    auto similarity = 1.0f-distance;
-                    if (similarity != similarity) {
-                        exit(12);
-                    }
-
-                    if (shared_region <= min_shared_region) {
-                        similarity = NAN;
-                    }
-
-
-                    if (profile1.GetName() != profile2.GetName() && similarity > 0.999) {
-                        equality_sum += similarity;
-                        std::cout << "GREP SIMILARITY: " << similarity << std::endl;
-                        equality_count++;
-                    }
-
-
-                    matrix.SetValue(profile1.GetName(), profile2.GetName(), similarity, true);
-                    if (profile1.GetName() == profile2.GetName()) continue;
-                    matrix.SetValue(profile1.GetName(), profile2.GetName(), static_cast<double>(shared_region), false);
-                }
-            }
-        }
-
-        std::cout << std::endl << std::string(60 ,'#') << std::endl;
-        std::cout << "StrainLevel Results" << std::endl;
-        for (auto& [id, matrix] : strain_results) {
-            matrix.PrintMatrix(std::cout, "\t", 6);
-            std::ofstream matrix_os(options.GetSimilarityMatrixOutput(std::to_string(id)), std::ios::out);
-            std::cout << " Write to : " << options.GetSimilarityMatrixOutput(std::to_string(id)) << std::endl;
-            matrix.PrintMatrix(matrix_os, "\t", 10);
-            matrix_os.close();
-        }
-        std::cout << "Equality: " << equality_sum << " (" << equality_count << ")" << std::endl;
-
-        return strain_results;
-    }
+// ###########################
+//    static StrainResults StrainWrapper(Options& options, Profiles& profiles, std::optional<profiler::TaxonFilter> filter={}) {
+//        std::unordered_set<size_t> taxa1_set;
+//
+//        auto taxa = ExtractTaxa(profiles, filter);
+//
+//        StrainResults strain_results;
+//        auto min_shared_region = 1500;
+//
+//        auto sample_size = profiles.size();
+//
+//        double equality_sum = 0;
+//        size_t equality_count = 0;
+//
+//        for (auto& profile1 : profiles) {
+//            auto& taxa_map1 = profile1.GetTaxa();
+//            taxa1_set = profile1.GetKeySet(filter);
+//
+//            for (auto& profile2 : profiles) {
+//
+//                for (auto& [tid, _] : profile2.GetTaxa()) {
+//                    auto& taxon2 = profile2.GetTaxa().at(tid);
+//
+//                    bool pass_filter = !filter.has_value() || filter.has_value() && filter->Pass(taxon2);
+//                    if (!(taxa1_set.contains(tid) && pass_filter)) continue;
+//
+//                    if (!strain_results.contains(tid)) {
+//                        auto matrix = DoubleMatrix(sample_size, sample_size, -1.0);
+//                        auto entry = std::pair{ tid,  matrix};
+//
+//                        strain_results.insert( entry );
+//                        strain_results.at(tid).SetColNames(options.GetPrefixes());
+//                        strain_results.at(tid).SetRowNames(options.GetPrefixes());
+//                    }
+//                    auto& matrix = strain_results.at(tid);
+//
+//
+//
+//                    auto& taxon1 = profile1.GetTaxa().at(tid);
+//
+//                    auto [distance, shared_region] = Distance(taxon1, taxon2);
+//
+//                    auto similarity = 1.0f-distance;
+//                    if (similarity != similarity) {
+//                        exit(12);
+//                    }
+//
+//                    if (shared_region <= min_shared_region) {
+//                        similarity = NAN;
+//                    }
+//
+//
+//                    if (profile1.GetName() != profile2.GetName() && similarity > 0.999) {
+//                        equality_sum += similarity;
+//                        std::cout << "GREP SIMILARITY: " << similarity << std::endl;
+//                        equality_count++;
+//                    }
+//
+//
+//                    matrix.SetValue(profile1.GetName(), profile2.GetName(), similarity, true);
+//                    if (profile1.GetName() == profile2.GetName()) continue;
+//                    matrix.SetValue(profile1.GetName(), profile2.GetName(), static_cast<double>(shared_region), false);
+//                }
+//            }
+//        }
+//
+//        std::cout << std::endl << std::string(60 ,'#') << std::endl;
+//        std::cout << "StrainLevel Results" << std::endl;
+//        for (auto& [id, matrix] : strain_results) {
+//            matrix.PrintMatrix(std::cout, "\t", 6);
+//            std::ofstream matrix_os(options.GetSimilarityMatrixOutput(std::to_string(id)), std::ios::out);
+//            std::cout << " Write to : " << options.GetSimilarityMatrixOutput(std::to_string(id)) << std::endl;
+//            matrix.PrintMatrix(matrix_os, "\t", 10);
+//            matrix_os.close();
+//        }
+//        std::cout << "Equality: " << equality_sum << " (" << equality_count << ")" << std::endl;
+//
+//        return strain_results;
+//    }
 
 
     static void Run(int argc, char *argv[]) {
@@ -893,8 +978,6 @@ namespace protal {
         using AlignmentBenchmark = CoreBenchmark;
 
         auto options = protal::Options::OptionsFromArguments(argc, argv);
-
-        std::cout << "After get options" << std::endl;
 
         if (options.Help()) {
             options.PrintHelp();
@@ -928,10 +1011,9 @@ namespace protal {
             bm_preload_genomes.PrintResults();
         }
 
-        bool skip_alignment = Utils::exists(options.SamFile(0)) && !options.Force();
+        bool skip_alignment = !options.BuildMode() && Utils::exists(options.SamFile(0)) && !options.Force();
         std::cout << "Skip alignment: " << skip_alignment << std::endl;
         if (!options.BuildMode() && !options.SamFile(0).empty() && (options.ProfileOnly() || skip_alignment)) {
-            std::cout << "Goto profile" << std::endl;
             goto Profile;
         }
 
@@ -1012,5 +1094,8 @@ namespace protal {
 
         bm_total.Stop();
         bm_total.PrintResults();
+
+        std::cout << "Find the results under:" << std::endl;
+        std::cout << options.GetOutputDir() << std::endl;
     }
 }

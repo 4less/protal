@@ -1,9 +1,11 @@
 project(protal_lib)
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_EXE_LINKER_FLAGS " -lwfa -lz")
+set(CMAKE_EXE_LINKER_FLAGS " -lwfa -lz -lCPMML")
 set(CMAKE_CXX_FLAGS_DEBUG " -pthread -ggdb -g -std=c++2a -fopenmp -Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-std=c++20 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas") #-march=native
+
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 
 message(${CMAKE_CXX_FLAGS_DEBUG})
 
@@ -68,7 +70,7 @@ add_library(protal_lib
         SequenceUtils/VariantHandler.h
         Strains/Distances.h
         IO/TaxonStatisticsOutput.h
-        )
+        Utils/Matrix.h)
 
 
 set_target_properties(protal_lib PROPERTIES LINKER_LANGUAGE CXX)
@@ -144,11 +146,16 @@ target_include_directories(protal_lib
 # require BitHashMap
 # find_package(BHM REQUIRED)
 
-find_package(ZLIB REQUIRED)
-#find_library(HTSLIB htslib /usr/users/QIB_fr017/fritsche/miniconda3/include/)
+message("${CMAKE_SYSTEM_PREFIX_PATH}")
 
-find_library(HTSLIB_LIB hts)
-target_link_libraries(protal_lib PUBLIC ${HTSLIB_LIB})
+set(ZLIB_USE_STATIC_LIBS "ON")
+find_package(ZLIB REQUIRED)
+
+#find_library(HTSLIB htslib /usr/users/QIB_fr017/fritsche/miniconda3/include/)
+#find_package(HTSLIB REQUIRED)
+
+#find_library(HTSLIB_LIB hts)
+#target_link_libraries(protal_lib PUBLIC ${HTSLIB_LIB})
 
 # include CWCSV
 #find_package(CWCSV REQUIRED)
@@ -168,18 +175,23 @@ target_include_directories(protal_lib PUBLIC /usr/users/QIB_fr017/fritsche/libra
 # Necessary to link to stdc++fs (filesystem experimental support)
 target_link_libraries(protal_lib
         LINK_PUBLIC
-        ZLIB::ZLIB
         stdc++fs
         wfa_lib
+        cPMML_lib
         gzstream_lib
-        cPMML
-#        hts_lib
-        #fmt_lib
+        ZLIB::ZLIB
+        -static
         )
 
-add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/wfa2-lib/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/wfa)
+#target_link_libraries(protal_lib
+#        LINK_PUBLIC
+#        )
+
+add_subdirectory(../lib/wfa2-lib/ ../src/wfa)
+add_subdirectory(../lib/gzstream/ ../src/gzstream)
+add_subdirectory(../lib/cPMML/ ../src/cPMML)
+
 #add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/fmt/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/fmt)
-add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/gzstream/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/gzstream)
 #add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/htslib-1.16/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/htslib)
 
 

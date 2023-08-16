@@ -1,25 +1,26 @@
 #include <iostream>
 #include "RunProtal.h"
-#include <htslib/sam.h>
-#include "Test.h"
+
+//#include <htslib/sam.h>
+//#include "Test.h"
 
 int main(int argc, char *argv[]) {
     std::ios::sync_with_stdio(false);
     std::cin.tie(NULL);
     std::cout.tie(NULL);
-
-    std::string first2 = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/SRR7280802_1c.fastq";
-    std::string second2 = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/SRR7280802_2c.fastq";
-    std::string first = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/sub1c.fastq";
-    std::string second = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/sub2c.fastq";
-
+//
+//    std::string first2 = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/SRR7280802_1c.fastq";
+//    std::string second2 = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/SRR7280802_2c.fastq";
+//    std::string first = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/sub1c.fastq";
+//    std::string second = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/sub2c.fastq";
+//
 //    igzstream is1 { first.c_str() };
 //    igzstream is2 { second.c_str() };
-    std::ifstream is1 { first.c_str() };
-    std::ifstream is2 { second.c_str() };
-    protal::SeqReaderPE reader{is1, is2};
-    FastxRecord record1;
-    FastxRecord record2;
+//    std::ifstream is1 { first.c_str() };
+//    std::ifstream is2 { second.c_str() };
+//    protal::SeqReaderPE reader{is1, is2};
+//    FastxRecord record1;
+//    FastxRecord record2;
 //
 //    for (std::string line; std::getline(is1, line);) {
 //        std::cout << line << std::endl;

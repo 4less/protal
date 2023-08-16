@@ -387,11 +387,15 @@ namespace protal {
         }
 
         void ExtendAnchor(ChainAlignmentAnchor& anchor, std::string const& query) {
+//            std::cout << "GetGenome" << std::endl;
             auto& genome = m_genome_loader.GetGenome(anchor.taxid);
+//            std::cout << "GetGene " << anchor.geneid << std::endl;
             auto& gene = genome.GetGeneOMP(anchor.geneid);
 
+//            std::cout << "StartAnchor " << anchor.chain.size() << std::endl;
             for (auto i = 0; i < anchor.chain.size(); i++) {
                 auto& seed = anchor.chain[i];
+//                std::cout << "ExtendSeed1 " << i << std::endl;
                 ExtendSeed1(seed,
                            (i > 0) ? &anchor.chain[i-1] : nullptr,
                            (i+1) < anchor.chain.size() ? &anchor.chain[i+1] : nullptr,

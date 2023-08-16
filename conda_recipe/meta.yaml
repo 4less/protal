@@ -1,0 +1,16 @@
+package:
+  name: protal
+  version: 1.0
+
+source:
+  path: /usr/users/QIB_fr017/fritsche/CLionProjects/protal
+
+requirements:
+  host:
+    - python
+  build:
+    - cmake
+    - ninja
+    - make
+    - gxx
+

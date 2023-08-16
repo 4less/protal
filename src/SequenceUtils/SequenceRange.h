@@ -21,7 +21,7 @@ struct ReadInfo {
     bool forward;
 
     std::string ToString() const {
-        return "read_id: " + std::to_string(read_id) + " start: " + std::to_string(start) + " length: " + std::to_string(length) + " forward: " + std::to_string(forward);
+        return "read_id: " + std::to_string(read_id) + " [" + std::to_string(start) + ", " + std::to_string(start+length) + "]:" + std::to_string(length) + " forward: " + std::to_string(forward);
     }
 
     bool Contains(size_t pos) const {

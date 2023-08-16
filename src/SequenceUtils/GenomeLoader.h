@@ -3,8 +3,8 @@
 //
 
 #pragma once
-#include <string>
 #include <sparse_map.h>
+#include <string>
 #include <fstream>
 #include <err.h>
 #include "Utils.h"
@@ -46,7 +46,15 @@ namespace protal {
         bool IsLoaded() const {
             return !m_sequence.empty();
         }
+
         void Load() {
+            if (!IsLoaded()) {
+                Load(m_sequence, m_start_byte, m_length);
+            }
+        };
+
+        void LoadOMP() {
+#pragma omp critical(genome_loader)
             if (!IsLoaded()) {
                 Load(m_sequence, m_start_byte, m_length);
             }
@@ -140,8 +148,11 @@ namespace protal {
         };
 
         Gene& GetGeneOMP(GeneKey key) {
-            if (!IsLoaded()) {
-                LoadGenomeOMP();
+#pragma omp critical(genome_loader)
+            {
+                if (!IsLoaded()) {
+                    LoadGenome();
+                }
             }
             return m_genes.at(GeneKeyToIndex(key));
         };
@@ -155,6 +166,7 @@ namespace protal {
 
 
         std::string m_path;
+        std::string m_genome_map;
         std::ifstream m_is;
         GenomeMap m_genomes;
 
@@ -168,9 +180,17 @@ namespace protal {
     public:
         GenomeLoader(std::string genome_path, std::string genome_map) :
                 m_path(genome_path),
+                m_genome_map(genome_map),
                 m_is(genome_path, std::ios::in) {
             LoadPositionMap(genome_map);
         };
+
+        GenomeLoader(const GenomeLoader& other) :
+                m_path(other.m_path),
+                m_genome_map(other.m_genome_map),
+                m_is(other.m_path, std::ios::in) {
+            LoadPositionMap(other.m_genome_map);
+        }
 
         ~GenomeLoader() {
             m_is.close();
@@ -194,7 +214,8 @@ namespace protal {
                 auto& genes = genome.GetGeneList();
                 for (auto i = 0; i < genes.size(); i++) {
                     if (genes[i].IsSet()) {
-                        os << "@SQ\tSN:" << key << '_' << i << '\t' << "LN:" << genes[i].GetLength() << '\n';
+
+                        os << "@SQ\tSN:" << key << '_' << genes[i].GetId() << '\t' << "LN:" << genes[i].GetLength() << '\n';
                     }
                 }
             }
@@ -209,7 +230,7 @@ namespace protal {
 
             for (auto& key : keys) {
                 if (!m_genomes.at(key).IsLoaded()){
-                    m_genomes.at(key).LoadGenome();
+                    m_genomes.at(key).LoadGenomeOMP();
                 }
             }
         }

@@ -72,6 +72,10 @@ namespace protal {
                 m_is2(other.m_is2) {};
 
 
+        auto& GetFirstStream() {
+            return m_is1;
+        }
+
         inline void LoadBlockOMP() {
 #pragma omp critical(reader)
             {

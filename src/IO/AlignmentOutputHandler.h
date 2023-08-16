@@ -15,7 +15,7 @@
 #include "FastxReader.h"
 #include "SamHandler.h"
 #include "SNP.h"
-#include <htslib/sam.h>
+//#include <htslib/sam.h>
 #include "AlignmentUtils.h"
 #include "SNPUtils.h"
 
@@ -112,6 +112,7 @@ namespace protal {
         sam.m_tlen = ar.Cigar().length();
         sam.m_seq = ar.Forward() ? record.sequence : KmerUtils::ReverseComplement(record.sequence);
         sam.m_qual = record.quality;
+        if (!ar.Forward()) reverse(sam.m_qual.begin(), sam.m_qual.end());
     }
 
     using SNPList = std::vector<SNP>;
@@ -479,6 +480,8 @@ namespace protal {
                     Flag::SetMateReverseComplement(m_sam2.m_flag, (FLAG_t)!ar1.Forward());
                     Flag::SetMateUnmapped(m_sam1.m_flag, false);
                     Flag::SetMateUnmapped(m_sam2.m_flag, false);
+                    Flag::SetPairBothAlign(m_sam1.m_flag, true);
+                    Flag::SetPairBothAlign(m_sam2.m_flag, true);
                 }
 
                 if ((ar1.IsSet() && !valid1) || (ar1.IsSet() && !valid2)) {

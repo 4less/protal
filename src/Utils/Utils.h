@@ -6,7 +6,6 @@
 
 #include <vector>
 #include <string>
-#include <c++/7/bits/locale_facets.tcc>
 #include <iomanip>
 #include <sys/stat.h>
 #include <unordered_map>

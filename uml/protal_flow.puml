@@ -1,0 +1,76 @@
+@startuml
+'https://plantuml.com/class-diagram
+
+'abstract class AbstractList
+'abstract AbstractCollection
+
+class KmerElement {
+    std::pair<size_t, size_t>
+}
+
+class KmerList {
+     std::vector<KmerElement>
+}
+KmerElement --> KmerList
+
+
+interface KmerIteratorConcept {
+    - Kmer iterator iterates over a
+    sequence seq with length len and
+    stores the next k-mer in 'kmer'
+---
+
+    #**Concept**:
+    void operator(size_t kmer)
+    void SetSequence(char* seq, size_t len)
+    size_t GetPos()
+}
+
+interface KmerLookupConcept {
+    - KmerLookup stores (Load) a data structure
+    that stores k-mers and their respective
+    taxonomic id , gene id, and gene position.
+---
+
+    #**Concept**:
+    void Get(LookupList list, size_t& kmer, uint32_t readpos)
+    void Load(std::istream& ifs)
+}
+
+
+interface KmerProcessorConcept {
+    - KmerProcessor takes a KmerList and
+    performs a kmer lookup using a
+    KmerLookupConcept.
+---
+
+    #**Concept**:
+    void operator(KmerList &l)
+}
+
+
+
+'interface List {
+'    hello
+'}
+'interface Collection
+'
+'List <|-- AbstractList
+'Collection <|-- AbstractCollection
+'
+'Collection <|- List
+'AbstractCollection <|- AbstractList
+'AbstractList <|-- ArrayList
+'
+'class ArrayList {
+'Object[] elementData
+'size()
+'}
+
+'enum TimeUnit {
+'DAYS
+'HOURS
+'MINUTES
+'}
+
+@enduml

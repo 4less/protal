@@ -4,10 +4,9 @@
 
 #pragma once
 
-#include "Variant.h"
-#include "SNP.h"
-#include "robin_map.h"
 #include "SNPUtils.h"
+#include "Variant.h"
+#include "robin_map.h"
 #include "GenomeLoader.h"
 
 namespace protal {
@@ -40,6 +39,7 @@ namespace protal {
                 }
             }
             variant_bin.emplace_back( Variant(pos, snp, ref) );
+            if (variant_bin.back().Observations() == 65536) exit(8);
             return variant_bin.back();
         }
 
@@ -67,9 +67,14 @@ namespace protal {
         }
 
         void AddSNP(VariantPos position, Base snp, Base ref, bool on_forward, Qual quality) {
-            auto& variant_bin = HasVariantBin(position) ? GetVariantBin(position) : m_variants[position];
+            if (!HasVariantBin(position)) m_variants.insert({position, VariantBin() });
+            auto& variant_bin = GetVariantBin(position);
             auto& variant = GetVariant(variant_bin, position, snp, ref);
             variant.AddObservation(quality, on_forward);
+            if (variant.Observations() == 65535) {
+                std::cout << variant.ToString()<< std::endl;
+                exit(3);
+            }
         }
 
         void AddINDEL(VariantType type, VariantPos position, Base ref, std::string&& structural, bool on_forward, Qual quality) {
@@ -160,9 +165,28 @@ namespace protal {
                 PrintAlignment(sam, m_reference, std::cerr);
                 std::cerr << sam.m_seq << std::endl;
                 std::cerr << "Faulty sam: \n" << sam.ToString() << std::endl;
+                exit(8);
                 return false;
             }
+//            std::cout << "Check ----------------------------------------------" << std::endl;
+            for (auto& [k,v] : m_variants) {
+                for (auto& var : v) {
+                    if (var.Observations() != var.GetQualListCopy().size()) {
+                        std::cout << var.ToString() << " <--- " << std::endl;
+                        exit(11);
+                    }
+                }
+            }
+
             return true;
+        }
+
+        static std::string VariantBinToMinimalString(const VariantBin& variant_bin) {
+            std::string str;
+            for (auto& variant : variant_bin) {
+                str += variant.ToMinimalString() + '\t';
+            }
+            return str;
         }
 
         static std::string VariantBinToString(const VariantBin& variant_bin) {
@@ -213,16 +237,29 @@ namespace protal {
             });
             qual /= bin.size();
 
+//            if (coverage < var_observations) {
+//                std::cout << "Cov: " << coverage << std::endl;
+//                std::cout << "Obs: " << var_observations << std::endl;
+//                for (auto& var : bin) {
+//                    std::cout << var.ToString() << std::endl;
+//                }
+//                std::cout << coverage - var_observations << std::endl;
+//                Utils::Input();
+//            }
+
             // No reads carrying reference allele (all variants)
-            if (coverage == var_observations) {
+            if (coverage <= var_observations) {
                 return;
             }
+
+
 
             // Reference allele (also stored in insertions, deleteions)
             char ref = bin.front().Reference();
 
             auto& variant = GetVariant(bin, var_pos, ref, ref);
             variant.SetObservations(coverage - var_observations);
+
 
             FilterSNPs(bin, coverage, min_observations, min_observations_fwdrev, min_frequency, min_avg_quality);
         }

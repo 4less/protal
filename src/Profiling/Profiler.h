@@ -4,22 +4,25 @@
 
 #pragma once
 
+#include "Strain.h"
+#include "AlignmentUtils.h"
 #include <cstdint>
 #include <cstddef>
 #include <vector>
 #include <sparse_map.h>
+#include <numeric>
+#include <unordered_set>
 #include "LineSplitter.h"
 #include "Taxonomy.h"
 #include "InternalReadAlignment.h"
 #include "Constants.h"
-#include "AlignmentUtils.h"
 #include "SNPUtils.h"
 #include "ProfilerOptions.h"
 #include "ScoreAlignments.h"
-#include "Strain.h"
 #include "gzstream/gzstream.h"
 #include "cPMML.h"
-//#include "/usr/local/include/cPMML.h"
+#include "sparse_map.h"
+#include "Benchmark.h"
 
 namespace protal {
 
@@ -70,12 +73,8 @@ namespace protal {
             std::vector<SamEntry*> m_sams;
             StrainLevelContainer m_strain_level;
 
-//            SNPs m_snps;
 
             GeneRef* m_gene_ref = nullptr;
-
-//            std::string& m_sequence;
-
 
             Gene(protal::Gene& gene_ref) :
                     m_gene_ref(&gene_ref),
@@ -132,6 +131,20 @@ namespace protal {
 //                if (extract_snps) {
 //                    ExtractSNPs(sam, m_gene_ref->Sequence(), m_snps, 0, 0, read_id);
 //                }
+
+
+                for (auto& [k,v] : m_strain_level.GetVariantHandler().GetVariants()) {
+                    for (auto& var : v) {
+                        if (var.Observations() == 65535) {
+                            std::cout << var.ToString() << " <--- AddSam" << std::endl;
+                            std::cout << v.size() << std::endl;
+                            for (auto& ve : v) {
+                                std::cout << ve.ToString() << std::endl;
+                            }
+                            Utils::Input();
+                        }
+                    }
+                }
 
                 size_t length = AlignmentLengthRef(sam.m_cigar);
 
@@ -213,10 +226,8 @@ namespace protal {
 
             void AddHit(GeneId geneid, GenePos genepos, double ani, bool unique) {
                 if (!m_genes.contains(geneid)) {
-                    if (!m_genome.GetGene(geneid).IsLoaded()) {
-                        m_genome.GetGene(geneid).Load();
-                    }
                     auto& g = m_genome.GetGene(geneid);
+                    g.LoadOMP();
                     m_genes.insert( { geneid, profiler::Gene(g) } );
                     m_genes.at(geneid).SetLength(m_genome.GetGene(geneid).Sequence().length());
                 }
@@ -241,10 +252,8 @@ namespace protal {
 
             void AddSam(GeneId geneid, SamEntry const& sam, double score, bool unique, size_t read_id) {
                 if (!m_genes.contains(geneid)) {
-                    if (!m_genome.GetGene(geneid).IsLoaded()) {
-                        m_genome.GetGene(geneid).Load();
-                    }
                     auto& g = m_genome.GetGene(geneid);
+                    g.LoadOMP();
                     m_genes.insert( { geneid, profiler::Gene(g) } );
                     m_genes.at(geneid).SetLength(m_genome.GetGene(geneid).Sequence().length());
                 }
@@ -498,8 +507,16 @@ namespace protal {
 
         public:
 
-            TaxonFilterForest(const std::string& path) : m_model(path) {
-                //m_model = cpmml::Model(path, false);
+            TaxonFilterForest(const std::string& path) : m_model(path) {}
+
+            TaxonFilterForest(const TaxonFilterForest& other) :
+                    m_model(other.m_model), m_threshold(other.m_threshold), m_sample() {
+            }
+
+            TaxonFilterForest(const TaxonFilterForest&& other) :
+                    m_model(other.m_model),
+                    m_threshold(other.m_threshold),
+                    m_sample(other.m_sample) {
             }
 
             bool Pass(Taxon const& taxon) const {
@@ -531,7 +548,8 @@ namespace protal {
 
             void AddSam(int taxid, int geneid, SamEntry const& sam, double score, bool unique=true, int read_id=0) {
                 if (!m_taxa.contains(taxid)) {
-                    auto& genome = m_genome_loader.GetGenome(taxid);
+                    auto &genome = m_genome_loader.GetGenome(taxid);
+
                     m_taxa.insert( { taxid, Taxon(genome) } );
                     m_taxa.at(taxid).SetId(taxid);
                     m_taxa.at(taxid).SetName(std::to_string(taxid));
@@ -877,13 +895,13 @@ namespace protal {
                 std::string current_qname = "__";
                 std::string next_qname = "__";
                 std::string last_qname = "__";
-
-
+                
                 if (!std::getline(file, line)) {
                     std::cerr << "Profile is empty " << file_path << std::endl;
                     exit(9);
                 }
 
+                auto count = 0;
                 while (line[0] == '@') {
                     std::getline(file, line);
                 }
@@ -894,7 +912,6 @@ namespace protal {
 
                 size_t read_id = 0;
                 while (GetSamPair(file, line, tokens, next, next_other, has_next1, has_next2)) {
-
                     current_qname = has_current1 ? current.m_qname : current_other.m_qname;
                     next_qname = has_next1 ? next.m_qname : next_other.m_qname;
                     bool unique = current_qname != last_qname && current_qname != next_qname;
@@ -945,9 +962,9 @@ namespace protal {
                     pair_list.emplace_back(new_pair);
                 }
 
-                std::cout << "Uniques:          " << m_pairs_unique.size() << std::endl;
-                std::cout << "Non-Uniques:      " << m_pairs_nonunique.size() << std::endl;
-                std::cout << "Non-Uniques best: " << m_pairs_nonunique_best.size() << std::endl;
+//                std::cout << "Uniques:          " << m_pairs_unique.size() << std::endl;
+//                std::cout << "Non-Uniques:      " << m_pairs_nonunique.size() << std::endl;
+//                std::cout << "Non-Uniques best: " << m_pairs_nonunique_best.size() << std::endl;
 
                 if (truth_in_header) {
                     OutputErrorData(m_pairs_unique, m_pairs_nonunique);
@@ -980,8 +997,9 @@ namespace protal {
                 for (auto &pair: pairs) {
                     auto &any = pair.Any();
                     auto &[tid, gid] = ExtractTaxidGeneid(any.m_rname);
-                    auto &gene = m_genome_loader.GetGenome(tid).GetGene(gid);
-                    gene.Load();
+                    auto &gene = m_genome_loader.GetGenome(tid).GetGeneOMP(gid);
+
+                    gene.LoadOMP();
                     auto &ref = gene.Sequence();
 //                        std::cout << "Extract: " << any.m_qname << " ---> " <<  any.m_rname << std::endl;
 
@@ -1009,7 +1027,7 @@ namespace protal {
                         auto& any = pair.Any();
                         auto &[ tid, gid ] = ExtractTaxidGeneid(any.m_rname);
                         auto& gene = m_genome_loader.GetGenome(tid).GetGene(gid);
-                        gene.Load();
+                        gene.LoadOMP();
                         auto& ref = gene.Sequence();
 //                        std::cout << "Extract: " << any.m_qname << " ---> " <<  any.m_rname << std::endl;
 
@@ -1326,13 +1344,34 @@ namespace protal {
             }
 
             MicrobialProfile Profile() {
-                std::cout << "Profile " << m_pairs_unique.size() << std::endl;
+//                std::cout << "Profile " << m_pairs_unique.size() << std::endl;
                 MicrobialProfile profile(m_genome_loader);
 
                 size_t read_id = 0;
 
                 for (auto& sam_pair : m_pairs_unique) {
                     ProcessMAPQ(profile, sam_pair, read_id++);
+
+                    for (auto& [tid, tax] : profile.GetTaxa()) {
+                        for (auto& [gid, gene] : tax.GetGenes()) {
+                            for (auto& [k,v] : gene.GetStrainLevel().GetVariantHandler().GetVariants()) {
+                                for (auto& var : v) {
+                                    if (var.Observations() == 65535) {
+                                        std::cout << tid << std::endl;
+                                        std::cout << gid << std::endl;
+                                        std::cout << var.ToString() << " <--- ProfileWrapper" << std::endl;
+                                        std::cout << "Size: " << var.GetQualListCopy().size() << std::endl;
+                                        for (auto& ve : v) {
+                                            std::cout << ve.ToString() << std::endl;
+                                        }
+                                        std::cout << "ReadID: " << read_id << std::endl;
+                                        Utils::Input();
+//                                exit(3);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 for (auto sam_pair : m_pairs_nonunique_best) {
                     ProcessMAPQ(profile, sam_pair, read_id++);

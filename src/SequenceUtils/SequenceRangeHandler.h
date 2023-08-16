@@ -48,6 +48,7 @@ public:
     std::string ToVerboseString() const;
 
     CoverageVec CalculateCoverageVector();
+    CoverageVec CalculateCoverageVector2() const;
     CoverageVec& GetCoverageVector() {
         return m_cov;
     }

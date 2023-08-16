@@ -62,7 +62,7 @@ namespace protal {
                 str += std::to_string(quality) + '\t';
             } else if (type == 2 || type == 4) {
                 str += *structural + '\t';
-                str += to_string(structural_size);
+                str += std::to_string(structural_size);
             }
             str += '}';
 

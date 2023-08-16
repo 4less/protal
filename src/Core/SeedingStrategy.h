@@ -33,7 +33,7 @@ namespace protal {
         size_t m_seeding_position_count;
         SeedListSet m_seedlist_set;
 
-        HTSLIB_SAM_H
+//        HTSLIB_SAM_H
 
         SeedListSetIterators m_seedlist_set_iterators;
         AnchorList m_anchor_list;

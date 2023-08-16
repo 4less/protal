@@ -16,8 +16,8 @@ namespace protal {
     static const size_t DEFAULT_ALIGN_TOP = 3;
     static const double DEFAULT_MAX_SCORE_ANI = 0.8;
     static const size_t DEFAULT_X_DROP = 1000;
-    static const size_t DEFAULT_MAX_KEY_UBIQUITY = 8;
-    static const size_t DEFAULT_MAX_SEED_SIZE = 32;
+    static const size_t DEFAULT_MAX_KEY_UBIQUITY = 256;
+    static const size_t DEFAULT_MAX_SEED_SIZE = 128;
     static const size_t DEFAULT_MAX_OUT = 1;
     static const size_t DEFAULT_OUTPUT_TOP = 3;
     static const bool DEFAULT_NO_STRAIN = false;
@@ -515,6 +515,7 @@ namespace protal {
             std::string prefix_output_dir = "";
             std::string sam_output_dir = "";
             std::string profile_output_dir = "";
+            std::string strain_output_dir2 = "";
             std::string input_dir = "";
 
             LineSplitter splitter;
@@ -531,6 +532,7 @@ namespace protal {
             bool header = true;
             size_t line_num = 0;
             for (std::string line; std::getline(is, line);) {
+                if (line.empty()) continue;
                 splitter.Split(line);
                 auto& tokens = splitter.Tokens();
                 // Header
@@ -614,6 +616,7 @@ namespace protal {
                             return false;
                         }
                         strain_output_dir = tokens[1];
+                        strain_output_dir2 = tokens[1];
                     }
                     if (!tokens.empty() && tokens[0] == MAP_VAR_SAM_OUTPUT_DIR) {
                         if (tokens.size() < 2) {

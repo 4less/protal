@@ -31,7 +31,7 @@ class ProgressBar {
     size_t window_size = 10;
     TimePoints time_points;
 
-    void print(int pos, double progress, double expected_runtime=0) {
+    void Print(int pos, double progress, double expected_runtime=0) {
         bar.clear();
         bar.reserve(150);
         bar = "[";
@@ -76,13 +76,13 @@ class ProgressBar {
 public:
     ProgressBar (size_t progress_size) : progress_size_(progress_size) {
         bar.reserve(150);
-        reset(progress_size_);
+        Reset(progress_size_);
         time_points.reserve(window_size);
     };
 
     ProgressBar() = default;
 
-    void reset(size_t new_progress_size) {
+    size_t Reset(size_t new_progress_size) {
         progress_size_ = new_progress_size;
         progress_pos_ = 0;
         progress_ = 0.0;
@@ -91,14 +91,15 @@ public:
         time_points.clear();
         time_points.push_back( { high_resolution_clock::now(), 0 } );
 
-        print(bar_width_ * progress_, progress_, 0);
+        Print(bar_width_ * progress_, progress_, 0);
+        return new_progress_size;
     }
 
     void UpdateAdd(size_t progress_pos) {
         Update(progress_pos_ + progress_pos);
     }
 
-    void Update(size_t new_progress_pos) {
+    size_t Update(size_t new_progress_pos) {
 
         time_point<high_resolution_clock> new_time_point = high_resolution_clock::now();
 
@@ -118,11 +119,9 @@ public:
 
         int pos = bar_width_ * progress_;
 
-//        if (pos == old_pos) return;
-//        if (pos == old_pos) return;
-//        else {
-            print(pos, progress_, expected_runtime);
-            old_pos = pos;
-//        }
+        Print(pos, progress_, expected_runtime);
+        old_pos = pos;
+
+        return new_progress_pos;
     }
 };

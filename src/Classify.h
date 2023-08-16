@@ -18,6 +18,7 @@
 #include "CoreBenchmark.h"
 #include "ChainAnchorFinder.h"
 #include "ScoreAlignments.h"
+#include "ProgressBar.h"
 
 namespace protal::classify {
 
@@ -293,6 +294,13 @@ namespace protal::classify {
 
             while (reader(record1, record2)) {
                 thread_statistics.reads++;
+//
+//#pragma omp critical(output)
+//                {
+//                    std::cout << record1.to_string();
+//                    std::cout << record2.to_string();
+//                    std::cout << std::string(40, '-') << std::endl;
+//                }
 
                 // Clear intermediate storage objects
                 kmers1.clear();
@@ -308,6 +316,7 @@ namespace protal::classify {
 
                 // Retrieve kmers
                 kmer_handler(std::string_view(record1.sequence), kmers1);
+
 
                 if constexpr(KmerStatisticsConcept<KmerHandler>) {
                     thread_statistics.kmers_total += kmer_handler.TotalKmers();

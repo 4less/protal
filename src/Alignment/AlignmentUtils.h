@@ -8,6 +8,9 @@
 #include <iostream>
 #include "assert.h"
 #include "SamHandler.h"
+#include "Utils.h"
+#include "Constants.h"
+#include <tuple>
 
 namespace protal {
     struct AlignmentInfo {

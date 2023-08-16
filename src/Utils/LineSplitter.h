@@ -22,6 +22,7 @@ namespace protal {
 
         static void Split(std::string& line, std::string& delimiter, std::vector<std::string> &tokens) {
             tokens.clear();
+            if (line.empty()) return;
 
             size_t delim_size = delimiter.length();
 
