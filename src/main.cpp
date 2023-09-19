@@ -8,6 +8,7 @@ int main(int argc, char *argv[]) {
     std::ios::sync_with_stdio(false);
     std::cin.tie(NULL);
     std::cout.tie(NULL);
+    std::cout << "Test" << std::endl;
 //
 //    std::string first2 = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/SRR7280802_1c.fastq";
 //    std::string second2 = "/media/fritsche/Extreme_SSD/data/reads/postdrama/test/SRR7280802_2c.fastq";

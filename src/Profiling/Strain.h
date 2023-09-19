@@ -11,6 +11,14 @@
 #include "SequenceRangeHandler.h"
 
 namespace protal {
+    static Variant& GetConsensusCall(VariantBin& bin) {
+        std::sort(bin.begin(), bin.end(), [](Variant const& a, Variant const& b) {
+            return a.QualitySum() > b.QualitySum();
+        });
+        return bin.front();
+    }
+
+
     struct SharedAlignmentRegion;
     using VariantVec = std::vector<VariantBin>;
 
@@ -204,12 +212,6 @@ namespace protal {
 
     using DoubleMatrix = Matrix<double>;
 
-    static Variant& GetConsensusCall(VariantBin& bin) {
-        std::sort(bin.begin(), bin.end(), [](Variant const& a, Variant const& b) {
-            return a.QualitySum() > b.QualitySum();
-        });
-        return bin.front();
-    }
 
     static bool VariantPass(Variant const& call, VariantBin const& bin, size_t min_var_qual_sum=50, size_t min_var_cov=3) {
         if (call.QualitySum() < min_var_qual_sum || call.Observations() < min_var_cov) return false;
@@ -293,6 +295,37 @@ namespace protal {
         }
     }
 
+
+
+    static bool MSA2(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum, bool ignore_insertions) {
+        // Get Coverages
+        CoverageVecs covs(items.size(), std::vector<uint16_t>());
+        for (auto i = 0; i < items.size(); i++) {
+            auto& item = items[i];
+            if (!item.has_value()) continue;
+            covs[i] = item->second.get().CalculateCoverageVector2();
+        }
+
+        // Store all variants for column
+        std::vector<OptionalVariant> column( items.size(), OptionalVariant{} );
+        std::vector<int> index(0, items.size());
+
+        // Iterate all positions
+        for (auto rpos = 0; rpos < reference.size(); rpos++) {
+            std::fill(column.begin(), column.end(), OptionalVariant{});
+
+            for (auto i = 0; i < items.size(); i++) {
+                auto& item = items[i];
+                if (!item.has_value()) continue;
+
+                auto& cov = covs[i];
+                column[i] = Variant();
+            }
+        }
+        return true;
+    }
+
+
     static bool MSA(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum) {
         if (msa.size() != items.size()) {
             std::cerr << msa.size() << " != " << items.size() << " <- items" << std::endl;
@@ -319,8 +352,9 @@ namespace protal {
         }
 
         int valid_bases = 0;
-        for (auto cv : covs) {
-            for (auto c : cv) {
+
+        for (auto& cv : covs) {
+            for (auto& c : cv) {
                 valid_bases += (c >= min_cov);
             }
         }
@@ -357,6 +391,7 @@ namespace protal {
 
             std::vector<std::string> outs(items.size(),"");
 
+            // Iterate All ITems
             for (auto i = 0; i < items.size(); i++) {
                 auto& cov = covs[i];
                 if (cov.size() > reference.size()) {
@@ -371,6 +406,7 @@ namespace protal {
                     column[i] = OptionalVariant();
                     continue;
                 }
+
                 const VariantVec& const_variants = items[i].value().first;
                 if (std::any_of(const_variants.begin(), const_variants.end(), [](std::vector<Variant> const& vv) {
                     return std::any_of(vv.begin(), vv.end(), [](Variant const&  v) {
@@ -392,9 +428,6 @@ namespace protal {
                     column[i] = OptionalVariant();
                 } else {
                     auto& variant = variants[indices[i]];
-                    for (auto v : variant) {
-                        outs[i] += v.ToString() + ",";
-                    }
                     auto& call = GetConsensusCall(variant);
                     bool pass = VariantPass(call, variant, min_qual_sum);
 
@@ -408,6 +441,8 @@ namespace protal {
                 }
             }
 
+
+
             bool current_had_indel = false;
             bool bad = false;
             size_t before = 0;
@@ -415,7 +450,7 @@ namespace protal {
             bool stop = false;
 
 
-
+            // Iterate column
             for (auto i = 0; i < column.size(); i++) {
                 auto& msa_row = msa[i];
                 auto& cov = covs[i];
@@ -442,6 +477,15 @@ namespace protal {
                     continue;
                 }
 
+                bool no_cov = (rpos < cov.size() && cov[rpos] == 0) || rpos >= cov.size();
+                bool lower_min_cov = rpos < cov.size() && cov[rpos] < min_cov;
+                bool sufficient_cov = rpos < cov.size() && cov[rpos] >= min_cov;
+
+//                if (!items[i].has_value()) {
+//                    for (auto j = max_ins; j > 0; j--) msa_row.emplace_back('-');
+//                    outs[i] += "a";
+//                }
+
                 if (!items[i].has_value() || (rpos < cov.size() && cov[rpos] < min_cov) || rpos >= cov.size()) {
                     for (auto j = max_ins; j > 0; j--) msa_row.emplace_back('N'); // changed from '-'
                     msa_row.emplace_back('N');
@@ -452,20 +496,6 @@ namespace protal {
                         outs[i] += "C";
                         for (auto j = max_ins; j > 0; j--) msa_row.emplace_back('-');
                         msa_row.emplace_back(column_pass[i] ? ref : 'N');
-//                        for (auto i = std::max(rpos - 30llu, 0llu); i < std::min(cov.size(), rpos + 30); i++) {
-//                            std::cout << reference[i] << (i == rpos ? "<" : "");
-//                        }
-//                        std::cout << std::endl;
-//                        std::cout << "Faulty Branch : check coverages for item: " << i << std::endl;
-//                        std::cout << reference << std::endl;
-//                        for (auto i = 0; i < cov.size(); i++) {
-//                            std::cout << (cov[i] < 10 ? cov[i] : 9);
-//                        }
-//                        std::cout << std::endl;
-//                        for (auto i = std::max(rpos - 30llu, 0llu); i < std::min(cov.size(), rpos + 30); i++) {
-//                            std::cout << cov[i] << (i == rpos ? "< " : " ");
-//                        }
-//                        std::cout << std::endl;
                     } else {
                         outs[i] += "D";
 //                        std::cout << var->ToString() << " pass: " << var_pass << std::endl;

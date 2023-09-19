@@ -312,7 +312,9 @@ namespace protal {
 
             auto sam = options.SamFile(i);
             profiler.FromSam(sam);
+            profiler.PrintStats();
             auto profile = profiler.Profile();
+
 
 //            std::cout << "IS profile sane? " << sam << std::endl;
 //
@@ -880,7 +882,7 @@ namespace protal {
             std::cout << "GetMSAForTaxon " << taxonomy.Get(taxid).ToString() << std::endl;
             GetMSAForTaxon(taxid, name, loader, options, profiles);
 
-            Utils::Input();
+//            Utils::Input();
         }
         std::cout << "Finish StrainWrapper" << std::endl;
     }

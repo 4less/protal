@@ -1,13 +1,17 @@
 project(protal_lib)
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_EXE_LINKER_FLAGS " -lwfa -lz -lCPMML")
+
+set(CMAKE_EXE_LINKER_FLAGS " -lwfa -lCPMML -flto")
 set(CMAKE_CXX_FLAGS_DEBUG " -pthread -ggdb -g -std=c++2a -fopenmp -Wall")
 set(CMAKE_CXX_FLAGS_RELEASE "-std=c++20 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas") #-march=native
 
-set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
 
 message(${CMAKE_CXX_FLAGS_DEBUG})
+message("CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+
+set(CMAKE_PREFIX_PATH "/usr/users/QIB_fr017/fritsche/miniconda3/envs/gcconda/" ${CMAKE_PREFIX_PATH})
 
 # This creates the target and must be specified before using target_include etc
 add_library(protal_lib
@@ -70,7 +74,9 @@ add_library(protal_lib
         SequenceUtils/VariantHandler.h
         Strains/Distances.h
         IO/TaxonStatisticsOutput.h
-        Utils/Matrix.h)
+        Utils/Matrix.h
+        Strains/MSA.h
+        Profiling/TreeFilter.h)
 
 
 set_target_properties(protal_lib PROPERTIES LINKER_LANGUAGE CXX)
@@ -151,6 +157,7 @@ message("${CMAKE_SYSTEM_PREFIX_PATH}")
 set(ZLIB_USE_STATIC_LIBS "ON")
 find_package(ZLIB REQUIRED)
 
+
 #find_library(HTSLIB htslib /usr/users/QIB_fr017/fritsche/miniconda3/include/)
 #find_package(HTSLIB REQUIRED)
 
@@ -171,25 +178,25 @@ find_package(ZLIB REQUIRED)
 target_include_directories(protal_lib PUBLIC /usr/users/QIB_fr017/fritsche/library_cpp/robin)
 target_include_directories(protal_lib PUBLIC /usr/users/QIB_fr017/fritsche/library_cpp/tsl)
 
+# Add-Subdirectory with ${CMAKE_CURRENT_SOURCE_DIR}/
+add_subdirectory(../lib/wfa2-lib/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa)
+add_subdirectory(../lib/gzstream/ ${CMAKE_CURRENT_SOURCE_DIR}/gzstream)
+add_subdirectory(../lib/cPMML/ ${CMAKE_CURRENT_SOURCE_DIR}/cPMML)
+
 
 # Necessary to link to stdc++fs (filesystem experimental support)
 target_link_libraries(protal_lib
         LINK_PUBLIC
+        cPMML_lib
         stdc++fs
         wfa_lib
-        cPMML_lib
         gzstream_lib
         ZLIB::ZLIB
-        -static
+#        -static
         )
 
-#target_link_libraries(protal_lib
-#        LINK_PUBLIC
-#        )
+message("CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
 
-add_subdirectory(../lib/wfa2-lib/ ../src/wfa)
-add_subdirectory(../lib/gzstream/ ../src/gzstream)
-add_subdirectory(../lib/cPMML/ ../src/cPMML)
 
 #add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/fmt/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/fmt)
 #add_subdirectory(/usr/users/QIB_fr017/fritsche/CLionProjects/protal/lib/htslib-1.16/ /usr/users/QIB_fr017/fritsche/CLionProjects/protal/src/htslib)

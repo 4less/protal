@@ -178,6 +178,8 @@ namespace protal {
         }
 
         LineSplitter::Split(line, delim, tokens);
+        if (tokens.empty()) return false;
+
         if (Flag::IsRead1(stoul(tokens[1]))) {
             SamFromTokens(tokens, sam1);
             has_sam1 = true;

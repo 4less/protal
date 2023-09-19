@@ -754,7 +754,6 @@ namespace protal {
                 }
 
 
-
                 if (!one_pass) {
                     std::cout << "No taxon passes criteria" << std::endl;
                 }
@@ -874,8 +873,14 @@ namespace protal {
 //                Process(oira1, oira2, unique);
 //            }
 
+            void PrintStats() {
+                std::cout << "Unique Sams: " << m_pairs_unique.size() << std::endl;
+                std::cout << "NonUnique Sams: " << m_pairs_nonunique.size() << std::endl;
+                std::cout << "NonUnique Best Sams: " << m_pairs_nonunique_best.size() << std::endl;
+            }
 
             void FromSam(std::string &file_path, bool truth_in_header=false) {
+                std::cout << "FromSam : " << file_path << std::endl;
                 m_pairs_unique.clear();
                 m_pairs_nonunique.clear();
                 m_pairs_nonunique_best.clear();
