@@ -9,3 +9,6 @@
 .cache
 .fleet
 /tests
+*.C.o
+*.csv
+*.zip
