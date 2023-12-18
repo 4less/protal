@@ -12,13 +12,11 @@ namespace protal {
     // KmerPutter needs to handle OMP collisions or have the map datastructure deal with it internally
     // -> Put function:  Put(size_t key, size_t taxid, size_t geneid, size_t genepos)
     // -> Boolean that says if it needs pre_processing
-//    template <typename T, typename S=size_t>
-//    concept KmerPutter = requires (T t, S s) {
-//        { t.Put(s, s, s, s) } -> std::same_as<void>;
-//        { t.FirstPut(s, s, s, s) } -> std::same_as<void>;
-//    };
-
-
+    //    template <typename T, typename S=size_t>
+    //    concept KmerPutter = requires (T t, S s) {
+    //        { t.Put(s, s, s, s) } -> std::same_as<void>;
+    //        { t.FirstPut(s, s, s, s) } -> std::same_as<void>;
+    //    };
 
     struct LookupResult {
         uint32_t taxid = UINT32_MAX;
@@ -216,6 +214,16 @@ namespace protal {
                 for (auto i = 0; i < flex_vector.size(); i++) {
                     if (flex_vector[i] == max) {
                         pointers.values_begin[i].Get(m_taxid, m_geneid, m_genepos);
+
+                        if (m_taxid == 0) {
+                            // Debug
+                            std::cout << pointers.values_begin[i].ToString() << std::endl;
+                            for (auto& e : result) {
+                                std::cout << e.ToString() << std::endl;
+                            }
+                            continue;
+                        }
+
                         result.emplace_back(LookupResult( m_taxid, m_geneid, m_genepos, pointers.read_pos + m_flex_k_half ));
                     }
                 }

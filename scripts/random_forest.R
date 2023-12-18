@@ -5,8 +5,8 @@ library(Metrics)
 library(caret)
 library(rfviz)
 library(pmml)
-
-
+library(tuneRanger)
+install.packages("tuneRanger")
 
 sensitivity <- function(ct) {
   tp <- ct[2, 2]
@@ -26,8 +26,70 @@ precision <- function(ct) {
   return(tp / (tp+fp))
 }
 
+evaluate <- function(rf, test.data, training.data) {
+  predictions.test <- predict(rf,  newdata=test.data)
+  predictions.train <- predict(rf,  newdata=training.data)
+  ct.test <- table(predictions.test, test.data$truth)
+  ct.train <- table(predictions.train, training.data$truth)
+  
+  print(paste("TRAINING: Sensitivity: ", sensitivity(ct.train), " Precision: ", precision(ct.train), sep=''))
+  print(paste("TEST:     Sensitivity: ", sensitivity(ct.test), " Precision: ", precision(ct.test), sep=''))
+}
 
-data_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/protal_r214/profiles/profile_forest/truths.csv"
+evaluate_ranger <- function(rf, test.data, training.data) {
+  predictions.test <- predict(rf,  test.data)$predictions
+  predictions.train <- predict(rf,  training.data)$predictions
+  ct.test <- table(predictions.test, test.data$truth)
+  ct.train <- table(predictions.train, training.data$truth)
+  
+  print(paste("TRAINING: Sensitivity: ", sensitivity(ct.train), " Precision: ", precision(ct.train), sep=''))
+  print(paste("TEST:     Sensitivity: ", sensitivity(ct.test), " Precision: ", precision(ct.test), sep=''))
+}
+
+evaluate_tuned <- function(rf, test.data, training.data) {
+  predictions.test <- predict(rf,  newdata=test.data)
+  predictions.train <- predict(rf,  newdata=training.data)
+  ct.test <- table(predictions.test$data$response, test.data$truth)
+  ct.train <- table(predictions.train$data$response, training.data$truth)
+  
+  print(paste("TRAINING: Sensitivity: ", sensitivity(ct.train), " Precision: ", precision(ct.train), sep=''))
+  print(paste("TEST:     Sensitivity: ", sensitivity(ct.test), " Precision: ", precision(ct.test), sep=''))
+}
+set.seed(1234)
+
+# Ranger model with parameter tuning
+train.task <- makeClassifTask(data = training_data, target = "truth")
+estimateTimeTuneRanger(train.task)
+res = tuneRanger(train.task, measure = list(multiclass.brier), num.trees = 500,
+                 num.threads = 8, iters = 150, save.file.path = NULL)
+varImp(res$model)#(res$model, sort = TRUE , n.var , main = "Variable importance" )
+str(res$model)
+evaluate_tuned(res$model, test_data, training_data)
+
+ranger.fr <- ranger(truth ~ present_genes + total_hits + unique_hits + mean_ani + expected_gene_presence + mean_mapq, 
+                    data = training_data, 
+                    importance = 'permutation',
+                    scale.permutation.importance = TRUE,
+                    mtry = res$recommended.pars$mtry,
+                    min.node.size = res$recommended.pars$min.node.size,
+                    sample.fraction = res$recommended.pars$sample.fraction,
+                    multiclass.brier = res$recommended.pars$multiclass.brier)
+ranger.fr$variable.importance
+evaluate_ranger(ranger.fr, test_data, training_data)
+
+# Random forest
+rf <- randomForest(formula = truth ~ ., 
+                   data = training_data,
+                   ntree = 500)
+evaluate(rf, test_data, training_data)
+varImpPlot(rf, sort = TRUE , 6, main = "Variable importance" )
+
+
+
+
+
+
+data_path <- "/usr/users/QIB_fr017/fritsche/CLionProjects/protal/scripts/data/truths.csv"
 data <- read.csv(data_path, header=FALSE, sep='\t')
 colnames(data) <- c("environment", "sample", "truth", "prediction", "taxon", "present_genes", "total_hits", "unique_hits", "mean_ani", "expected_gene_presence", "expected_gene_presence_ratio", "uniqueness", "mean_mapq", "vcov")
 
@@ -35,7 +97,7 @@ data$truth_raw <- as.logical(data$truth)
 data$prediction <- as.logical(data$prediction)
 data$truth <- as.factor(data$truth_raw)
 
-set.seed(1234) # Set Seed so that same sample can be reproduced in future also
+ # Set Seed so that same sample can be reproduced in future also
 # Now Selecting 75% of data as sample from total 'n' rows of the data  
 
 columns <- c("truth", "present_genes", "total_hits", "unique_hits", "mean_ani", "expected_gene_presence", "mean_mapq")
@@ -43,11 +105,11 @@ predictors <- c("present_genes", "total_hits", "unique_hits", "mean_ani", "expec
 sample <- sample.int(n = nrow(data), size = floor(.8*nrow(data)), replace = F)
 training_data <- data[sample, columns]
 test_data  <- data[-sample, columns]
+paste("Training/Test  ", nrow(training_data), "/", nrow(test_data), sep='')
 
 
-rf <- randomForest(formula = truth ~ ., 
-                   data = training_data,
-                   ntree = 500)
+
+evaluate(rf, test_data, training_data)
 
 node_sizes <- seq(10,200,10)
 

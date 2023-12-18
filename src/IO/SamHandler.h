@@ -8,6 +8,7 @@
 
 #include <string>
 #include "LineSplitter.h"
+#include <iostream>
 
 namespace protal {
     using QNAME_t = std::string;
@@ -115,6 +116,39 @@ namespace protal {
         }
     };
 
+    struct ReducedSam {
+        size_t m_qid;
+        size_t m_rid;
+        FLAG_t m_flag;
+        POS_t m_pos;
+        MAPQ_t m_mapq;
+        RNAME_t m_rnext;
+        POS_t m_pnext;
+        TLEN_t m_tlen;
+        QUAL_t m_qual;
+        SEQ_t m_seq;
+        CIGAR_t m_cigar;
+
+        [[nodiscard]] std::string ToString() const {
+            return  std::to_string(m_qid) + '\t'
+                    + std::to_string(m_flag) + '\t'
+                    + std::to_string(m_rid) + '\t'
+                    + std::to_string(m_pos) + '\t'
+                    + std::to_string(m_mapq) + '\t'
+                    + m_cigar + '\t'
+                    + m_rnext + '\t'
+                    + std::to_string(m_pnext) + '\t'
+                    + std::to_string(m_tlen) + '\t'
+                    + m_seq + '\t'
+                    + m_qual;
+        }
+
+        bool IsReversed() const {
+            return Flag::IsRead1(m_flag) ? Flag::IsRead1ReverseComplement(m_flag) : Flag::IsRead2ReverseComplement(m_flag);
+        }
+
+    };
+
     struct SamEntry {
         QNAME_t m_qname;
         FLAG_t m_flag;
@@ -128,7 +162,7 @@ namespace protal {
         SEQ_t m_seq;
         CIGAR_t m_cigar;
 
-        std::string ToString() const {
+        [[nodiscard]] std::string ToString() const {
             return  m_qname + '\t'
                     + std::to_string(m_flag) + '\t'
                     + m_rname + '\t'
@@ -160,6 +194,8 @@ namespace protal {
         sam.m_seq = tokens[9];
         sam.m_qual = tokens[10];
     }
+
+
 
     static bool GetSam(std::istream &file, std::string &line, std::vector<std::string> &tokens, SamEntry &sam) {
         static std::string delim = "\t";
@@ -201,6 +237,8 @@ namespace protal {
 
         return true;
     }
+
+
 
     class SamHandler {
 

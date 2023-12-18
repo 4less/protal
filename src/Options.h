@@ -9,6 +9,7 @@
 #include <utility>
 #include "LineSplitter.h"
 #include <fstream>
+#include <regex>
 
 
 namespace protal {
@@ -96,6 +97,8 @@ namespace protal {
         std::vector<std::string> m_sampleid_list;
         std::vector<std::string> m_profile_truth_list;
 
+        std::vector<size_t> m_range;
+
         std::string m_profile_truth;
 
         size_t m_threads = DEFAULT_THREADS;
@@ -140,10 +143,10 @@ namespace protal {
                 std::string benchmark_alignment_output, bool show_help, bool mapq_debug_output,
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
                 std::string database_path, std::vector<std::string>& output_prefix_list,
-                std::string sequence_file, std::string map_file, std::string output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
+                std::string sequence_file, std::string map_file, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
                 size_t x_drop, size_t max_key_ubiquity, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
                 std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
-                bool force, bool verbose) :
+                bool force, bool verbose, std::vector<size_t> range) :
                 m_build(build),
                 m_profile(profile),
                 m_profile_only(profile_only),
@@ -173,7 +176,8 @@ namespace protal {
                 m_benchmark_alignment_output(benchmark_alignment_output),
                 m_mapq_debug_out(mapq_debug_output),
                 m_force(force),
-                m_verbose(verbose) {
+                m_verbose(verbose),
+                m_range(range) {
             if (samplename_list.empty()) {
                 m_sampleid_list = m_prefix_list;
             } else {
@@ -336,6 +340,10 @@ namespace protal {
 
         size_t GetCurrentIndex() const {
             return m_current_index;
+        }
+
+        std::vector<size_t> GetRange() const {
+            return m_range;
         }
 
 //        std::string GetOutputPrefix() const {
@@ -829,12 +837,55 @@ namespace protal {
             return true;
         }
 
+        static std::vector<size_t> ProcessRange(std::string const& s, size_t const& total) {
+            std::regex pattern("^\\d+(-\\d+)?(,\\d+(-(\\d+)?)?)*$");
+            if (!std::regex_match(s, pattern)) {
+                std::cout << "String " << s << " does not match the regex." << std::endl;
+                exit(9);
+            }
+
+            std::vector<size_t> samples;
+            std::vector<std::string> tokens;
+            std::vector<std::string> subtokens;
+
+            Utils::split(tokens, s, ",");
+
+            for (auto& token : tokens) {
+                if (token.empty()) continue;
+                if (token.find('-') != std::string::npos) {
+                    Utils::split(subtokens, token, "-");
+
+                    auto begin = stoll(subtokens[0]);
+                    auto end = !subtokens[1].empty() ? stoll(subtokens[1]) + 1 : total + 1;
+
+                    if (begin >= total || end - 1 > total) {
+                        std::cout << "There are only " << total << " samples." << std::endl;
+                        exit(9);
+                    }
+
+                    for (auto i = begin; i < end; i++) {
+                        samples.emplace_back(i-1);
+                    }
+                } else {
+                    samples.emplace_back(stoll(token)-1);
+                }
+            }
+
+            std::unordered_set<size_t> as_set(samples.begin(), samples.end());
+            if (as_set.size() != samples.size()) {
+                std::cout << "Ranges and numbers may not overlap." << std::endl;
+                exit(9);
+            }
+
+            return samples;
+        }
+
         static Options OptionsFromArguments(int argc, char *argv[]) {
             auto cxx_options = CxxOptions();
 
 
             if (argc <= 1) {
-                return Options();
+                return {};
             }
 
 
@@ -868,6 +919,10 @@ namespace protal {
             auto universal_prefix = result.count("prefix") ? result["prefix"].as<std::string>() : "";
             auto output_dir = result.count("outdir") ? result["outdir"].as<std::string>() : "";
 
+            auto range_arg = result.count("map_range") ? result["map_range"].as<std::string>() : "";
+            std::vector<size_t> range;
+
+
             std::vector<std::string> first_list;
             std::vector<std::string> second_list;
             std::vector<std::string> prefix_list;
@@ -879,6 +934,10 @@ namespace protal {
             if (!map_file.empty()) {
                 output_dir = "";
                 LoadFromMap(map_file, output_dir, prefix_list, first_list, second_list, sam_list, profile_list, samplenames_list, profile_truth_list);
+
+                if (range_arg != "") {
+                    range = ProcessRange(range_arg, first_list.size());
+                }
             } else {
                 LineSplitter::Split(first, ",", first_list);
                 LineSplitter::Split(second, ",", second_list);
@@ -922,6 +981,8 @@ namespace protal {
                         }
                     }
                 }
+
+
             } else {
                 if (sam_list.empty()) {
                     for (auto i = 0; i < prefix_list.size(); i++) {
@@ -950,6 +1011,11 @@ namespace protal {
                 } else {
                     db_path = db_path_env;
                 }
+            }
+
+            if (range.empty()) {
+                range.resize(prefix_list.size());
+                std::iota(range.begin(), range.end(), 0);
             }
 
             auto options = Options(
@@ -983,7 +1049,8 @@ namespace protal {
                     profile_truth_list,
                     profile_truth,
                     force,
-                    verbose);
+                    verbose,
+                    range);
 
 
             if (!options.PrepareAndCheckValidity()) {

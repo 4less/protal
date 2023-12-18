@@ -76,7 +76,28 @@ add_library(protal_lib
         IO/TaxonStatisticsOutput.h
         Utils/Matrix.h
         Strains/MSA.h
-        Profiling/TreeFilter.h)
+        Profiling/TreeFilter.h
+        Profiling/ProfilerNew.cpp
+        Profiling/ProfilerNew.h
+        Profiling/MSA.cpp
+        Profiling/MSA.h
+        Profiler/GeneBase.h
+        Profiler/TaxonBase.h
+        Profiler/StrainBase.h
+        Profiler/ProfilerDefinitions.h
+        Profiler/Gene.cpp
+        Profiler/Gene.h
+        Profiler/AlignmentContainerBase.h
+        Profiler/AlignmentContainer.cpp
+        Profiler/AlignmentContainer.h
+        Profiler/SampleBase.h
+        Profiler/Sample.cpp
+        Profiler/Sample.h
+        Profiler/Profiler.cpp
+        Profiler/Profiler.h
+        Profiler/Taxon.cpp
+        Profiler/Taxon.h
+        Profiler/ReadFilter.h)
 
 
 set_target_properties(protal_lib PROPERTIES LINKER_LANGUAGE CXX)
@@ -120,9 +141,11 @@ target_link_directories(protal_lib
         Alignment/
         Utils/
         Profiling/
+        Profiler/
         SequenceUtils/
         Taxonomy/
-        SNPs/)
+        SNPs/
+        cPMML/)
 
 target_include_directories(protal_lib
         PUBLIC
@@ -192,7 +215,7 @@ target_link_libraries(protal_lib
         wfa_lib
         gzstream_lib
         ZLIB::ZLIB
-#        -static
+        -static # WITHOUT THIS IT WILL NOT COMPILE INTO A STATIC LIBRARY
         )
 
 message("CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")

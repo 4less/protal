@@ -36,7 +36,7 @@ add_executable(protal
 
 
 # Link to cmake file in src
-target_link_libraries(protal protal_lib)
+target_link_libraries(protal PRIVATE protal_lib)
 
 add_subdirectory(src/)
 #add_subdirectory(tests/)

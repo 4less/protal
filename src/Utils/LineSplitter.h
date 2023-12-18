@@ -6,6 +6,7 @@
 
 #include <vector>
 #include <string>
+#include <stdexcept>
 
 namespace protal {
     class LineSplitter {

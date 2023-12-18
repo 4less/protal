@@ -17,6 +17,9 @@
 #include "AlignmentStrategy.h"
 #include "TaxonStatisticsOutput.h"
 #include "ProgressBar.h"
+#include "Profiler/AlignmentContainer.h"
+#include "Profiler/Profiler.h"
+#include "Profiler/ReadFilter.h"
 //#include "AnchorFinder.h"
 //#include "AlignmentStrategy.h"
 //#include "gzstream/gzstream.h"
@@ -143,7 +146,9 @@ namespace protal {
             bm_classify.Start();
 
             if (options.PairedMode()) {
-                for (auto index = 0; index < options.GetFileCount(); index++) {
+                for (auto index : options.GetRange()) {
+                //for (auto index = 0; index < options.GetFileCount(); index++) {
+
                     Benchmark bm_classify_sample("Classifying sample");
                     bm_classify_sample.Start();
 
@@ -269,6 +274,35 @@ namespace protal {
     using Profile = profiler::MicrobialProfile;
     using Profiles = std::vector<Profile>;
 
+    void ProfileWrapper2(Options& options, ProtalDB& db) {
+        std::cout << "ProfileWrapper2" << std::endl;
+        GenomeLoader& genomes = db.GetGenomes();
+
+        if (!db.IsTaxonomyLoaded()) db.LoadTaxonomy(options.GetInternalTaxonomyFile());
+        auto& taxonomy = db.GetTaxonomy();
+
+//        omp_set_num_threads(6);
+
+//#pragma omp parallel for default(none) shared(options, cout, taxonomy, genomes, db)
+        for (auto i : options.GetRange()) {
+        //for (auto i = 0; i < options.GetFileCount(); i++) {
+
+            Profiler::AlignmentContainer ac;
+            auto sam = options.SamFile(i);
+//#pragma omp critical(read_sam)
+            ac.LoadSam(sam);
+
+            const auto& alignments = ac.AlignmentPairs();
+            Profiler::ReadFilter filter;
+            Profiler::Profiler<Profiler::ReadFilter> profiler(filter);
+            profiler.Profile(ac);//, db);
+
+//             profiler(genomes);
+//
+//            profiler.FromSam(sam);
+        }
+    }
+
     Profiles ProfileWrapper(Options& options, ProtalDB& db) {
         GenomeLoader& genomes = db.GetGenomes();
 
@@ -300,7 +334,8 @@ namespace protal {
         omp_set_num_threads(options.GetThreads());
 
         #pragma omp parallel for default(none) firstprivate(filter) shared(options, prog, cout, taxonomy, profiles, genomes)
-        for (auto i = 0; i < options.GetFileCount(); i++) {
+        for (auto i : options.GetRange()) {
+        //for (auto i = 0; i < options.GetFileCount(); i++) {
 #pragma omp critical(progress)
             prog.UpdateAdd(1);
 
@@ -314,30 +349,6 @@ namespace protal {
             profiler.FromSam(sam);
             profiler.PrintStats();
             auto profile = profiler.Profile();
-
-
-//            std::cout << "IS profile sane? " << sam << std::endl;
-//
-//
-//            for (auto& [tid, tax] : profile.GetTaxa()) {
-//                for (auto& [gid, gene] : tax.GetGenes()) {
-//                    for (auto& [k,v] : gene.GetStrainLevel().GetVariantHandler().GetVariants()) {
-//                        for (auto& var : v) {
-//                            if (var.Observations() == 65535) {
-//                                std::cout << tid << std::endl;
-//                                std::cout << gid << std::endl;
-//                                std::cout << var.ToString() << " <--- ProfileWrapper" << std::endl;
-//                                std::cout << "Size: " << var.GetQualListCopy().size() << std::endl;
-//                                for (auto& ve : v) {
-//                                    std::cout << ve.ToString() << std::endl;
-//                                }
-//                                Utils::Input();
-////                                exit(3);
-//                            }
-//                        }
-//                    }
-//                }
-//            }
 
 
             std::optional<TruthSet> truth = options.HasProfileTruths() ?
@@ -376,23 +387,6 @@ namespace protal {
 #pragma omp critical(add_profiles)
             profiles.emplace_back(profile);
         }
-
-//        std::cout << std::endl;
-//
-//        for (auto& profile : profiles) {
-//            for (auto& [tid, tax] : profile.GetTaxa()) {
-//                for (auto& [gid, gene] : tax.GetGenes()) {
-//                    for (auto& [k,v] : gene.GetStrainLevel().GetVariantHandler().GetVariants()) {
-//                        for (auto& var : v) {
-//                            if (var.Observations() == 65535) {
-//                                std::cout << var.ToString() << " <--- ProfileWrapper all profiles" << std::endl;
-//                                exit(3);
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        }
         return profiles;
     }
 
@@ -988,20 +982,6 @@ namespace protal {
 
         std::cout << "Options:\n" << options.ToString() << std::endl;
 
-//        std::unordered_map<std::string, std::string> sample = {
-//                {"present_genes", "40"},
-//                {"total_hits", "50"},
-//                {"unique_hits", "10"},
-//                {"expected_gene_presence", "40"},
-//                {"mean_ani", "97.9"}
-//        };
-//        std::string model_path = "/usr/users/QIB_fr017/fritsche/Documents/HPC/group/projects/protal/camisim_all_output/output_flex_r214/profiles/mapq4_2/random_forest_cami_r214.pmml";
-//        cpmml::Model model(model_path);
-//        std::cout << "Loaded data" << std::endl;
-//        auto prediction = stod(model.predict(sample));
-//        auto score = model.score(sample);
-//        std::cout << "Prediction: " << prediction << std::endl;
-//        std::cout << "Score:      " << score.as_double() << std::endl;
 
         ProtalDB db(options.GetSequenceFile(), options.GetSequenceMapFile());
 
@@ -1044,12 +1024,14 @@ namespace protal {
 
             Benchmark bm_profiling("Profiling");
             bm_profiling.Start();
+            // ProfileWrapper2(options, db);
+            // exit(9);
             auto profiles = ProfileWrapper(options, db);
             bm_profiling.Stop();
             bm_profiling.PrintResults();
 
 
-            // Remove later
+            // Remove later - keep option
             double min_ani = 0.95;
             double min_gene_presence = 0.5; //previously 0.5
             size_t min_total_hits = 60; //previously 70

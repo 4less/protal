@@ -61,6 +61,7 @@ namespace protal {
                 return a.size < b.size;
             });
 
+
             uint32_t previous_size = 0;
             uint32_t successful_lookups = 0;
             uint32_t total_lookups = 0;
@@ -118,6 +119,7 @@ namespace protal {
         }
 
         Anchor ExtractAndExtendAnchorFromSeed(Seed& seed, std::string& fwd, std::string& rev) {
+//            if (seed.taxid == 0) exit(23); // remove
             auto& genome = m_genome_loader.GetGenome(seed.taxid);
             auto& gene = genome.GetGeneOMP(seed.geneid);
 
@@ -332,6 +334,10 @@ namespace protal {
             }
 
             for (auto& seed : m_seed_tmp) {
+//                if (seed.taxid == 0) {
+//                    std::cout << "seed taxid is 0 "<< std::endl;
+//                    std::cout << seed.ToString() << std::endl;
+//                }
                 auto anchor = ExtractAndExtendAnchorFromSeed(seed, *m_fwd, m_rev);
                 m_anchors.emplace_back(anchor);
             }

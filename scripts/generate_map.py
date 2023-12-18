@@ -6,8 +6,6 @@ from os.path import isfile, join
 import textdistance
 import argparse
 
-
-
 def OmitExtension(file: str, extensions=None):
     if extensions == None:
         extensions = {".fq", ".fastq", ".fq.gz", ".fastq.gz"}

@@ -193,7 +193,7 @@ namespace protal::classify {
             for (auto& alignment2 : read2) {
                 if (alignment1.Taxid() == alignment2.Taxid() && alignment1.GeneId() == alignment2.GeneId()) {
                     if (!CorrectOrientation(alignment1, alignment2)) {
-                        std::cerr << "Discard: " << std::endl;
+                        std::cerr << "Discard wrong orientation: " << std::endl;
                         std::cerr << alignment1.ToString() << std::endl;
                         std::cerr << alignment2.ToString() << std::endl;
                         continue;
@@ -294,13 +294,6 @@ namespace protal::classify {
 
             while (reader(record1, record2)) {
                 thread_statistics.reads++;
-//
-//#pragma omp critical(output)
-//                {
-//                    std::cout << record1.to_string();
-//                    std::cout << record2.to_string();
-//                    std::cout << std::string(40, '-') << std::endl;
-//                }
 
                 // Clear intermediate storage objects
                 kmers1.clear();
