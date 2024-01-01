@@ -282,6 +282,7 @@ namespace protal::classify {
 
             size_t record_id = omp_get_thread_num();
 
+            Benchmark bm_kmer_extracter{"Retrieve k-mers"};
             Benchmark bm_anchor_finder{"Seed- and Anchor-finding"};
             Benchmark bm_anchor_recovery{"Anchor recovery"};
             Benchmark bm_alignment{"Alignment handler"};
@@ -308,7 +309,9 @@ namespace protal::classify {
 
 
                 // Retrieve kmers
+                bm_kmer_extracter.Start();
                 kmer_handler(std::string_view(record1.sequence), kmers1);
+                bm_kmer_extracter.Stop();
 
 
                 if constexpr(KmerStatisticsConcept<KmerHandler>) {
@@ -318,7 +321,9 @@ namespace protal::classify {
                     thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
                 }
 
+                bm_kmer_extracter.Start();
                 kmer_handler(std::string_view(record2.sequence), kmers2);
+                bm_kmer_extracter.Stop();
 
                 if constexpr(KmerStatisticsConcept<KmerHandler>) {
                     thread_statistics.kmers_total += kmer_handler.TotalKmers();
@@ -416,6 +421,10 @@ namespace protal::classify {
             {
                 anchor_finder_global.m_bm_seeding.Join(anchor_finder1.m_bm_seeding);
                 anchor_finder_global.m_bm_seeding.Join(anchor_finder2.m_bm_seeding, false);
+                anchor_finder_global.m_bm_reverse_complement.Join(anchor_finder1.m_bm_reverse_complement);
+                anchor_finder_global.m_bm_reverse_complement.Join(anchor_finder2.m_bm_reverse_complement, false);
+                anchor_finder_global.m_bm_operator.Join(anchor_finder1.m_bm_operator);
+                anchor_finder_global.m_bm_operator.Join(anchor_finder2.m_bm_operator, false);
                 anchor_finder_global.m_bm_seed_subsetting.Join(anchor_finder1.m_bm_seed_subsetting);
                 anchor_finder_global.m_bm_seed_subsetting.Join(anchor_finder2.m_bm_seed_subsetting, false);
                 anchor_finder_global.m_bm_processing.Join(anchor_finder1.m_bm_processing);
@@ -442,7 +451,7 @@ namespace protal::classify {
 //                anchor_finder_global.m_bm_extend_anchors.DivideSamplingsBy(2);
 
                 bm_anchor_finder_global.Join(bm_anchor_finder);
-                bm_anchor_recovery_global.Join(bm_anchor_recovery);
+                // bm_anchor_recovery_global.Join(bm_anchor_recovery);
                 bm_alignment_global.Join(bm_alignment);
                 bm_alignment_join_sort_global.Join(bm_alignment_join_sort);
                 bm_output_global.Join(bm_output);
@@ -473,15 +482,25 @@ namespace protal::classify {
 
         if (options.Verbose()) {
             std::cout << "---------------Speed benchmarks---------------------" << std::endl;
-            anchor_finder_global.m_bm_seeding.PrintResults();
-            anchor_finder_global.m_bm_seed_subsetting.PrintResults();
-            anchor_finder_global.m_bm_processing.PrintResults();
-            anchor_finder_global.m_bm_pairing.PrintResults();
-            anchor_finder_global.m_bm_sorting_anchors.PrintResults();
-            anchor_finder_global.m_bm_recovering_anchors.PrintResults();
-            anchor_finder_global.m_bm_extend_anchors.PrintResults();
             bm_anchor_finder_global.PrintResults();
-            bm_anchor_recovery_global.PrintResults();
+            std::cout << "\t";
+            anchor_finder_global.m_bm_operator.PrintResults();
+            std::cout << "\t\t";
+            anchor_finder_global.m_bm_reverse_complement.PrintResults();
+            std::cout << "\t\t";
+            anchor_finder_global.m_bm_seeding.PrintResults();
+            // anchor_finder_global.m_bm_seed_subsetting.PrintResults();
+            std::cout << "\t\t";
+            anchor_finder_global.m_bm_processing.PrintResults();
+            std::cout << "\t\t";
+            anchor_finder_global.m_bm_pairing.PrintResults();
+            std::cout << "\t\t";
+            anchor_finder_global.m_bm_extend_anchors.PrintResults();
+            std::cout << "\t\t";
+            anchor_finder_global.m_bm_sorting_anchors.PrintResults();
+            std::cout << "\t\t";
+            anchor_finder_global.m_bm_recovering_anchors.PrintResults();
+            // bm_anchor_recovery_global.PrintResults();
             bm_alignment_global.PrintResults();
             bm_alignment_join_sort_global.PrintResults();
             bm_output_global.PrintResults();

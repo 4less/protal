@@ -342,11 +342,11 @@ namespace protal {
                               optional_item.value().second.get().CalculateCoverageVector2() :
                               CoverageVec());
 
-            if (optional_item.has_value()) {
-                auto& [var, srh] = optional_item.value();
-                std::cout << (!var.empty() ? var.front().front().ToString() + " " + var.back().front().ToString() : "empty") << std::endl;
-                std::cout << srh.get().ToString() << std::endl;
-            }
+            // if (optional_item.has_value()) {
+            //     auto& [var, srh] = optional_item.value();
+            //     std::cout << (!var.empty() ? var.front().front().ToString() + " " + var.back().front().ToString() : "empty") << std::endl;
+            //     std::cout << srh.get().ToString() << std::endl;
+            // }
 
             msa_item.reserve(msa_item.size() + covs.back().size());
         }
@@ -481,35 +481,39 @@ namespace protal {
                 bool lower_min_cov = rpos < cov.size() && cov[rpos] < min_cov;
                 bool sufficient_cov = rpos < cov.size() && cov[rpos] >= min_cov;
 
-//                if (!items[i].has_value()) {
-//                    for (auto j = max_ins; j > 0; j--) msa_row.emplace_back('-');
-//                    outs[i] += "a";
-//                }
+                const char LACKING_COVERAGE = '-'; // Changed from 'N'
+                const char VARIANT_NO_PASS = 'N';
+                const char REFERENCE_NO_PASS = 'N';
 
                 if (!items[i].has_value() || (rpos < cov.size() && cov[rpos] < min_cov) || rpos >= cov.size()) {
-                    for (auto j = max_ins; j > 0; j--) msa_row.emplace_back('N'); // changed from '-'
-                    msa_row.emplace_back('N');
+                    for (auto j = max_ins; j > 0; j--) msa_row.emplace_back(LACKING_COVERAGE); // changed from '-'
+                    msa_row.emplace_back(LACKING_COVERAGE);
                     outs[i] += "A";
                 } else if (cov[rpos] > 0) {
                     outs[i] += "B";
                     if (!var.has_value()) {
+                        // NO VARIANT: ---------------------------------------------------------------------------------
                         outs[i] += "C";
                         for (auto j = max_ins; j > 0; j--) msa_row.emplace_back('-');
-                        msa_row.emplace_back(column_pass[i] ? ref : 'N');
+                        msa_row.emplace_back(column_pass[i] ? ref : REFERENCE_NO_PASS);
                     } else {
+                        // VARIANT: ------------------------------------------------------------------------------------
                         outs[i] += "D";
 //                        std::cout << var->ToString() << " pass: " << var_pass << std::endl;
                         if (!var_pass) {
                             outs[i] += "E";
+                            // NO PASS: IGNORE COLUMN ------------------------------------------------------------------
                             // Variant does not pass - add 'N' for ambiguous base.
                             AddInsertionGap(msa_row, max_ins);
-                            msa_row.emplace_back('N');
+                            msa_row.emplace_back(VARIANT_NO_PASS);
                         } else if (var->IsSNP()) {
+                            // PASS: SNP -------------------------------------------------------------------------------
                             outs[i] += "F";
                             // Variant passes and is SNP
                             AddInsertionGap(msa_row, max_ins);
                             msa_row.emplace_back(var->GetVariant());
                         } else if (var->IsINS()) {
+                            // PASS: INSERTION -------------------------------------------------------------------------
                             outs[i] += "G";
                             // Variant passes and is Insertion
                             had_indel = true;
@@ -518,6 +522,7 @@ namespace protal {
                             AddInsertionGap(msa_row, max_ins - var->GetStructuralSize());
                             msa_row.emplace_back(ref);
                         } else {
+                            // PASS: DELETION --------------------------------------------------------------------------
                             outs[i] += "H";
                             // Variant passes and is Deletion
                             had_indel = true;

@@ -880,7 +880,6 @@ namespace protal {
             }
 
             void FromSam(std::string &file_path, bool truth_in_header=false) {
-                std::cout << "FromSam : " << file_path << std::endl;
                 m_pairs_unique.clear();
                 m_pairs_nonunique.clear();
                 m_pairs_nonunique_best.clear();

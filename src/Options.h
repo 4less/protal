@@ -442,6 +442,10 @@ namespace protal {
             return m_output_dir + '/' + species_name + ".msa.fna";
         }
 
+        std::string GetMSAProcessedOutput(std::string species_name) const {
+            return m_output_dir + '/' + species_name + ".processed.msa.fna";
+        }
+
         std::string GetMSAPartitionOutput(std::string species_name) const {
             return m_output_dir + '/' + species_name + ".partition.txt";
         }

@@ -190,6 +190,47 @@ namespace protal {
             result.emplace_back(std::move(m_lookup_tmp));
         }
 
+        inline void GetFromLoopupSIMD(LookupList& result, LookupPointer& pointers) {
+
+            if (pointers.flex_begin != nullptr) {
+                flex_vector.clear();
+                auto max = 0;
+                auto max_count = 0;
+                for (auto begin = pointers.flex_begin; begin < pointers.flex_end; begin++) {
+                    auto sim = Seedmap::Similarity(*begin, pointers.flex_key);
+                    flex_vector.emplace_back(sim);
+                    if (sim > max)  {
+                        max = sim;
+                        max_count = 0;
+                    }
+                    max_count += (sim == max);
+                }
+
+                if (max_count > m_max_ubiquity) {
+                    //                    std::cout << "No recovery " << max_count << "/" << m_entry_end - m_entry_begin << std::endl;
+                    return;
+                }
+
+                //                std::cout << "Recovery" << std::endl;
+                for (auto i = 0; i < flex_vector.size(); i++) {
+                    if (flex_vector[i] == max) {
+                        pointers.values_begin[i].Get(m_taxid, m_geneid, m_genepos);
+
+                        if (m_taxid == 0) {
+                            // Debug
+                            std::cout << pointers.values_begin[i].ToString() << std::endl;
+                            for (auto& e : result) {
+                                std::cout << e.ToString() << std::endl;
+                            }
+                            continue;
+                        }
+
+                        result.emplace_back(LookupResult( m_taxid, m_geneid, m_genepos, pointers.read_pos + m_flex_k_half ));
+                    }
+                }
+            }
+        }
+
         inline void GetFromLookup(LookupList& result, LookupPointer& pointers) {
             if (pointers.flex_begin != nullptr) {
                 flex_vector.clear();

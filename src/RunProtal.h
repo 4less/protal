@@ -249,6 +249,7 @@ namespace protal {
                 using OutputHandler = ProtalOutputHandler;
                 OutputHandler output_handler(sam_output, 1024*512, 1024*1024*16, genomes, 0.8);
 //                std::ifstream is {options.GetFirstFile(), std::ios::in};
+//                std::ifstream is {options.GetFirstFile(), std::ios::in};
                 igzstream is { options.GetFirstFile(0).c_str() };
                 SeqReader reader{ is };
 
@@ -347,7 +348,7 @@ namespace protal {
 
             auto sam = options.SamFile(i);
             profiler.FromSam(sam);
-            profiler.PrintStats();
+            // profiler.PrintStats();
             auto profile = profiler.Profile();
 
 
@@ -654,17 +655,56 @@ namespace protal {
         return { NAN, 0 };
     }
 
-    static bool IsRowGood(std::vector<char> row, size_t min_chars) {
+    static bool IsRowGood(std::vector<char> row, size_t min_hcov) {
         size_t count_non_n = 0;
         for (auto c : row) {
             count_non_n += (c != 'N' && c != '-');
         }
-        return count_non_n >= min_chars;
+        return count_non_n >= min_hcov;
     }
 
+    static std::vector<uint32_t> GetInformationVector(MSAVector const& msa_vector) {
+        size_t info = 0;
+        const auto msa_len = msa_vector.front().size();
+        std::vector<uint32_t> information_vector(msa_len, 0);
+
+        for (auto pos = 0; pos < msa_len; pos++) {
+            info = 0;
+            for (auto const& seq : msa_vector) info += (seq[pos] != 'N' && seq[pos] != '-');
+            information_vector[pos] = info;
+        }
+        return information_vector;
+    }
+
+    static MSAVector ProcessMSA(MSAVector const& msa_vector, double position_coverage = 0.5) {
+        auto sample_len = msa_vector.size();
+        auto info_vector = GetInformationVector(msa_vector);
+        MSAVector processed_msa(sample_len, std::vector<char>{});
+
+        auto sample_size_treshold = msa_vector.size() * position_coverage;
+        for (auto pos = 0; pos < info_vector.size(); pos++) {
+            if (info_vector[pos] > sample_size_treshold) {
+                for (auto s = 0; s < sample_len; s++) {
+                    processed_msa[s].emplace_back(msa_vector[s][pos]);
+                }
+            }
+        }
+        return processed_msa;
+    }
+
+    static void OutputMSA(MSAVector const& msa, std::vector<std::string> const& names, std::ostream& os=std::cout) {
+        for (auto i = 0; i < msa.size(); i++) {
+            auto& row = msa[i];
+
+            if (row.empty()) continue;
+            os << ">" << names[i] << std::endl;
+            os << std::string_view(row.begin(), row.end()) << std::endl;
+        }
+    }
 
     static void GetMSAForTaxon (uint32_t taxid, std::string taxon_name, GenomeLoader& loader, Options& options, Profiles& profiles, std::optional<profiler::TaxonFilter> filter={}) {
-        std::cout << "GET MSA FOR TAXON " << taxid << std::endl;
+
+        auto min_hcov = 5000;
 
         auto min_cov = 2;
         auto min_qual_sum = 60;
@@ -694,9 +734,6 @@ namespace protal {
             auto& gene = genome.GetGene(geneid);
             if (!gene.IsSet()) continue;
 
-
-
-//            std::cout << "found: " << geneid << std::endl;
             bool hasone = false;
             for (auto i = 0; i < profile_indices.size(); i++) {
 
@@ -710,12 +747,10 @@ namespace protal {
 
                 if (!genes.contains(geneid)) {
                     items.emplace_back(OptionalMSASequenceItem{});
-                    continue;
                 } else {
                     hasone = true;
                     auto& strain = genes.at(geneid).GetStrainLevel();
                     auto snps = SharedAlignmentRegion::GetSNPs(strain.GetVariantHandler());
-
 
                     auto& region = strain.GetSequenceRangeHandler();
                     items.emplace_back( OptionalMSASequenceItem { { std::move(snps), region } } );
@@ -725,14 +760,13 @@ namespace protal {
             if (hasone) {
                 previous_size = msa.front().size();
 
-                std::cout << "GeneID: " << gene.GetId() << std::endl;
-                std::cout << "Profile indices" << std::endl;
-                for (auto i = 0; i < profile_indices.size(); i++) {
-                    std::cout << i << " " << profile_indices[i] << " " << names[i] << std::endl;
-                }
-//                Utils::Input();
+                // std::cout << "GeneID: " << gene.GetId() << std::endl;
+                // std::cout << "Profile indices" << std::endl;
+                // for (auto i = 0; i < profile_indices.size(); i++) {
+                //     std::cout << i << " " << profile_indices[i] << " " << names[i] << std::endl;
+                // }
 
-                for (auto& opt : items) {
+                for (auto& opt : items)  {
                     if (!opt.has_value()) continue;
                     auto& [var, shr] = opt.value();
                     if (std::any_of(var.begin(), var.end(), [](std::vector<Variant> const& vv) {
@@ -746,6 +780,7 @@ namespace protal {
                 }
 
                 bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum);
+
                 if (!result) continue;
                 if (msa.front().size() > partition_start) {
                     if (partitions.size() > 0) {
@@ -761,7 +796,6 @@ namespace protal {
                     partition_start = msa.front().size();
                 }
             }
-
         }
 
         bool any_good = std::any_of(msa.begin(), msa.end(), [](MSARow const& row){
@@ -770,17 +804,15 @@ namespace protal {
         if (!any_good) return;
 
         std::ofstream os(options.GetMSAOutput(taxon_name), std::ios::out);
-        auto s = 0;
         for (auto i = 0; i < msa.size(); i++) {
             auto& row = msa[i];
 
-            if (!IsRowGood(row, 5000)) continue;
+            if (!IsRowGood(row, min_hcov)) continue;
             os << ">" << names[i] << std::endl;
             os << std::string_view(row.begin(), row.end()) << std::endl;
         }
         os.close();
-
-        std::cout << " Saved MSA ";
+        std::cout << " Saved MSA to " << options.GetMSAOutput(taxon_name);
 
         partitions.back() += std::to_string(msa.front().size());
 
@@ -791,7 +823,16 @@ namespace protal {
         os_part.close();
 
         std::cout << " Saved Partitions " << std::endl;
+
+        auto processed_msa = protal::ProcessMSA(msa, 0.9);
+        std::cout << "Trimmed size: " << processed_msa.front().size() << std::endl;
+
+        os = std::ofstream(options.GetMSAProcessedOutput(taxon_name), std::ios::out);
+        std::cout << "Processed output: " << options.GetMSAProcessedOutput(taxon_name) << std::endl;
+        OutputMSA(processed_msa, names, os);
+        os.close();
     }
+
 
 
     static SimilarityMatrix GetSimilarityMatrixForTaxon(uint32_t taxid, Options& options, Profiles& profiles, std::optional<profiler::TaxonFilterObj> filter={}) {
@@ -837,6 +878,8 @@ namespace protal {
         return matrix;
     }
 
+
+
     static void WriteDistanceMatrix(uint32_t id, SimilarityMatrix const& matrix, Options& options, std::string& name) {
         std::ofstream matrix_os(options.GetSimilarityMatrixOutput(name), std::ios::out);
         matrix.PrintMatrix(matrix_os, "\t", 10);
@@ -853,25 +896,19 @@ namespace protal {
 
         auto taxids = ExtractTaxa(profiles, filter);
 
+        auto enable_similarity_matrix = false;
+
         for (auto& taxid : taxids) {
             std::cout << "Target taxid: " << taxid << " >> " << taxonomy.Get(taxid).scientific_name << std::endl;
 
             std::string name = taxonomy.Get(taxid).scientific_name;
             std::replace(name.begin(), name.end(), ' ', '_');
-//
-//            std::cout << "Get Similarity matrix" << std::endl;
-//            auto similarities = GetSimilarityMatrixForTaxon(taxid, options, profiles, filter);
-//
-//            if (!similarities.AnySet()) continue;
-//
-//            if (options.Verbose()) {
-//                std::cout << "Target taxid: " << taxid << " >> " << taxonomy.Get(taxid).scientific_name << std::endl;
-//                similarities.PrintMatrix();
-//                std::cout << "------------" << std::endl;
-//            }
-//
-//
-//            WriteDistanceMatrix(taxid, similarities, options, name);
+
+            if (enable_similarity_matrix) {
+                auto similarities = GetSimilarityMatrixForTaxon(taxid, options, profiles, filter);
+                if (!similarities.AnySet()) continue;
+                WriteDistanceMatrix(taxid, similarities, options, name);
+            }
 
             std::cout << "GetMSAForTaxon " << taxonomy.Get(taxid).ToString() << std::endl;
             GetMSAForTaxon(taxid, name, loader, options, profiles);
@@ -880,88 +917,6 @@ namespace protal {
         }
         std::cout << "Finish StrainWrapper" << std::endl;
     }
-
-
-
-// ###########################
-//    static StrainResults StrainWrapper(Options& options, Profiles& profiles, std::optional<profiler::TaxonFilter> filter={}) {
-//        std::unordered_set<size_t> taxa1_set;
-//
-//        auto taxa = ExtractTaxa(profiles, filter);
-//
-//        StrainResults strain_results;
-//        auto min_shared_region = 1500;
-//
-//        auto sample_size = profiles.size();
-//
-//        double equality_sum = 0;
-//        size_t equality_count = 0;
-//
-//        for (auto& profile1 : profiles) {
-//            auto& taxa_map1 = profile1.GetTaxa();
-//            taxa1_set = profile1.GetKeySet(filter);
-//
-//            for (auto& profile2 : profiles) {
-//
-//                for (auto& [tid, _] : profile2.GetTaxa()) {
-//                    auto& taxon2 = profile2.GetTaxa().at(tid);
-//
-//                    bool pass_filter = !filter.has_value() || filter.has_value() && filter->Pass(taxon2);
-//                    if (!(taxa1_set.contains(tid) && pass_filter)) continue;
-//
-//                    if (!strain_results.contains(tid)) {
-//                        auto matrix = DoubleMatrix(sample_size, sample_size, -1.0);
-//                        auto entry = std::pair{ tid,  matrix};
-//
-//                        strain_results.insert( entry );
-//                        strain_results.at(tid).SetColNames(options.GetPrefixes());
-//                        strain_results.at(tid).SetRowNames(options.GetPrefixes());
-//                    }
-//                    auto& matrix = strain_results.at(tid);
-//
-//
-//
-//                    auto& taxon1 = profile1.GetTaxa().at(tid);
-//
-//                    auto [distance, shared_region] = Distance(taxon1, taxon2);
-//
-//                    auto similarity = 1.0f-distance;
-//                    if (similarity != similarity) {
-//                        exit(12);
-//                    }
-//
-//                    if (shared_region <= min_shared_region) {
-//                        similarity = NAN;
-//                    }
-//
-//
-//                    if (profile1.GetName() != profile2.GetName() && similarity > 0.999) {
-//                        equality_sum += similarity;
-//                        std::cout << "GREP SIMILARITY: " << similarity << std::endl;
-//                        equality_count++;
-//                    }
-//
-//
-//                    matrix.SetValue(profile1.GetName(), profile2.GetName(), similarity, true);
-//                    if (profile1.GetName() == profile2.GetName()) continue;
-//                    matrix.SetValue(profile1.GetName(), profile2.GetName(), static_cast<double>(shared_region), false);
-//                }
-//            }
-//        }
-//
-//        std::cout << std::endl << std::string(60 ,'#') << std::endl;
-//        std::cout << "StrainLevel Results" << std::endl;
-//        for (auto& [id, matrix] : strain_results) {
-//            matrix.PrintMatrix(std::cout, "\t", 6);
-//            std::ofstream matrix_os(options.GetSimilarityMatrixOutput(std::to_string(id)), std::ios::out);
-//            std::cout << " Write to : " << options.GetSimilarityMatrixOutput(std::to_string(id)) << std::endl;
-//            matrix.PrintMatrix(matrix_os, "\t", 10);
-//            matrix_os.close();
-//        }
-//        std::cout << "Equality: " << equality_sum << " (" << equality_count << ")" << std::endl;
-//
-//        return strain_results;
-//    }
 
 
     static void Run(int argc, char *argv[]) {

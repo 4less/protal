@@ -1,5 +1,6 @@
 #include <iostream>
 #include "RunProtal.h"
+#include "Test.h"
 
 //#include <htslib/sam.h>
 //#include "Test.h"
@@ -58,7 +59,9 @@ int main(int argc, char *argv[]) {
 //    }
 //    exit(90);
 
-//    test::TestEndsFree();
+    // test::TestEndsFree();
+
+    // test::SIMDSimilarity();
     protal::Run(argc, argv);
 
     return 0;

@@ -261,6 +261,8 @@ namespace protal {
 
     public:
         size_t dummy = 0;
+        Benchmark m_bm_operator{"Seed-finding operator"};
+        Benchmark m_bm_reverse_complement{"Reverse complementing read"};
         Benchmark m_bm_seeding{"Seeding"};
         Benchmark m_bm_seed_subsetting{"Subset Seeds"};
         Benchmark m_bm_processing{"Sorting Seeds"};
@@ -417,9 +419,13 @@ namespace protal {
         }
 
         void operator () (KmerList& kmer_list, SeedList& seeds, ChainAnchorList& anchors, std::string& query) {
+            m_bm_operator.Start();
+
+            m_bm_reverse_complement.Start();
             auto read_length = query.length();
             m_fwd = &query;
             m_rev = KmerUtils::ReverseComplement(query);
+            m_bm_reverse_complement.Stop();
 
             m_recovery.clear();
 
@@ -449,6 +455,7 @@ namespace protal {
             });
             m_bm_sorting_anchors.Stop();
 
+            m_bm_operator.Stop();
             for (int i = 0; i < 3 && i < anchors.size(); i++) {
                 m_recovery.insert((static_cast<uint64_t>(anchors[i].taxid) << 40llu) | (static_cast<uint64_t>(anchors[i].geneid) << 20llu));
             }
