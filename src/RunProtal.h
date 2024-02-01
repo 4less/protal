@@ -27,6 +27,8 @@
 //#include "Taxonomy.h"
 //#include "TaxonStatisticsOutput.h"
 //#include <math.h>
+#include <unistd.h>
+#include <algorithm>
 
 namespace protal {
 
@@ -58,6 +60,12 @@ namespace protal {
         ProtalDB(std::string sequence_file, std::string map_file) :
                 m_genomes(sequence_file, map_file),
                 m_taxonomy() {
+        }
+
+        ProtalDB(std::string sequence_file, std::string map_file, std::string hittable_genes_file) :
+                m_genomes(sequence_file, map_file),
+                m_taxonomy() {
+            m_genomes.LoadHittableGenes(hittable_genes_file);
         }
 
         void LoadTaxonomy(std::string file) {
@@ -121,7 +129,7 @@ namespace protal {
 
             GenomeLoader& genomes = db.GetGenomes();
 
-            WFA2Wrapper aligner(4, 6, 2, options.GetXDrop());
+            WFA2Wrapper2 aligner(4, 6, 2, options.GetXDrop());
 
             if (options.PreloadGenomes() && !genomes.AllGenomesLoaded()) {
                 Benchmark bm_preload_genomes("Preload genomes");
@@ -142,14 +150,14 @@ namespace protal {
 
 
 
-            Benchmark bm_classify("Run classify");
+            Benchmark bm_classify("Processing all samples");
             bm_classify.Start();
 
             if (options.PairedMode()) {
                 for (auto index : options.GetRange()) {
                 //for (auto index = 0; index < options.GetFileCount(); index++) {
 
-                    Benchmark bm_classify_sample("Classifying sample");
+                    Benchmark bm_classify_sample("Aligning reads");
                     bm_classify_sample.Start();
 
                     // TODO implement logger in protal
@@ -284,13 +292,13 @@ namespace protal {
 
 //        omp_set_num_threads(6);
 
-//#pragma omp parallel for default(none) shared(options, cout, taxonomy, genomes, db)
+#pragma omp parallel for default(none) shared(options, cout, taxonomy, genomes, db)
         for (auto i : options.GetRange()) {
         //for (auto i = 0; i < options.GetFileCount(); i++) {
 
             Profiler::AlignmentContainer ac;
             auto sam = options.SamFile(i);
-//#pragma omp critical(read_sam)
+#pragma omp critical(read_sam)
             ac.LoadSam(sam);
 
             const auto& alignments = ac.AlignmentPairs();
@@ -329,37 +337,75 @@ namespace protal {
 //        std::string model = "/usr/users/QIB_fr017/fritsche/Documents/HPC/group/projects/protal/camisim_all_output/output_flex_r214/profiles/mapq4_2/random_forest_cami_r214.pmml";
         TaxonFilterObj filter(model);
 
-        ProgressBar prog;
-        prog.Reset(options.GetFileCount());
+        // ProgressBar prog;
+        // prog.Reset(options.GetFileCount());
 
         omp_set_num_threads(options.GetThreads());
 
-        #pragma omp parallel for default(none) firstprivate(filter) shared(options, prog, cout, taxonomy, profiles, genomes)
+
+
+        #pragma omp parallel for default(none) firstprivate(filter) shared(options, cout, taxonomy, profiles, genomes, std::cerr)//, bm_read_alignments, bm_profile)
         for (auto i : options.GetRange()) {
-        //for (auto i = 0; i < options.GetFileCount(); i++) {
-#pragma omp critical(progress)
-            prog.UpdateAdd(1);
+#pragma omp critical(print)
+            std::cerr << omp_get_thread_num() << " File " << i << " of " << options.GetRange().size() << ":\n\t" << options.SamFile(i) << std::endl;
+
+            Benchmark bm_read_alignments{ "Load read alignments" };
+            Benchmark bm_profile{ "Profile sample" };
+
+// #pragma omp critical(progress)
+//             prog.UpdateAdd(1);
 
             profiler::Profiler profiler(genomes);
+            profiler.SetNoStrain(options.NoStrains());
 
             // New Profiler approach
             std::vector<AlignmentPair> unique_pairs;
             std::vector<std::vector<AlignmentPair>> pairs;
 
             auto sam = options.SamFile(i);
+#pragma omp critical(print)
+            std::cout << "Thread " << omp_get_thread_num() << " read sam file " << sam << std::endl;
+            if (!Utils::exists(sam)) {
+                std::cerr << "File does not exist" << sam << std::endl;
+                exit(90);
+            }
+
+#pragma omp critical(load_sam)
             profiler.FromSam(sam);
-            // profiler.PrintStats();
-            auto profile = profiler.Profile();
+
+
+            if (!profiler.HasReads()) {
+                std::cerr << "Empty sam file" << std::endl;
+                profiles.emplace_back(profiler::MicrobialProfile{genomes});
+                continue;
+            }
+
+
+            std::ofstream erro(sam + ".err", std::ios::out);
+
+            profiler.PrintStats();
+            bm_profile.Start();
+#pragma omp critical(print)
+            std::cout << "Thread " << omp_get_thread_num() << " run profile" << std::endl;
+            auto profile = profiler.Profile(std::optional<std::reference_wrapper<std::ostream>>{erro});
+            erro.close();
+            bm_profile.Stop();
+#pragma omp critical(print)
+            std::cout << "Thread " << omp_get_thread_num() << " ";
+            bm_profile.PrintResults();
+
+            profile.bm_add_sam.PrintResults();
 
 
             std::optional<TruthSet> truth = options.HasProfileTruths() ?
-                                            std::optional<TruthSet>{ protal::GetTruth(options.ProfileTruthFile(i)) } :
+                                            std::optional<TruthSet>{ protal::GetTruth(options.ProfileTruthFile(i), taxonomy) } :
                                             std::optional<TruthSet>{};
 
             if (options.BenchmarkAlignment()) {
                 profiler.TestSNPUtils(pairs);
                 profiler.OutputErrorData(pairs);
             } else if (truth.has_value()) {
+                std::cout << "Has Truth Available" << std::endl;
                 profiler.OutputErrorData(unique_pairs, pairs, &truth.value());
             }
 
@@ -681,9 +727,10 @@ namespace protal {
         auto info_vector = GetInformationVector(msa_vector);
         MSAVector processed_msa(sample_len, std::vector<char>{});
 
-        auto sample_size_treshold = msa_vector.size() * position_coverage;
+        auto sample_size_threshold = msa_vector.size() * position_coverage;
+        std::cout << "Sample size threshold: " << sample_size_threshold << std::endl;
         for (auto pos = 0; pos < info_vector.size(); pos++) {
-            if (info_vector[pos] > sample_size_treshold) {
+            if (info_vector[pos] > sample_size_threshold) {
                 for (auto s = 0; s < sample_len; s++) {
                     processed_msa[s].emplace_back(msa_vector[s][pos]);
                 }
@@ -702,19 +749,164 @@ namespace protal {
         }
     }
 
-    static void GetMSAForTaxon (uint32_t taxid, std::string taxon_name, GenomeLoader& loader, Options& options, Profiles& profiles, std::optional<profiler::TaxonFilter> filter={}) {
+    static std::vector<size_t> GetProfilesWithTaxon(uint32_t taxid, Profiles& profiles, Options& options, std::optional<profiler::TaxonFilter>& filter) {
+        std:vector<size_t> indices;
 
-        auto min_hcov = 5000;
-
-        auto min_cov = 2;
-        auto min_qual_sum = 60;
-
-        std::vector<size_t> profile_indices;
         for (auto i = 0; i < profiles.size(); i++) {
-            if (profiles[i].GetTaxa().contains(taxid)) {
-                profile_indices.emplace_back(i);
+            auto& profile = profiles[i];
+            if (!profile.GetTaxa().contains(taxid)) {
+                continue;
+            }
+            auto& taxon_map = profile.GetTaxa();
+
+            auto& taxon = taxon_map.at(taxid);
+            if (filter.has_value() && !filter.value().Pass(taxon)) {
+                continue;
+            }
+            std::cout << taxid << " Passes " << std::endl;
+
+            indices.emplace_back(i);
+        }
+        return indices;
+    }
+
+    static std::vector<uint32_t> SelectGenesForTaxon(uint32_t taxid, std::string name, std::vector<size_t>& selected_profiles, GenomeLoader& loader, Options& options, Profiles& profiles) {
+        std::vector<uint32_t> selected_gene_ids;
+        std::vector<uint32_t> gene_ids = loader.GetGenome(taxid).GetHittableGenes();
+
+        auto max_gene_id = std::max_element(gene_ids.begin(), gene_ids.end());
+
+        // std::vector<std::vector<double>> per_sample_gene_multiallelic_portion;
+        // per_sample_gene_multiallelic_portion.resize(selected_profiles.size(),
+        //     std::vector<double>(*max_gene_id + 1, -1) );
+
+        std::vector<std::vector<int>> per_sample_gene_multiallelic_snps;
+        per_sample_gene_multiallelic_snps.resize(selected_profiles.size(),
+            std::vector<int>(*max_gene_id + 1, -1) );
+
+        std::vector<std::vector<int>> per_sample_gene_snps;
+        per_sample_gene_snps.resize(selected_profiles.size(),
+            std::vector<int>(*max_gene_id + 1, -1) );
+
+        std::vector<std::vector<int>> per_sample_gene_cov;
+        per_sample_gene_cov.resize(selected_profiles.size(),
+            std::vector<int>(*max_gene_id + 1, -1) );
+
+        std::vector<std::vector<int>> per_sample_gene_noise;
+        per_sample_gene_noise.resize(selected_profiles.size(),
+            std::vector<int>(*max_gene_id + 1, -1) );
+
+        for (auto si = 0; si < selected_profiles.size(); si++) {
+            std::cout << " _______________Sample: " << si << std::endl;
+            auto sample_index = selected_profiles[si];
+            auto& taxon = profiles[sample_index].GetTaxa().at(taxid);
+            auto& multiallelic_vec = per_sample_gene_multiallelic_snps[si];
+
+            // for (auto& [gid, gene] : taxon.GetGenes()) {
+            //     std::cout << "gid: " << gid << " " << gene.ToString() << std::endl;
+            // }
+            // std::cout << " ------ " << std::endl;
+            for (auto& gene_id : gene_ids) {
+                if (gene_id >= per_sample_gene_multiallelic_snps[si].size()) {
+                    std::cout << gene_id << " >= " << gene_ids.size() << std::endl;
+                    exit(123);
+                }
+                if (!taxon.GetGenes().contains(gene_id)) {
+                    per_sample_gene_multiallelic_snps[si][gene_id] = -1;
+                    per_sample_gene_snps[si][gene_id] = -1;
+                    per_sample_gene_cov[si][gene_id] = 0;
+                    continue;
+                }
+
+                auto& gene = taxon.GetGene(gene_id);
+
+                auto allele_counts = gene.AlleleSNPCounts(2, 60);
+                auto allele_counts_nf = gene.AlleleSNPCounts(0, 0);
+
+                per_sample_gene_multiallelic_snps[si][gene_id] = allele_counts.Multi();
+                per_sample_gene_snps[si][gene_id] = allele_counts.AllValid();
+                per_sample_gene_cov[si][gene_id] = gene.Coverage();
+                per_sample_gene_noise[si][gene_id] = allele_counts.Noisy();
             }
         }
+
+        std::ofstream os(options.GetOutputDir() + '/' + name + ".multiallelic.tsv", std::ios::out);
+        std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".multiallelic.tsv") << std::endl;
+        for (auto si = 0; si < selected_profiles.size(); si++) {
+            auto sample_index = selected_profiles[si];
+            os << options.GetSampleId(sample_index);
+
+            if (si >= per_sample_gene_multiallelic_snps.size()) exit(244);
+            auto& vec = per_sample_gene_multiallelic_snps[si];
+            double total = 0;
+            for (auto i = 1; i < vec.size(); i++) {
+                os << '\t' << vec[i];
+                total += vec[i] == -1 ? 0 : vec[i];
+            }
+            os << '\t' << total << std::endl;
+        }
+        os.close();
+
+        std::ofstream os2(options.GetOutputDir() + '/' + name + ".total.tsv", std::ios::out);
+        std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".total.tsv") << std::endl;
+        for (auto si = 0; si < selected_profiles.size(); si++) {
+            auto sample_index = selected_profiles[si];
+            os2 << options.GetSampleId(sample_index);
+
+            if (si >= per_sample_gene_snps.size()) exit(244);
+            auto& vec = per_sample_gene_snps[si];
+            double total = 0;
+            for (auto i = 1; i < vec.size(); i++) {
+                os2 << '\t' << vec[i];
+                total += vec[i] == -1 ? 0 : vec[i];
+            }
+            os2 << '\t' << total << std::endl;
+        }
+        os2.close();
+
+        std::ofstream os3(options.GetOutputDir() + '/' + name + ".cov.tsv", std::ios::out);
+        std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".cov.tsv") << std::endl;
+        for (auto si = 0; si < selected_profiles.size(); si++) {
+            auto sample_index = selected_profiles[si];
+            os3 << options.GetSampleId(sample_index);
+
+            if (si >= per_sample_gene_snps.size()) exit(244);
+            auto& vec = per_sample_gene_cov[si];
+            size_t total = 0;
+            for (auto i = 1; i < vec.size(); i++) {
+                os3 << '\t' << vec[i];
+                total += vec[i] == -1 ? 0 : vec[i];
+            }
+            os3 << '\t' << total << std::endl;
+        }
+        os3.close();
+
+
+        for (auto gi = 0; gi < per_sample_gene_noise.front().size(); gi++) {
+            std::cout << gi;
+            for (auto si = 0; si < selected_profiles.size(); si++) {
+                auto sample_index = selected_profiles[si];
+                auto sample_name = options.GetSampleId(sample_index);
+                std::cout << '\t' << (per_sample_gene_noise[si][gi]/static_cast<double>(per_sample_gene_cov[si][gi])) << "(" << per_sample_gene_noise[si][gi] << "/" << per_sample_gene_cov[si][gi] << ")";
+            }
+            std::cout << std::endl;
+        }
+        Utils::Input();
+
+
+        return gene_ids;
+    }
+
+    static void GetMSAForTaxon (uint32_t taxid, std::string taxon_name, GenomeLoader& loader, Options& options, Profiles& profiles, std::optional<profiler::TaxonFilter> filter={}) {
+        auto min_hcov = 5000;
+        auto min_cov = 2;
+        auto min_qual_sum = 60;
+        auto min_samples_with_gene = 3;
+
+        std::vector<size_t> profile_indices = GetProfilesWithTaxon(taxid, profiles, options, filter);
+
+        if (profile_indices.empty()) return;
+
         MSAVector msa{ profile_indices.size(), std::vector<char>() };
 
         auto& genome = loader.GetGenome(taxid);
@@ -724,23 +916,36 @@ namespace protal {
         size_t partition_start = 0;
         size_t previous_size = 0;
 
+        std::cout << "MULTIALLELIC: " << taxid << " " << taxon_name << std::endl;
+        std::vector<uint32_t> selected_genes = SelectGenesForTaxon(taxid, taxon_name, profile_indices, loader, options, profiles);
+
         ProgressBar prog(120);
-        for (auto geneid = 1; geneid <= 120; geneid++) {
+        std::cout << "Process " << selected_genes.size() << std::endl;
+        for (auto& geneid : selected_genes) {
+            std::cout << "GID: " << geneid << std::endl;
+            // if (!loader.GetGenome(taxid).IsGeneHittable(geneid)) {
+            //     continue;
+            // }
+
             prog.UpdateAdd(1);
             MSASequenceItems items;
 
-            if (!genome.HasGene(geneid)) break;
-
+            // if (!genome.ValidGene(geneid)) break;
+            //
             auto& gene = genome.GetGene(geneid);
-            if (!gene.IsSet()) continue;
+            // if (!gene.IsSet()) continue;
 
-            bool hasone = false;
+            // Check if
+            size_t samples_with_gene = 0;
+
             for (auto i = 0; i < profile_indices.size(); i++) {
+                std::cout << "profile: " << i << std::endl;
 
                 auto& profile = profiles[profile_indices[i]];
-                auto& taxon = profile.GetTaxa();
+                auto& taxon_map = profile.GetTaxa();
 
-                if (!taxon.contains(taxid)) continue;
+                if (!taxon_map.contains(taxid)) continue;
+
 
                 names.emplace_back(profile.GetName());
                 auto& genes = profile.GetTaxa().at(taxid).GetGenes();
@@ -748,7 +953,7 @@ namespace protal {
                 if (!genes.contains(geneid)) {
                     items.emplace_back(OptionalMSASequenceItem{});
                 } else {
-                    hasone = true;
+                    samples_with_gene++;
                     auto& strain = genes.at(geneid).GetStrainLevel();
                     auto snps = SharedAlignmentRegion::GetSNPs(strain.GetVariantHandler());
 
@@ -757,14 +962,8 @@ namespace protal {
                 }
             }
 
-            if (hasone) {
+            if (samples_with_gene > min_samples_with_gene) {
                 previous_size = msa.front().size();
-
-                // std::cout << "GeneID: " << gene.GetId() << std::endl;
-                // std::cout << "Profile indices" << std::endl;
-                // for (auto i = 0; i < profile_indices.size(); i++) {
-                //     std::cout << i << " " << profile_indices[i] << " " << names[i] << std::endl;
-                // }
 
                 for (auto& opt : items)  {
                     if (!opt.has_value()) continue;
@@ -801,7 +1000,10 @@ namespace protal {
         bool any_good = std::any_of(msa.begin(), msa.end(), [](MSARow const& row){
             return IsRowGood(row, 5000);
         });
-        if (!any_good) return;
+        if (!any_good) {
+            std::cout << "No any good" << std::endl;
+            return;
+        }
 
         std::ofstream os(options.GetMSAOutput(taxon_name), std::ios::out);
         for (auto i = 0; i < msa.size(); i++) {
@@ -824,8 +1026,8 @@ namespace protal {
 
         std::cout << " Saved Partitions " << std::endl;
 
-        auto processed_msa = protal::ProcessMSA(msa, 0.9);
-        std::cout << "Trimmed size: " << processed_msa.front().size() << std::endl;
+        auto processed_msa = protal::ProcessMSA(msa, options.GetMSAMinVCOV());
+        std::cout << "Trimmed size: " << processed_msa.front().size() << " with minvcov: " << options.GetMSAMinVCOV() << std::endl;
 
         os = std::ofstream(options.GetMSAProcessedOutput(taxon_name), std::ios::out);
         std::cout << "Processed output: " << options.GetMSAProcessedOutput(taxon_name) << std::endl;
@@ -887,6 +1089,8 @@ namespace protal {
     }
 
     static void StrainWrapper2(Options& options, Profiles& profiles, GenomeLoader& loader, taxonomy::IntTaxonomy& taxonomy, std::optional<profiler::TaxonFilterObj> filter={}) {
+        Benchmark bm_strain{"Strain-level MSAs"};
+        bm_strain.Start();
         std::cout << "Output " << options.GetOutputDir() << std::endl;
         auto dir = std::filesystem::path(options.GetOutputDir());
         if (!std::filesystem::create_directories(dir.string()) && !std::filesystem::exists(dir)) {
@@ -897,6 +1101,7 @@ namespace protal {
         auto taxids = ExtractTaxa(profiles, filter);
 
         auto enable_similarity_matrix = false;
+
 
         for (auto& taxid : taxids) {
             std::cout << "Target taxid: " << taxid << " >> " << taxonomy.Get(taxid).scientific_name << std::endl;
@@ -912,16 +1117,25 @@ namespace protal {
 
             std::cout << "GetMSAForTaxon " << taxonomy.Get(taxid).ToString() << std::endl;
             GetMSAForTaxon(taxid, name, loader, options, profiles);
-
+            std::cout << "Check " << taxid << " " << name << std::endl;
 //            Utils::Input();
         }
-        std::cout << "Finish StrainWrapper" << std::endl;
+        bm_strain.Stop();
+        bm_strain.PrintResults();
     }
 
+
+    size_t GetTotalSystemMemory()
+    {
+        long pages = sysconf(_SC_PHYS_PAGES);
+        long page_size = sysconf(_SC_PAGE_SIZE);
+        return pages * page_size;
+    }
 
     static void Run(int argc, char *argv[]) {
         PrintLogo();
         PrintProtalInformation();
+        std::cout << "Total available memory is " << GetTotalSystemMemory() / (1024 * 1024 * 1024) << "GB" << std::endl;;
 
         Benchmark bm_total("Run protal");
         bm_total.Start();
@@ -938,9 +1152,14 @@ namespace protal {
         std::cout << "Options:\n" << options.ToString() << std::endl;
 
 
-        ProtalDB db(options.GetSequenceFile(), options.GetSequenceMapFile());
+        // Load protal DB into RAM
+        ProtalDB db = options.HittableGenesMapExists() ?
+            ProtalDB(options.GetSequenceFile(), options.GetSequenceMapFile(), options.GetHittableGenesMap()) :
+            ProtalDB(options.GetSequenceFile(), options.GetSequenceMapFile());
 
+        // Load fasta sequences of reference into RAM (advised)
         if (options.PreloadGenomes()) {
+            std::cout << "Preload genomes" << std::endl;
             Benchmark bm_preload_genomes("Preload genomes");
             bm_preload_genomes.Start();
             db.GetGenomes().LoadAllGenomes();
@@ -948,12 +1167,19 @@ namespace protal {
             bm_preload_genomes.PrintResults();
         }
 
-        bool skip_alignment = !options.BuildMode() && Utils::exists(options.SamFile(0)) && !options.Force();
-        std::cout << "Skip alignment: " << skip_alignment << std::endl;
+        // Skip alignment if files are present. Do not skip if either files are not there or user specified --force
+        auto sam_files = options.SamFiles();
+        bool all_alignments_exist = std::all_of(sam_files.begin(), sam_files.end(), [](std::string const& file){ return Utils::exists(file); });
+
+        bool skip_alignment = !options.BuildMode() && all_alignments_exist && !options.Force();
         if (!options.BuildMode() && !options.SamFile(0).empty() && (options.ProfileOnly() || skip_alignment)) {
+            std::cout << "All alignments are present." << std::endl;
             goto Profile;
         }
 
+        /*
+         *  READ ALIGNMENT SECTION
+         */
         // Untangle Template options that need to be written out specifically.
         if (options.BenchmarkAlignment()) {
             AlignmentBenchmark alignment_benchmark{};
@@ -1025,6 +1251,9 @@ namespace protal {
                 }
             }
 
+            /*
+             * STRAIN PART -  RESOLVE MSAs BETWEEN SAMPLES
+             */
             if (!options.NoStrains()) {
                 std::cout << "Start StrainWrapper" << std::endl;
                 StrainWrapper2(options, profiles, db.GetGenomes(), db.GetTaxonomy(), filter);

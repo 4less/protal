@@ -7,8 +7,12 @@
 #include <string>
 #include <fstream>
 #include <err.h>
+#include <sparse_set.h>
+
 #include "Utils.h"
 #include <sysexits.h>
+
+#include "Benchmark.h"
 
 namespace protal {
     class Gene {
@@ -30,6 +34,7 @@ namespace protal {
         };
 
     public:
+
         Gene(){};
 
         void Set(size_t id, size_t start_byte, size_t length, std::ifstream* is) {
@@ -80,10 +85,11 @@ namespace protal {
         using GeneList = std::vector<Gene>;
 
     private:
+        using GeneID = uint16_t;
         GeneList m_genes;
         GenomeKey m_key;
+        tsl::sparse_set<GeneID> m_hittable_genes;
         bool m_is_loaded = false;
-
 
         const size_t GeneKeyToIndex(GeneKey const& key) const {
             return key - 1;
@@ -105,11 +111,27 @@ namespace protal {
             m_genes[index].Set(key, start_byte, length, is);
         }
 
+        void AddHittableGene(GeneID geneid) {
+            m_hittable_genes.insert(geneid);
+        }
+
+        bool IsGeneHittable(GeneID geneid) const {
+            return m_hittable_genes.empty() ? true : m_hittable_genes.contains(geneid);
+        }
+
+        std::vector<uint32_t> GetHittableGenes() {
+            std::vector<uint32_t> genes;
+            for (auto i = 1; i <= 120; i++) {
+                if (IsGeneHittable(i)) genes.emplace_back(i);
+            }
+            return genes;
+        }
+
         void LoadGene(GeneKey key) {
             m_genes[GeneKeyToIndex(key)].Load();
         };
 
-        bool HasGene(GeneKey key) {
+        bool ValidGene(GeneKey key) {
             return GeneKeyToIndex(key) < m_genes.size();
         }
 
@@ -122,9 +144,9 @@ namespace protal {
         }
 
         size_t GeneNum() const {
-            return std::count_if(m_genes.begin(), m_genes.end(), [](Gene const& gene) {
+            return m_hittable_genes.empty() ? std::count_if(m_genes.begin(), m_genes.end(), [](Gene const& gene) {
                 return gene.IsSet();
-            });
+            }) : m_hittable_genes.size();
         }
 
         void LoadGenome() {
@@ -196,6 +218,27 @@ namespace protal {
             m_is.close();
         }
 
+        void LoadHittableGenes(std::string const& file) {
+            std::ifstream is(file, std::ios::in);
+
+            std::vector<std::string> tokens;
+            std::string line;
+            while (std::getline(is, line)) {
+                Utils::split(tokens, line, "\t");
+                auto taxid = std::stoull(tokens[0]);
+                auto gene_str = tokens[2];
+
+                auto& taxon = m_genomes.at(taxid);
+
+                Utils::split(tokens, gene_str, ",");
+                for (auto const& g : tokens) {
+                    auto gid = std::stoul(g);
+                    taxon.AddHittableGene(gid);
+                }
+            }
+            is.close();
+        }
+
         size_t GetLoadedGenomeCount() const {
             return std::count_if(m_genomes.begin(), m_genomes.end(), [](auto const& pair) { return pair.second.IsLoaded(); });
         }
@@ -252,6 +295,7 @@ namespace protal {
             }
             return m_genomes.at(key);
         }
+
 
         void LoadPositionMap(std::string file_path) {
             std::ifstream is(file_path, std::ios::in);

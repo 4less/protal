@@ -35,11 +35,15 @@ namespace protal::classify {
         omp_set_num_threads(options.GetThreads());
 
         Statistics statistics{};
+        Benchmark bm_reader_global{"Sequence reader"};
         Benchmark bm_alignment_global{"Alignment handler"};
+        Benchmark bm_omp_block{"OMP Loop handler"};
+        Benchmark bm_omp_before_loop_global{ "OMP before loop" };
 
-
-#pragma omp parallel default(none) shared(std::cout, bm_alignment_global, benchmark_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global, reader_global)//, loader, map)
+        bm_omp_block.Start();
+#pragma omp parallel default(none) shared(std::cout, bm_alignment_global, bm_reader_global, bm_omp_before_loop_global, benchmark_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global, reader_global)//, loader, map)
         {
+            bm_omp_before_loop_global.Start();
             // Private variables
             FastxRecord record;
 
@@ -64,10 +68,15 @@ namespace protal::classify {
             AlignmentResultList alignment_results;
 
             Benchmark bm_alignment{"Alignment handler"};
+            Benchmark bm_reader{"Reader"};
 
             size_t record_id = omp_get_thread_num();
 
+            bm_omp_before_loop_global.Stop();
+            bm_reader.Start();
             while (reader(record)) {
+                bm_reader.Stop();
+
                 // Implement logger
                 thread_statistics.reads++;
 
@@ -116,7 +125,10 @@ namespace protal::classify {
                 }
 
                 record_id += options.GetThreads();
+                bm_reader.Start();
             }
+            bm_reader.Stop();
+
 
 #pragma omp critical(statistics)
             {
@@ -142,6 +154,7 @@ namespace protal::classify {
                 std::cout << "rate: " << (static_cast<double>(alignment_handler.total_tail_length)/static_cast<double>(alignment_handler.total_tail_alignments)) << std::endl;
             }
         }
+        bm_omp_block.Stop();
 
         if constexpr (benchmark_active) {
             std::cout << "\n------------Alignment benchmarks------------------" << std::endl;
@@ -244,8 +257,15 @@ namespace protal::classify {
         Utils::Histogram seed_sizes_global;
         Utils::Histogram anchor_sizes_global;
 
-#pragma omp parallel default(none) shared(std::cout, bm_alignment_join_sort_global, bm_anchor_recovery_global, bm_anchor_finder_global, /*adoh_global,*/ genome_loader, seed_sizes_global, anchor_sizes_global, bm_alignment_global, bm_output_global, benchmark_global, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
+
+        Benchmark bm_omp_block{"OMP Loop handler"};
+        Benchmark bm_reader_global{"Sequence reader"};
+        Benchmark bm_omp_before_loop_global{ "OMP before loop" };
+
+        bm_omp_block.Start();
+#pragma omp parallel default(none) shared(std::cout, bm_reader_global, bm_omp_before_loop_global, bm_alignment_join_sort_global, bm_anchor_recovery_global, bm_anchor_finder_global, /*adoh_global,*/ genome_loader, seed_sizes_global, anchor_sizes_global, bm_alignment_global, bm_output_global, benchmark_global, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
         {
+            bm_omp_before_loop_global.Start();
             // Private variables
             FastxRecord record1;
             FastxRecord record2;
@@ -282,6 +302,7 @@ namespace protal::classify {
 
             size_t record_id = omp_get_thread_num();
 
+            Benchmark bm_reader{"Sequence reader"};
             Benchmark bm_kmer_extracter{"Retrieve k-mers"};
             Benchmark bm_anchor_finder{"Seed- and Anchor-finding"};
             Benchmark bm_anchor_recovery{"Anchor recovery"};
@@ -292,8 +313,10 @@ namespace protal::classify {
             Utils::Histogram seed_sizes;
             Utils::Histogram anchor_sizes;
 
-
+            bm_omp_before_loop_global.Stop();
+            bm_reader.Start();
             while (reader(record1, record2)) {
+                bm_reader.Stop();
                 thread_statistics.reads++;
 
                 // Clear intermediate storage objects
@@ -416,7 +439,11 @@ namespace protal::classify {
 
                 }
                 record_id += options.GetThreads();
+
+                bm_reader.Start();
             }
+            bm_reader.Stop();
+
 #pragma omp critical(statistics)
             {
                 anchor_finder_global.m_bm_seeding.Join(anchor_finder1.m_bm_seeding);
@@ -442,13 +469,7 @@ namespace protal::classify {
                 anchor_finder_global.total_count += anchor_finder1.total_count;
                 anchor_finder_global.total_count += anchor_finder2.total_count;
 
-//                anchor_finder_global.m_bm_seeding.DivideSamplingsBy(2);
-//                anchor_finder_global.m_bm_seed_subsetting.DivideSamplingsBy(2);
-//                anchor_finder_global.m_bm_processing.DivideSamplingsBy(2);
-//                anchor_finder_global.m_bm_pairing.DivideSamplingsBy(2);
-//                anchor_finder_global.m_bm_sorting_anchors.DivideSamplingsBy(2);
-//                anchor_finder_global.m_bm_recovering_anchors.DivideSamplingsBy(2);
-//                anchor_finder_global.m_bm_extend_anchors.DivideSamplingsBy(2);
+                bm_reader_global.Join(bm_reader);
 
                 bm_anchor_finder_global.Join(bm_anchor_finder);
                 // bm_anchor_recovery_global.Join(bm_anchor_recovery);
@@ -456,6 +477,8 @@ namespace protal::classify {
                 bm_alignment_join_sort_global.Join(bm_alignment_join_sort);
                 bm_output_global.Join(bm_output);
                 alignment_handler_global.bm_alignment.Join(alignment_handler.bm_alignment);
+
+                alignment_handler_global.m_bm_alignment.Join(alignment_handler.m_bm_alignment);
 
                 thread_statistics.output_alignments = output_handler.alignments;
                 statistics.Join(thread_statistics);
@@ -468,6 +491,7 @@ namespace protal::classify {
                 }
             }
         }
+        bm_omp_block.Stop();
 
 //        adoh_os.close();
 
@@ -482,6 +506,10 @@ namespace protal::classify {
 
         if (options.Verbose()) {
             std::cout << "---------------Speed benchmarks---------------------" << std::endl;
+            bm_omp_block.PrintResults();
+            bm_omp_before_loop_global.PrintResults();
+            std::cout << "-----" << std::endl;
+            bm_reader_global.PrintResults();
             bm_anchor_finder_global.PrintResults();
             std::cout << "\t";
             anchor_finder_global.m_bm_operator.PrintResults();
@@ -505,6 +533,7 @@ namespace protal::classify {
             bm_alignment_join_sort_global.PrintResults();
             bm_output_global.PrintResults();
             alignment_handler_global.bm_alignment.PrintResults();
+            alignment_handler_global.m_bm_alignment.PrintResults();
             std::cout << "----------------------------------------------------\n" << std::endl;
 
             std::cout << "Reads that had anchors recovered: "

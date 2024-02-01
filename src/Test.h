@@ -6,6 +6,7 @@
 
 #include "wfa2-lib/bindings/cpp/WFAligner.hpp"
 #include <immintrin.h>
+#include <iostream>
 
 using namespace::wfa;
 
@@ -120,4 +121,8 @@ namespace test {
         test::SIMDSim(query, flex.data(), flex.size());
         test::RegularSim(query, flex.data(), flex.size());
     };
+
+    int main(int argc, char *argv[]) {
+        std::cout << "TEsting" << std::endl;
+    }
 }

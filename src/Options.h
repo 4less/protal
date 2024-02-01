@@ -15,7 +15,8 @@
 namespace protal {
     static const size_t DEFAULT_THREADS = 1;
     static const size_t DEFAULT_ALIGN_TOP = 3;
-    static const double DEFAULT_MAX_SCORE_ANI = 0.8;
+    static const double DEFAULT_MAX_SCORE_ANI = 0.9;
+    static const double DEFAULT_MSA_MIN_VCOV = 0.5;
     static const size_t DEFAULT_X_DROP = 1000;
     static const size_t DEFAULT_MAX_KEY_UBIQUITY = 256;
     static const size_t DEFAULT_MAX_SEED_SIZE = 128;
@@ -42,13 +43,15 @@ namespace protal {
                 ("4,map", "For larger datasets you can define parameters -1, -2, -3 and -o in a file.", cxxopts::value<std::string>()->default_value(""))
                 ("5,map_help", "Get help how to format the map file.")
                 ("6,map_range", "If you specified a map file with -4 or --map you can also pass a range to protal to run protal only on a subset. The first entry is 1, the end is inclusive. e.g.: 1-10. If the end open or larger than the number of entries in the map file, the last entry in the map file is selected as end.", cxxopts::value<std::string>()->default_value("1-"))
+                ("7,mapq_debug_output", "Output mapq debug info to stderr")
+                ("8,profile_truth", "Provide truth file and annotate profile taxa with TP/FP. Format is list of integers (internal ids)", cxxopts::value<std::string>()->default_value(""))
+                ("9,benchmark_alignment_output", "Benchmark alignment output. Output is appended to the file.", cxxopts::value<std::string>())
                 ("h,help", "Print help.")
                 ("z,force", "Force redo alignment even if sam files exists.")
                 ("f,fastalign", "Speed up alignment by allowing approximate alignment between seeds with no indication for indels.")
                 ("n,no_strains", "Stray on species level. Do not output SNPs")
                 ("0,benchmark_alignment", "Benchmark alignment part of protal based on true taxonomic id and gene id supplied in the read header. Header must fulfill the formatting >taxid_geneid... with the regex: >[0-9]+_[0-9]+([^0-9]+.*)*")
-                ("7,mapq_debug_output", "Output mapq debug info to stderr")
-                ("9,benchmark_alignment_output", "Benchmark alignment output. Output is appended to the file.", cxxopts::value<std::string>())
+
                 ("c,align_top", "After seeding, anchor are sorted by quality passed to alignment. <take_top> specifies how many anchors should be aligned starting with the most promising anchor.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_ALIGN_TOP)))
                 ("m,max_out", "Maximum alignments that should be outputted", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_OUT)))
                 ("u,max_key_ubiquity", "Max key ubiquity. Best matching Flexkey count for seed must be lower or equal", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_KEY_UBIQUITY)))
@@ -56,10 +59,10 @@ namespace protal {
                 ("a,max_score_ani", "A max score makes an alignment stop if the alignment diverges too much. This parameter estimates the score for a given ani and is a tradeoff between speed/accuracy. [ Default: " + std::to_string(DEFAULT_MAX_SCORE_ANI) + "]", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MAX_SCORE_ANI)))
                 ("x,x_drop", "Value determines when to cut of branches in the aligment process that are unpromising. [ Default: " + std::to_string(DEFAULT_X_DROP) + "]", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_X_DROP)))
                 ("e,output_top", "After alignment, alignments are sorted by score. <output_top> specifies how many alignments should be reported starting with the highest scoring alignment.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_OUTPUT_TOP)))
-                ("g,preload_genomes", "Preload complete reference library (can be very memory intensive) instead of dynamic loading. This improves performance. [default off]")
+                ("g,preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
+                ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
                 ("p,profile", "Perform taxonomic profiling.")
                 ("q,profile_only", "Provide profile filename (.sam) and only perform profiling based on sam file.", cxxopts::value<std::string>()->default_value(""))
-                ("8,profile_truth", "Provide truth file and annotate profile taxa with TP/FP. Format is list of integers (internal ids)", cxxopts::value<std::string>()->default_value(""))
                 ("reference", "", cxxopts::value<std::string>()->default_value(""));
 
         return options;
@@ -111,12 +114,16 @@ namespace protal {
         size_t m_max_key_ubiquity = DEFAULT_MAX_KEY_UBIQUITY;
         size_t m_max_seed_size = DEFAULT_MAX_SEED_SIZE;
         size_t m_max_out = DEFAULT_MAX_OUT;
+        double m_msa_min_vcov = DEFAULT_MSA_MIN_VCOV;
 
     public:
         static inline const std::string PROTAL_INDEX_FILE = "index.prx";
         static inline const std::string PROTAL_SEQUENCE_FILE = "reference.fna";
         static inline const std::string PROTAL_SEQUENCE_MAP_FILE = "reference.map";
+        static inline const std::string PROTAL_HITTABLE_GENES_FILE = "species_gene_mask.tsv";
         static inline const std::string PROTAL_TAXONOMY_FILE = "internal_taxonomy.dmp";
+
+        // DEPRECATED
         static inline const std::string PROTAL_TAXONOMY_GTDB_FILE = "internal_taxonomy_gtdb.dmp";
         static inline const std::string PROTAL_TAXONOMY_NCBI_FILE = "internal_taxonomy_ncbi.dmp";
 
@@ -144,7 +151,7 @@ namespace protal {
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
                 std::string database_path, std::vector<std::string>& output_prefix_list,
                 std::string sequence_file, std::string map_file, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
-                size_t x_drop, size_t max_key_ubiquity, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
+                double msa_min_vcov, size_t x_drop, size_t max_key_ubiquity, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
                 std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
                 bool force, bool verbose, std::vector<size_t> range) :
                 m_build(build),
@@ -167,11 +174,12 @@ namespace protal {
                 m_align_top(align_top),
                 m_max_out(max_out),
                 m_max_score_ani(max_score_ani),
+                m_msa_min_vcov(msa_min_vcov),
                 m_x_drop(x_drop),
                 m_max_key_ubiquity(max_key_ubiquity),
                 m_max_seed_size(max_seed_size),
                 m_fastalign(fastalign),
-                m_profile_truth(profile_truth),
+                m_profile_truth(std::move(profile_truth)),
                 m_benchmark_alignment(benchmark_alignment),
                 m_benchmark_alignment_output(benchmark_alignment_output),
                 m_mapq_debug_out(mapq_debug_output),
@@ -329,6 +337,14 @@ namespace protal {
             return m_database_path + "/" + PROTAL_SEQUENCE_MAP_FILE;
         }
 
+        std::string GetHittableGenesMap() const {
+            return m_database_path + "/" + PROTAL_HITTABLE_GENES_FILE;
+        }
+
+        bool HittableGenesMapExists() const {
+            return Utils::exists(GetHittableGenesMap());
+        }
+
         void SetCurrentIndex(size_t i) {
             if (i >= m_prefix_list.size()) {
                 std::cerr << "SetCurrentIndex to " << i << " not possible." << std::endl;
@@ -396,6 +412,10 @@ namespace protal {
                 exit(33);
             }
             return m_sam_list[index];
+        }
+
+        std::vector<std::string> SamFiles() {
+            return m_sam_list;
         }
 
         std::string ProfileFile(int index) const {
@@ -480,6 +500,10 @@ namespace protal {
 
         bool HasProfileTruths() const {
             return m_profile_truth_list.size() == m_profile_list.size();
+        }
+
+        auto GetMSAMinVCOV() {
+            return m_msa_min_vcov;
         }
 
         size_t GetAlignTop() const {
@@ -793,8 +817,17 @@ namespace protal {
                 error_log.emplace_back(error);
             }
 
+            if (m_first_list.size() != m_second_list.size() || m_first_list.size() != m_sam_list.size()) {
+                std::cerr << "First:  " << m_first_list.size() << std::endl;
+                std::cerr << "Second: " << m_second_list.size() << std::endl;
+                std::cerr << "Sam:    " << m_sam_list.size() << std::endl;
+                std::cerr << "lists different sizes" << std::endl;
+                exit(9);
+            }
+
             // Check files
             for (auto i = 0; i < m_first_list.size(); i++) {
+
                 auto first = m_first_list[i];
                 auto second = m_second_list[i];
                 auto sam = m_sam_list[i];
@@ -892,14 +925,18 @@ namespace protal {
                 return {};
             }
 
-
             cxx_options.parse_positional({ "reference" });
             auto result = cxx_options.parse(argc, argv);
 
             bool help = result.count("help");
+
+            if (help) {
+                return {};
+            }
+
             bool no_strains = result.count("no_strains");
             bool build = result.count("build");
-            bool preload_genomes = result.count("preload_genomes");
+            bool preload_genomes_off = result.count("preload_genomes_off");
             bool benchmark_alignment = result.count("benchmark_alignment");
             bool fastalign = result.count("fastalign");
             bool profile = result.count("profile");
@@ -911,6 +948,7 @@ namespace protal {
             size_t max_key_ubiquity = result["max_key_ubiquity"].as<size_t>();
             size_t max_seed_size = result["max_seed_size"].as<size_t>();
             double max_score_ani = result["max_score_ani"].as<double>();
+            double msa_min_vcov = result["msa_min_vcov"].as<double>();
             size_t max_out = result["max_out"].as<size_t>();
 
 
@@ -1010,6 +1048,7 @@ namespace protal {
                 db_path = result["db"].as<std::string>();
             } else {
                 auto db_path_env = std::getenv(PROTAL_DB_ENV_VARIABLE.c_str());
+                std::cout << "Get DB from environment variable $" << PROTAL_DB_ENV_VARIABLE << std::endl;
                 if (!db_path_env) {
                     std::cerr << "Error " << PROTAL_DB_ENV_VARIABLE << std::endl;
                 } else {
@@ -1027,7 +1066,7 @@ namespace protal {
                     profile,
                     profile_only,
                     no_strains,
-                    preload_genomes,
+                    !preload_genomes_off,
                     benchmark_alignment,
                     benchmark_alignment_output_file,
                     help,
@@ -1044,6 +1083,7 @@ namespace protal {
                     align_top,
                     max_out,
                     max_score_ani,
+                    msa_min_vcov,
                     x_drop,
                     max_key_ubiquity,
                     max_seed_size,

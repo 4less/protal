@@ -16,6 +16,8 @@ namespace protal {
         const std::string& m_reference;
 
     public:
+        Benchmark bm_next_compressed_cigar{"Next compressed cigar"};
+
         VariantHandler(const std::string& reference) : m_reference(reference) {};
 
         bool HasVariantBin(VariantPos position) {
@@ -112,13 +114,23 @@ namespace protal {
                 std::cout << sam.ToString() << std::endl;
                 PrintAlignment(sam, m_reference, std::cout);
             }
+
+            bm_next_compressed_cigar.Start();
             while (NextCompressedCigar(cpos, sam.m_cigar, count, op)) {
                 if (op == 'M') {
                     for (auto i = 0; i < count; i++) {
                         if (sam.m_seq[qpos + i] != m_reference[rpos+i] && sam.m_seq[qpos + i] != 'N' && m_reference[rpos+i] != 'N') {
-                            std::cerr << sam.m_seq[qpos + i] << " " << m_reference[rpos+i] << std::endl;
+                            // std::cerr << sam.m_seq[qpos + i] << " " << m_reference[rpos+i] << std::endl;
                             faulty = true;
                         }
+                    }
+                    if (faulty) {
+                        std::cerr << "Thread " << omp_get_thread_num() << " FAULTY ---------------------------------" << std::endl;
+                        auto success = PrintAlignment(sam, m_reference, std::cerr);
+                        std::cerr << sam.m_seq << std::endl;
+                        std::cerr << "Faulty sam: \n" << sam.ToString() << std::endl;
+                        bm_next_compressed_cigar.Stop();
+                        return false;
                     }
                 }
 
@@ -154,28 +166,11 @@ namespace protal {
                 qpos += (op != 'D') * count;
                 rpos += (!(op == 'I' || op == 'S')) * count;
             }
+            bm_next_compressed_cigar.Stop();
 
             if (output) {
                 std::cout << std::flush << std::endl;
                 Utils::Input();
-            }
-
-            if (faulty) {
-                std::cerr << "FAULTY ---------------------------------" << std::endl;
-                PrintAlignment(sam, m_reference, std::cerr);
-                std::cerr << sam.m_seq << std::endl;
-                std::cerr << "Faulty sam: \n" << sam.ToString() << std::endl;
-                exit(8);
-                return false;
-            }
-//            std::cout << "Check ----------------------------------------------" << std::endl;
-            for (auto& [k,v] : m_variants) {
-                for (auto& var : v) {
-                    if (var.Observations() != var.GetQualListCopy().size()) {
-                        std::cout << var.ToString() << " <--- " << std::endl;
-                        exit(11);
-                    }
-                }
             }
 
             return true;
@@ -274,8 +269,8 @@ namespace protal {
             }
         }
 
-        void AddVariantsFromSam(SamEntry const& sam, size_t read_id = 0) {
-            ExtractVariants(sam, read_id);
+        bool AddVariantsFromSam(SamEntry const& sam, size_t read_id = 0) {
+            return ExtractVariants(sam, read_id);
         }
 
     };

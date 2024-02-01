@@ -535,6 +535,9 @@ void protal::taxonomy::IntTaxonomy::Load(std::string path) {
         int parent_id = stoi(tokens.at(1));
         int external_id = stoi(tokens.at(2));
         std::string name = tokens.at(3);
+
+        string_to_id[name] = id;
+
         std::string rank = tokens.at(4);
         int level = stoi(tokens.at(5));
         std::string rep_genome = tokens.at(6);
@@ -680,6 +683,7 @@ std::string protal::taxonomy::IntTaxonomy::LineageStr(int t, const std::vector<s
         }
         nid = pid;
         if (!map.contains(nid)) {
+            std::cout << "Map does not contain " << nid << std::endl;
             Utils::Input();
         }
         pid = map.at(nid).parent_id;
@@ -719,6 +723,10 @@ std::string protal::taxonomy::IntTaxonomy::LineageExternalIds(int t, const std::
 
 //    return lineage;
     return Utils::join(result, "|");
+}
+
+protal::taxonomy::TaxId protal::taxonomy::IntTaxonomy::Get(std::string taxon) {
+    return string_to_id.at(taxon);
 }
 
 std::string protal::taxonomy::IntTaxonomy::Lineage(int t, std::string divider)  {

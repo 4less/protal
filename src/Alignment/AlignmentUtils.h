@@ -697,6 +697,11 @@ namespace protal {
                 rpos += count;
                 hasid = true;
             } else if (op == 'I' || op == 'S') {
+                if (qpos + count > sam.m_seq.size()) {
+                    std::cerr << "Weird error1" << std::endl;
+                    return false;
+                }
+
                 query += sam.m_seq.substr(qpos, count);
                 ref += std::string(count, '-');
                 qpos += count;
@@ -705,7 +710,17 @@ namespace protal {
 
                 hasid = true;
             } else {
+                if (qpos + count > sam.m_seq.size()) {
+                    std::cerr << "Weird error2" << std::endl;
+                    return false;
+                }
                 query += sam.m_seq.substr(qpos, count);
+                if (rpos + count > reference.size()) {
+                    std::cerr << "rpos, count: " << rpos << ", " << count << " -- " << reference.size() << " <- ref size" << std::endl;
+                    std::cerr << "Weird error3" << std::endl;
+                    std::cerr << sam.ToString() << std::endl;
+                    return false;
+                }
                 ref += reference.substr(rpos, count);
 
                 qpos += count;
@@ -719,10 +734,10 @@ namespace protal {
         out << query << std::endl;
         out << align << std::endl;
         out << ref << std::endl;
-        out << "-------------------------" << std::endl;
+        out << "-------------------------" << (faulty ? "FAULTY ALIGNMENT" : "Good") << std::endl;
 
         if (faulty) {
-            std::cout << "Faulty within print" << std::endl;
+            std::cerr << "Faulty within print" << std::endl;
             return false;
         }
         return true;

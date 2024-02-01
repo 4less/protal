@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "WFA2Wrapper.h"
+#include "WFA2Wrapper2.h"
 #include "AlignmentOutputHandler.h"
 #include "GenomeLoader.h"
 #include "SeedingStrategy.h"
@@ -90,7 +90,7 @@ namespace protal {
 
     class SimpleAlignmentHandler {
     private:
-        WFA2Wrapper m_aligner;
+        WFA2Wrapper2 m_aligner;
         AlignmentResult m_alignment_result;
         GenomeLoader& m_genome_loader;
         size_t m_kmer_size = 15;
@@ -124,6 +124,7 @@ namespace protal {
         size_t total_tail_alignments = 0;
         size_t total_tail_length = 0;
         Benchmark bm_alignment{ "Alignment" };
+        Benchmark m_bm_alignment {"Raw alignment"};
         Benchmark bm_seedext{ "Seed Extension" };
         size_t dummy = 0;
 
@@ -138,7 +139,7 @@ namespace protal {
         }
 
 
-        SimpleAlignmentHandler(GenomeLoader& genome_loader, WFA2Wrapper& aligner, size_t kmer_size, size_t align_top, double max_score_ani, bool fastalign) :
+        SimpleAlignmentHandler(GenomeLoader& genome_loader, WFA2Wrapper2& aligner, size_t kmer_size, size_t align_top, double max_score_ani, bool fastalign) :
                 m_genome_loader(genome_loader),
                 m_aligner(aligner),
                 m_kmer_size(kmer_size),
@@ -435,13 +436,14 @@ namespace protal {
             } else {
                 Benchmark bm_local{"alignment"};
                 if (true) {//max_dove_size > 0 && (dove_left_required || dove_right_required)) {
-//
+                    m_bm_alignment.Start();
                     m_aligner.Alignment(read, reference_str,
                                         allowed_del_left,
                                         allowed_del_right,
                                         dove_left_required ? m_alignment_orientation.reference_dove_left * 2 : 0,
                                         dove_right_required ? m_alignment_orientation.reference_dove_right * 2 : 0,
                                         MaxScore(m_max_score_ani, m_alignment_orientation.overlap));
+                    m_bm_alignment.Stop();
                 }
 //                else {
 //                    std::cout << "End2End" << std::endl;

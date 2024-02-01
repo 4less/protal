@@ -7,14 +7,14 @@
 #include <string>
 #include <istream>
 #include <iostream>
-#include "wfa2-lib/bindings/cpp/WFAligner.hpp"
+#include "wfa2-lib-2.3.4/bindings/cpp/WFAligner.hpp"
 // #include "wfa2-lib-2.3.4/bindings/cpp/WFAligner.hpp"
 
 
 using namespace::wfa;
 
 namespace protal {
-    class WFA2Wrapper {
+    class WFA2Wrapper2 {
         WFAlignerGapAffine m_aligner;
 
         int m_mismatch;
@@ -30,7 +30,7 @@ namespace protal {
     public:
         std::string seq1;
         std::string seq2;
-        WFA2Wrapper(int mismatch, int gap_opening, int gap_extension, size_t x_drop) :
+        WFA2Wrapper2(int mismatch, int gap_opening, int gap_extension, size_t x_drop) :
                 m_mismatch(mismatch),
                 m_gap_opening(gap_opening),
                 m_gap_extension(gap_extension),
@@ -38,7 +38,7 @@ namespace protal {
                 m_aligner(mismatch, gap_opening, gap_extension, WFAligner::Alignment, WFAligner::MemoryHigh) {
         }
 
-        WFA2Wrapper(const WFA2Wrapper &other) :
+        WFA2Wrapper2(const WFA2Wrapper2 &other) :
                 m_mismatch(other.m_mismatch),
                 m_gap_opening(other.m_gap_opening),
                 m_gap_extension(other.m_gap_extension),

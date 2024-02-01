@@ -81,6 +81,7 @@ namespace Utils {
 
     static std::string Input() {
         std::string input;
+        std::cout << "Input: ";
         std::cin >> input;
         return input;
     }

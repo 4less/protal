@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <omp.h>
+
 #include "Matrix.h"
 #include <optional>
 #include <unordered_set>
@@ -64,13 +66,16 @@ namespace protal {
         const Gene& m_reference;
 
     public:
+        Benchmark bm_add_read{"Add read"};
+        Benchmark bm_add_sequence_range{"Add sq"};
+        Benchmark bm_add_variants{"Add variants"};
+
         StrainLevelContainer(Gene const& reference) :
                 m_reference(reference), m_variant_handler(reference.Sequence()) {
         };
 
-        void AddToVariants(SamEntry const& sam, size_t read_id) {
-            m_variant_handler.AddVariantsFromSam(sam, read_id);
-
+        bool AddToVariants(SamEntry const& sam, size_t read_id) {
+            return m_variant_handler.AddVariantsFromSam(sam, read_id);
         }
 
         const VariantHandler& GetVariantHandler() const {
@@ -121,10 +126,17 @@ namespace protal {
             }
         }
 
-        void AddSam(SamEntry const& sam, size_t read_id) {
+        bool AddSam(SamEntry const& sam, size_t read_id) {
 //            m_sequence_range_handler.Add(sam.m_pos, sam.m_cigar.length());
+            bm_add_read.Start();
+            bm_add_sequence_range.Start();
             AddToSequenceRange(sam, read_id);
-            AddToVariants(sam, read_id);
+            bm_add_sequence_range.Stop();
+            bm_add_variants.Start();
+            auto valid = AddToVariants(sam, read_id);
+            bm_add_variants.Stop();
+            bm_add_read.Stop();
+            return valid;
         }
     };
 

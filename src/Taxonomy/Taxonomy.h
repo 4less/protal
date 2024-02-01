@@ -20,6 +20,7 @@ namespace protal::taxonomy {
 
     typedef tsl::sparse_map<TaxId, Node*> NodeFromId;
     typedef tsl::sparse_map<TaxId, IntNode> IntNodeMap;
+    typedef tsl::sparse_map<std::string, TaxId> StringIdMap;
 //    typedef tsl::sparse_map<TaxId, tsl::sparse_map<std::string, Name>> NamesFromId;/
     typedef std::vector<Name> Names;
     typedef std::vector<Node> Nodes;
@@ -195,6 +196,7 @@ namespace protal::taxonomy {
         void Load(std::string path);
 
     public:
+        StringIdMap string_to_id;
         IntNodeMap map;
         TaxId root_id = 0;
 
@@ -202,6 +204,7 @@ namespace protal::taxonomy {
         int LCA(int t1, int t2);
         IntNode &Get(int t1);
         IntNode &Get(int t1, std::string rank);
+        TaxId Get(std::string taxon);
         std::string Lineage(int t, std::string divider=";");
         bool IsRoot(int t);
 
