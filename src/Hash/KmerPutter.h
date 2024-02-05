@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "KmerLookup.h"
 #include "Seedmap.h"
 
 namespace protal {

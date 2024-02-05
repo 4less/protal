@@ -118,6 +118,11 @@ namespace protal {
             size_t m_mapped_reads = 0;
             size_t m_mapped_length = 0;
             size_t m_mapq_sum = 0;
+            size_t m_unique_mers = 0;
+            size_t m_unique_two_mers = 0;
+            size_t m_unique_mer_reads = 0;
+            size_t m_unique_two_mers_reads = 0;
+            size_t m_unique_two_mer_reads = 0;
             double m_ani_sum = 0;
 
             size_t m_gene_length = 0;
@@ -235,11 +240,33 @@ namespace protal {
                 m_mapq_sum += sam.m_mapq;
                 m_ani_sum += ani;
 
+                m_unique_mers += sam.m_uniques;
+                m_unique_two_mers += sam.m_uniques_two;
+
+                m_unique_mer_reads += sam.m_uniques > 0;
+                m_unique_two_mer_reads += sam.m_uniques_two > 0;
+
                 return true;
             }
 
             void SetLength(size_t length) {
                 m_gene_length = length;
+            }
+
+            size_t UniqueKmers() const {
+                return m_unique_mers;
+            }
+
+            size_t UniqueKmersReads() const {
+                return m_unique_mer_reads;
+            }
+
+            size_t UniqueTwoKmers() const {
+                return m_unique_two_mers;
+            }
+
+            size_t UniqueTwoKmersReads() const {
+                return m_unique_two_mers_reads;
             }
 
             double VerticalCoverage() const {
@@ -296,6 +323,8 @@ namespace protal {
             size_t m_id;
             std::string m_name;
             size_t m_total_hits = 0;
+            size_t m_unique_mers = 0;
+            size_t m_unique_mer_reads = 0;
             size_t m_unique_hits = 0;
             double m_ani_sum = 0;
             size_t m_mapq_sum = 0;
@@ -358,6 +387,8 @@ namespace protal {
                 bool success = m_genes.at(geneid).AddSam(sam, read_id, score, true, no_strain);
                 if (!success) return false;
 
+                m_unique_mers += sam.m_uniques;
+                m_unique_mer_reads += sam.m_uniques > 0;
                 m_total_hits++;
                 m_ani_sum += score;
                 m_mapq_sum += sam.m_mapq;
@@ -368,6 +399,23 @@ namespace protal {
             size_t GetGenomeGeneNumber() const {
                 return m_genome.GeneNum();
             }
+
+            size_t UniqueKmers() const {
+                return std::accumulate(m_genes.begin(), m_genes.end(), 0, [](auto acc, auto const& pair) { return acc + pair.second.UniqueKmers(); });
+            }
+
+            size_t UniqueTwoKmers() const {
+                return std::accumulate(m_genes.begin(), m_genes.end(), 0, [](auto acc, auto const& pair) { return acc + pair.second.UniqueTwoKmers(); });
+            }
+
+            size_t GenesWithUniqueKmers() const {
+                return std::count_if(m_genes.begin(), m_genes.end(), [](auto const& pair) { return pair.second.UniqueKmers() > 0; });
+            }
+
+            size_t GenesWithUniqueTwoKmers() const {
+                return std::count_if(m_genes.begin(), m_genes.end(), [](auto const& pair) { return pair.second.UniqueTwoKmers() > 0; });
+            }
+
             Genome& GetGenome() {
                 return m_genome;
             }
@@ -866,7 +914,11 @@ namespace protal {
                         os << filtered_alleles[i] << '\t';
                     }
                     os << taxon.VCovStdDev() << '\t';
-                    os << taxon.GetGenomeGeneNumber();
+                    os << taxon.GetGenomeGeneNumber() << '\t';
+                    os << taxon.UniqueKmers() << '\t';
+                    os << taxon.GenesWithUniqueKmers() << '\t';
+                    os << taxon.UniqueTwoKmers() << '\t';
+                    os << taxon.GenesWithUniqueTwoKmers();
 
                     os << std::endl;
 
@@ -1150,10 +1202,6 @@ namespace protal {
                         has_current1 ? std::optional<SamEntry>{current} : std::optional<SamEntry>{},
                         has_current2 ? std::optional<SamEntry>{current_other} : std::optional<SamEntry>{}
                     );
-
-//                    std::cout << "----------------------- unique? " << unique << " " << current_qname << " " << last_qname << std::endl;
-//                    if (new_pair.HasFirst()) std::cout << new_pair.First().ToString() << std::endl;
-//                    if (new_pair.HasSecond()) std::cout << new_pair.Second().ToString() << std::endl;
 
                     if (unique) {
                         m_pairs_unique.emplace_back(std::move(new_pair));

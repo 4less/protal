@@ -71,13 +71,17 @@ namespace protal {
         uint32_t taxid;
         uint32_t geneid;
         uint16_t total_length = 0;
+        uint16_t unique = 0;
+        uint16_t unique_best_two = 0;
         bool forward = true;
         ChainList chain;
 
-        ChainAlignmentAnchor(uint32_t taxid, uint32_t geneid, bool forward) :
+        ChainAlignmentAnchor(uint32_t taxid, uint32_t geneid, bool forward, uint8_t unique = 0, uint8_t unique_best_two = 0) :
                 taxid(taxid),
                 geneid(geneid),
-                forward(forward) {};
+                forward(forward),
+                unique(unique),
+                unique_best_two(unique_best_two) {};
 
         ChainLink& Back() noexcept {
             if (chain.empty()) exit(27);
@@ -120,17 +124,14 @@ namespace protal {
             str += "[ChainAnchor " + std::to_string(taxid) + "," + std::to_string(geneid) + "  ";
             size_t prev_end = 0;
             for (auto& link : chain) {
-//                str += std::string(link.readpos,' ');
-//                str += std::string(link.length,'X');
                 str += link.ToString() + " ";
-//                if (prev_end) {
-//                    str += " -" + std::to_string(link.readpos - prev_end) + "- ";
-//                }
-//                str += '(' + std::to_string(link.readpos) + ',' + std::to_string(link.readpos + link.length) + ')';
-//                prev_end = link.readpos + link.length;
             }
             str += "... ";
             str += std::to_string(total_length);
+            str += "\tunique:";
+            str += std::to_string(unique);
+            str += "\tunique2:";
+            str += std::to_string(unique_best_two);
             str += ']';
             return str;
         }

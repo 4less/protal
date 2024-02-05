@@ -186,22 +186,34 @@ namespace protal {
         uint32_t m_taxid = DEFAULT_VALUE;
         uint32_t m_geneid = DEFAULT_VALUE;
         int32_t m_genepos = INT32_MAX;
+        uint16_t m_uniques = 0;
+        uint16_t m_uniques_two = 0;
 
         bool m_forward = false;
 
         AlignmentInfo m_info;
 
     public:
-        AlignmentResult(int alignment_score, uint32_t taxid, uint32_t geneid, int32_t genepos, bool forward) :
+        AlignmentResult(int alignment_score, uint32_t taxid, uint32_t geneid, int32_t genepos, bool forward, uint8_t uniques = 0, uint8_t uniques_two = 0) :
                 m_taxid(taxid),
                 m_geneid(geneid),
                 m_genepos(genepos),
-                m_forward(forward) {};
+                m_forward(forward),
+                m_uniques(uniques),
+                m_uniques_two(uniques) {};
 
         AlignmentResult() {};
 
         std::string& Cigar() {
             return m_info.cigar;
+        }
+
+        uint16_t Uniques() const {
+            return m_uniques;
+        }
+
+        uint16_t UniquesTwo() const {
+            return m_uniques_two;
         }
 
         std::string Cigar() const {
@@ -236,11 +248,13 @@ namespace protal {
             return m_info;
         }
 
-        void Set(size_t taxid, size_t geneid, int32_t abs_pos, bool forward) {
+        void Set(size_t taxid, size_t geneid, int32_t abs_pos, bool forward, uint8_t uniques = 0, uint8_t uniques_two = 0) {
             m_taxid = taxid;
             m_geneid = geneid;
             m_genepos = abs_pos;
             m_forward = forward;
+            m_uniques = uniques;
+            m_uniques_two = uniques_two;
         }
 
         bool IsSet() const {

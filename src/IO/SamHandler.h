@@ -158,6 +158,8 @@ namespace protal {
         RNAME_t m_rnext;
         POS_t m_pnext;
         TLEN_t m_tlen;
+        uint16_t m_uniques;
+        uint16_t m_uniques_two;
         QUAL_t m_qual;
         SEQ_t m_seq;
         CIGAR_t m_cigar;
@@ -173,13 +175,16 @@ namespace protal {
                     + std::to_string(m_pnext) + '\t'
                     + std::to_string(m_tlen) + '\t'
                     + m_seq + '\t'
-                    + m_qual;
+                    + m_qual + '\t'
+                    + "ZU:i:" + std::to_string(m_uniques) + '\t'
+                    + "ZT:i:" + std::to_string(m_uniques_two);
         }
 
         bool IsReversed() const {
             return Flag::IsRead1(m_flag) ? Flag::IsRead1ReverseComplement(m_flag) : Flag::IsRead2ReverseComplement(m_flag);
         }
     };
+
 
     static void SamFromTokens(std::vector<std::string>& tokens, SamEntry &sam) {
         sam.m_qname = tokens[0];
@@ -193,6 +198,11 @@ namespace protal {
         sam.m_tlen = std::stol(tokens[8]);
         sam.m_seq = tokens[9];
         sam.m_qual = tokens[10];
+
+        const auto s = tokens[11];
+        sam.m_uniques = s.size() > 4 && s[4] == ':' ? std::stoul(s.substr(5)) : 0;
+        const auto s2 = tokens[12];
+        sam.m_uniques_two = s2.size() > 4 && s2[4] == ':' ? std::stoul(s2.substr(5)) : 0;
     }
 
 

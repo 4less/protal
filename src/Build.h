@@ -127,8 +127,6 @@ namespace protal::build {
 
             thread_statistics.reads++;
 
-//            std::cout << record.id << std::endl;
-
             // Retrieve kmers
             kmers.clear();
             kmer_handler(std::string_view(record.sequence), kmers);
@@ -152,13 +150,101 @@ namespace protal::build {
             }
         }
 
-        std::ofstream index_ostream(options.GetIndexFile(), std::ios::binary);
-        putter.Save(index_ostream);
-        index_ostream.close();
 
 #pragma omp critical(statistics)
         statistics.Join(thread_statistics);
     }
+
+        if (options.GetFullSequenceFilePath().empty()) {
+            std::ofstream index_ostream(options.GetIndexFile(), std::ios::binary);
+            putter.Save(index_ostream);
+            index_ostream.close();
+            return statistics;
+        }
+
+        std::cout << "Check Uniqueness: " << options.GetFullSequenceFilePath() << std::endl;
+
+        omp_set_num_threads(options.GetThreads());
+        is = std::ifstream(options.GetFullSequenceFilePath(), std::ios::in);
+        KmerLookupSM lookup_global(putter.GetMap());
+
+#pragma omp parallel default(none) shared(std::cout, lookup_global, options, is, dummy, read_count, kmer_handler_global, statistics, putter, flex_k_bits, main_k_bits)
+    {
+        // Private variables
+        FastxRecord record;
+
+        // Extract variables from kmi_global
+        KmerHandler kmer_handler(kmer_handler_global);
+        SeqReader reader { is };
+        size_t kmer = 0;
+        Statistics thread_statistics;
+        thread_statistics.thread_num = omp_get_thread_num();
+
+        size_t taxid = 1;
+        size_t geneid = 1;
+        size_t genepos = 1;
+
+        KmerList kmers;
+        KmerLookupSM lookup(lookup_global);
+
+        LookupList seeds;
+        std::vector<Entry<20,20,20>*> max_sim_entries;
+        uint32_t max_sim = 0;
+        uint32_t best_possible_sim = putter.GetMap().m_flex_k;
+
+        while (reader(record)) {
+            kmer_handler.SetSequence(std::string_view(record.sequence));
+
+            auto [taxonomic_id, gene_id] = KmerUtils::ExtractHeaderInformation(record.header);
+
+            thread_statistics.reads++;
+
+            // Retrieve kmers
+            kmers.clear();
+            seeds.clear();
+            kmer_handler(std::string_view(record.sequence), kmers);
+
+            for (auto pair : kmers) {
+                size_t pos = pair.second;
+                max_sim = 0;
+                // std::cout << pair.first << ", " << pair.second << std::endl;
+                max_sim_entries.clear();
+                lookup.GetFlex(pair.first, max_sim_entries, max_sim);
+                if (max_sim_entries.empty()) continue;
+
+                max_sim_entries.front()->Get(taxid, geneid, genepos);
+
+                if (max_sim != best_possible_sim) {
+                    continue;
+                }
+                if (max_sim_entries.size() == 1 && taxonomic_id == taxid) {
+                    continue;
+                }
+
+                for (auto& entry : max_sim_entries) {
+                    // std::cout << "SetNonUnique " << taxonomic_id << " != " << taxid << " entries: " << max_sim_entries.size() << " Isunique? " << entry->IsFlagUnique();
+#pragma omp critical(SetNonUnique)
+                    entry->SetFlagNonUnique();
+                    // std::cout << " -> " << entry->IsFlagUnique() << std::endl;
+                }
+            }
+        }
+
+
+    #pragma omp critical(statistics)
+        statistics.Join(thread_statistics);
+    }
+
+        std::cout << "Save unique kmer info: \n" << options.GetIndexFolder() + "/unique_kmers.tsv" << std::endl;
+        std::ofstream os(options.GetIndexFolder() + "/unique_kmers.tsv");
+        putter.GetMap().CountUniqueKmers(os, true, true);
+        os.close();
+
+        std::ofstream index_ostream(options.GetIndexFile(), std::ios::binary);
+        putter.Save(index_ostream);
+        index_ostream.close();
+
+
         return statistics;
     }
 }

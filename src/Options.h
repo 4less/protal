@@ -62,6 +62,7 @@ namespace protal {
                 ("g,preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
                 ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
                 ("p,profile", "Perform taxonomic profiling.")
+                ("i,full_reference", "", cxxopts::value<std::string>()->default_value(""))
                 ("q,profile_only", "Provide profile filename (.sam) and only perform profiling based on sam file.", cxxopts::value<std::string>()->default_value(""))
                 ("reference", "", cxxopts::value<std::string>()->default_value(""));
 
@@ -88,6 +89,7 @@ namespace protal {
 
 
         std::string m_sequence_file;
+        std::string m_full_sequence_file;
         std::string m_database_path;
         std::string m_output_dir;
         std::string m_map_file;
@@ -149,7 +151,7 @@ namespace protal {
         Options(bool build, bool profile, bool profile_only, bool no_strains, bool preload_genomes, bool benchmark_alignment,
                 std::string benchmark_alignment_output, bool show_help, bool mapq_debug_output,
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
-                std::string database_path, std::vector<std::string>& output_prefix_list,
+                std::string database_path, std::vector<std::string>& output_prefix_list, std::string full_sequence_file,
                 std::string sequence_file, std::string map_file, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
                 double msa_min_vcov, size_t x_drop, size_t max_key_ubiquity, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
                 std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
@@ -168,7 +170,8 @@ namespace protal {
                 m_sam_list(sam_file_list),
                 m_profile_list(profile_file_list),
                 m_profile_truth_list(profile_truth_list),
-                m_sequence_file(std::move(sequence_file)),
+                m_sequence_file(std::move(full_sequence_file)),
+                m_full_sequence_file(std::move(sequence_file)),
                 m_map_file(std::move(map_file)),
                 m_threads(threads),
                 m_align_top(align_top),
@@ -307,6 +310,10 @@ namespace protal {
 
         std::string GetSequenceFilePath() const {
             return m_sequence_file;
+        }
+
+        std::string GetFullSequenceFilePath() const {
+            return m_full_sequence_file;
         }
 
         std::string GetIndexFolder() const {
@@ -953,6 +960,7 @@ namespace protal {
 
 
             auto reference = result["reference"].as<std::string>();
+            auto full_reference = result["full_reference"].as<std::string>();
 
             auto map_file = result.count("map") ? result["map"].as<std::string>() : "";
             auto first = result.count("first") ? result["first"].as<std::string>() : "";
@@ -1077,6 +1085,7 @@ namespace protal {
                     db_path,
                     prefix_list,
                     reference,
+                    full_reference,
                     map_file,
                     output_dir,
                     threads,

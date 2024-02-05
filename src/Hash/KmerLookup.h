@@ -22,12 +22,14 @@ namespace protal {
         uint32_t taxid = UINT32_MAX;
         uint32_t geneid = UINT32_MAX;
         uint32_t genepos = UINT32_MAX;
-        uint32_t readpos = UINT32_MAX;
+        uint16_t readpos = UINT16_MAX;
+        bool unique = false;
+        bool unique_dist_two = false;
 
         LookupResult() {};
 
-        LookupResult(uint32_t taxid, uint32_t geneid, uint32_t genepos, uint32_t readpos) :
-                taxid(taxid), geneid(geneid), genepos(genepos), readpos(readpos) {};
+        LookupResult(uint32_t taxid, uint32_t geneid, uint32_t genepos, uint32_t readpos, bool unique=false, bool unique_dist_two=false) :
+                taxid(taxid), geneid(geneid), genepos(genepos), readpos(readpos), unique(unique), unique_dist_two(unique_dist_two) {};
 
         inline bool SameTaxon(LookupResult const& other) const {
             return taxid == other.taxid;
@@ -157,6 +159,8 @@ namespace protal {
         size_t m_taxid{};
         size_t m_geneid{};
         size_t m_genepos{};
+        bool m_unique{};
+        bool m_unique_dist_two{};
 
         LookupPointer m_lookup_tmp;
     public:
@@ -166,9 +170,14 @@ namespace protal {
 //        }
         using RecoverySet = tsl::robin_set<uint64_t>;
 
-        KmerLookupSM(Seedmap& map, size_t max_ubiquity=128) :
+        KmerLookupSM(Seedmap& map, size_t max_ubiquity) :
                 m_sm(map), m_flex_k(map.m_flex_k), m_flex_k_bits(map.m_flex_k_bits), m_flex_k_half(map.m_flex_k/2),
                 m_max_ubiquity(max_ubiquity) {
+        };
+
+        KmerLookupSM(Seedmap& map) :
+            m_sm(map), m_flex_k(map.m_flex_k), m_flex_k_bits(map.m_flex_k_bits), m_flex_k_half(map.m_flex_k/2),
+            m_max_ubiquity(map.max_key_multiplicity) {
         };
 
         KmerLookupSM(KmerLookupSM const& other) :
@@ -254,7 +263,9 @@ namespace protal {
 //                std::cout << "Recovery" << std::endl;
                 for (auto i = 0; i < flex_vector.size(); i++) {
                     if (flex_vector[i] == max) {
-                        pointers.values_begin[i].Get(m_taxid, m_geneid, m_genepos);
+                        pointers.values_begin[i].Get(m_taxid, m_geneid, m_genepos, m_unique, m_unique_dist_two);
+                        m_unique &= max == m_sm.m_flex_k;
+                        m_unique_dist_two &= max == m_sm.m_flex_k;
 
                         if (m_taxid == 0) {
                             // Debug
@@ -265,14 +276,14 @@ namespace protal {
                             continue;
                         }
 
-                        result.emplace_back(LookupResult( m_taxid, m_geneid, m_genepos, pointers.read_pos + m_flex_k_half ));
+                        result.emplace_back( m_taxid, m_geneid, m_genepos, pointers.read_pos + m_flex_k_half, m_unique, m_unique_dist_two );
                     }
                 }
             } else {
                 m_entry_begin = pointers.values_begin;
                 for (; m_entry_begin < pointers.values_end; m_entry_begin++) {
-                    m_entry_begin->Get(m_taxid, m_geneid, m_genepos);
-                    result.emplace_back(LookupResult( m_taxid, m_geneid, m_genepos, pointers.read_pos + m_flex_k_half ));
+                    m_entry_begin->Get(m_taxid, m_geneid, m_genepos, m_unique, m_unique_dist_two);
+                    result.emplace_back( m_taxid, m_geneid, m_genepos, pointers.read_pos + m_flex_k_half, false, false );
                 }
             }
         }
@@ -285,6 +296,48 @@ namespace protal {
                     result.emplace_back(LookupResult(taxid, geneid, genepos, pointers.read_pos + m_flex_k_half));
                     recovery.erase(recovery.find(iter->MaskPosition()));
                     return;
+                }
+            }
+        }
+
+        inline void GetFlex(size_t &kmer, std::vector<Entry<20,20,20>*>& max_sim_entries, uint32_t& max_similarity) {
+            m_sm.Get(kmer, m_entry_begin, m_entry_end, m_flex_begin, m_flex_end);
+
+            if (m_entry_begin == nullptr || m_entry_end == nullptr) {
+                return;
+            }
+
+            if (m_flex_begin != nullptr) {
+                size_t flex_key = m_sm.FlexKey(kmer);
+                flex_vector.clear();
+                max_similarity = 0;
+                auto max_count = 0;
+                for (auto begin = m_flex_begin; begin < m_flex_end; begin++) {
+                    auto sim = Seedmap::Similarity(*begin, flex_key);
+                    flex_vector.emplace_back(sim);
+                    if (sim > max_similarity)  {
+                        max_similarity = sim;
+                        max_count = 0;
+                    }
+                    max_count += (sim == max_similarity);
+                }
+
+                if (max_count > m_max_ubiquity) {
+                    return;
+                }
+
+                for (auto i = 0; i < flex_vector.size(); i++) {
+                    if (flex_vector[i] == max_similarity) {
+                        m_entry_begin[i].Get(m_taxid, m_geneid, m_genepos);
+                        max_sim_entries.emplace_back((m_entry_begin + i));
+                    }
+                }
+            } else {
+                size_t length = m_entry_end - m_entry_begin;
+                if (length > 1) {
+                    for (; m_entry_begin < m_entry_end; m_entry_begin++) {
+                        max_sim_entries.emplace_back(m_entry_begin);
+                    }
                 }
             }
         }
@@ -320,8 +373,8 @@ namespace protal {
 //                std::cout << "Recovery" << std::endl;
                 for (auto i = 0; i < flex_vector.size(); i++) {
                     if (flex_vector[i] == max) {
-                        m_entry_begin[i].Get(m_taxid, m_geneid, m_genepos);
-                        result.emplace_back(LookupResult( m_taxid, m_geneid, m_genepos, readpos + m_flex_k_half ));
+                        m_entry_begin[i].Get(m_taxid, m_geneid, m_genepos, m_unique, m_unique_dist_two);
+                        result.emplace_back( m_taxid, m_geneid, m_genepos, readpos + m_flex_k_half, m_unique, m_unique_dist_two );
                     }
 //                    // Recovering step.
 //                    if (choose != nullptr && choose->contains(std::pair<uint32_t, uint32_t>(static_cast<uint32_t>(m_taxid), static_cast<uint32_t>(m_geneid)))) {
@@ -330,8 +383,8 @@ namespace protal {
                 }
             } else {
                 for (; m_entry_begin < m_entry_end; m_entry_begin++) {
-                    m_entry_begin->Get(m_taxid, m_geneid, m_genepos);
-                    result.emplace_back(LookupResult( m_taxid, m_geneid, m_genepos, readpos + m_flex_k_half ));
+                    m_entry_begin->Get(m_taxid, m_geneid, m_genepos, m_unique, m_unique_dist_two);
+                    result.emplace_back( m_taxid, m_geneid, m_genepos, readpos + m_flex_k_half, m_unique, m_unique_dist_two );
                 }
             }
 

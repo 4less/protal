@@ -105,6 +105,7 @@ namespace protal {
 
         if (options.BuildMode()) {
             Benchmark bm_build("Run build");
+            bm_build.Start();
             KmerPutterSM kmer_putter{};
             auto protal_stats = protal::build::Run<SimpleKmerHandler<ClosedSyncmer>, KmerPutterSM, DEBUG_NONE>(
                     options, kmer_putter, iterator);
@@ -334,7 +335,6 @@ namespace protal {
 //        TaxonFilterObj filter(min_ani, min_gene_presence, min_total_hits, min_mean_mapq);
         std::string model = options.GetIndexFolder() + "/random_forest.xml";
         std::cout << "Model: " << model << std::endl;
-//        std::string model = "/usr/users/QIB_fr017/fritsche/Documents/HPC/group/projects/protal/camisim_all_output/output_flex_r214/profiles/mapq4_2/random_forest_cami_r214.pmml";
         TaxonFilterObj filter(model);
 
         // ProgressBar prog;
@@ -891,7 +891,6 @@ namespace protal {
             }
             std::cout << std::endl;
         }
-        Utils::Input();
 
 
         return gene_ids;

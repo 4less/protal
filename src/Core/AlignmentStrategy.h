@@ -184,7 +184,7 @@ namespace protal {
 
         size_t ExtendSeedLeft(Seed const& s, std::string const& query, std::string const& gene) {
             size_t extension = 0;
-            size_t max_extension_len = std::min(s.readpos, s.genepos);
+            size_t max_extension_len = std::min(static_cast<uint32_t>(s.readpos), s.genepos);
             for (int qpos = s.readpos, rpos = s.genepos;
                  extension < max_extension_len && query[qpos] == gene[rpos];
                  qpos--, rpos--) {
@@ -209,7 +209,7 @@ namespace protal {
         static std::pair<std::string_view, std::string_view>
         GetViewsForAlignment(Seed const& a, std::string const& query, std::string const& target) {
 
-            auto min = std::min(a.readpos, a.genepos);
+            auto min = std::min(static_cast<uint32_t>(a.readpos), a.genepos);
             auto qstart = a.readpos - min;
             auto tstart = a.genepos - min;
             auto overlap_length = std::min(query.length() - qstart, target.length() - tstart);
@@ -227,7 +227,7 @@ namespace protal {
             size_t extension_left = 0;
             size_t extension_right = 0;
 
-            size_t max_extension_len = std::min(s.readpos, s.genepos);
+            size_t max_extension_len = std::min(static_cast<uint32_t>(s.readpos), s.genepos);
             for (int qpos = s.readpos - 1, rpos = s.genepos - 1;
                  extension_left < max_extension_len && query[qpos] == gene[rpos];
                  qpos--, rpos--) {
@@ -368,7 +368,7 @@ namespace protal {
                 info.alignment_ani = info.GetProxyANI();
                 info.matches = read.length();
                 info.UpdateScore();
-                alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward);
+                alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward, anchor.unique, anchor.unique_best_two);
                 return true;
             }
 
@@ -474,7 +474,7 @@ namespace protal {
                                      gene.Sequence().length(), m_alignment_orientation.reference_start, 0, abs_pos);
 
                 info.UpdateScore();
-                alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward);
+                alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward, anchor.unique, anchor.unique_best_two);
 
 
 //                record.id = id;

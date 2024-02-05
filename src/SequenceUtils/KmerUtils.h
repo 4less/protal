@@ -21,9 +21,11 @@ namespace KmerUtils {
             std::cerr << "Must contain underscore. " << header << std::endl;
             exit(9);
         }
+
+        int underscore2 = header.find('_', underscore + 1);
         int start = header[0] == '>' ? 1 : 0;
         size_t taxid = std::stoul(header.substr(start, underscore - start));
-        size_t geneid = std::stoul(header.substr(underscore+1, header.size() - underscore - 1));
+        size_t geneid = std::stoul(header.substr(underscore+1, header.size() - underscore - start - (header.size() - underscore2)));
         return { taxid, geneid };
     }
 

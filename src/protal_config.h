@@ -1,5 +1,5 @@
 #pragma once
-#define varkit_VERSION_MAJOR 
-#define varkit_VERSION_MINOR 
-#define varkit_VERSION_PATCH 
-#define varkit_VERSION_TWEAK 
+#define protal_VERSION_MAJOR 0
+#define protal_VERSION_MINOR 1
+#define protal_VERSION_PATCH 0
+#define protal_VERSION_TWEAK 

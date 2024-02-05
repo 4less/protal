@@ -147,7 +147,11 @@ namespace protal {
                 ReverseSeedList(seeds, read_length);
             }
 
-            Anchor anchor(seeds.front().taxid, seeds.front().geneid, forward);
+            auto uniques = std::accumulate(seeds.begin(), seeds.end(), 0, [](auto acc, Seed& seed){ return acc + seed.unique; });
+            auto uniques_two = std::accumulate(seeds.begin(), seeds.end(), 0, [](auto acc, Seed& seed){ return acc + seed.unique_dist_two; });
+
+
+            Anchor anchor(seeds.front().taxid, seeds.front().geneid, forward, uniques, uniques_two);
             bool stop = false;
             bool skip_first = true;
             for (auto& seed : seeds) {
@@ -165,10 +169,7 @@ namespace protal {
         }
 
         void FindAnchorsSingleRef(SeedList &seeds, ChainAnchorList &anchors, size_t read_length) {
-//            std::cout << "Find Anchors Single Ref" << std::endl;
-//            for (auto& seed : seeds) {
-//                std::cout << seed.ToString() << std::endl;
-//            }
+
             while (seeds.size() > 1) {
                 auto& init_seed = seeds[0];
                 auto init_offset = Offset(init_seed);
@@ -444,6 +445,7 @@ namespace protal {
 
             m_bm_extend_anchors.Start();
             for (auto& anchor : anchors) {
+                // std::cout <<  anchor.ToString() << std::endl;
                 ExtendAnchor(anchor, anchor.forward ? *m_fwd : m_rev);
             }
             m_bm_extend_anchors.Stop();
