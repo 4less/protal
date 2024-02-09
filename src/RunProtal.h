@@ -17,9 +17,12 @@
 #include "AlignmentStrategy.h"
 #include "TaxonStatisticsOutput.h"
 #include "ProgressBar.h"
-#include "Profiler/AlignmentContainer.h"
-#include "Profiler/Profiler.h"
+
+// #include "Profiler/AlignmentContainer.h"
+// #include "Profiler/Profiler.h"
+
 #include "Profiler/ReadFilter.h"
+
 //#include "AnchorFinder.h"
 //#include "AlignmentStrategy.h"
 //#include "gzstream/gzstream.h"
@@ -62,10 +65,11 @@ namespace protal {
                 m_taxonomy() {
         }
 
-        ProtalDB(std::string sequence_file, std::string map_file, std::string hittable_genes_file) :
+        ProtalDB(std::string sequence_file, std::string map_file, std::string hittable_genes_file, std::string unique_kmers_file) :
                 m_genomes(sequence_file, map_file),
                 m_taxonomy() {
-            m_genomes.LoadHittableGenes(hittable_genes_file);
+            // m_genomes.LoadHittableGenes(hittable_genes_file);
+            m_genomes.LoadUniqueKmers(unique_kmers_file);
         }
 
         void LoadTaxonomy(std::string file) {
@@ -170,7 +174,7 @@ namespace protal {
                     };
 
 
-                    std::cout << "Process sample " << options.GetSampleId(index) << (std::filesystem::exists(sam) ? " (sam exists)" : " (sam does not exist)") << std::endl;
+                    std::cout << index << " Process sample " << options.GetSampleId(index) << (std::filesystem::exists(sam) ? " (sam exists)" : " (sam does not exist)") << std::endl;
 
                     // Avoid aligning files that already exist.
                     if (!options.Force() && std::filesystem::exists(sam)) {
@@ -189,6 +193,26 @@ namespace protal {
 //                    std::ofstream sam_output(sam, std::ios::out);
                     ogzstream sam_output(sam.c_str());
                     genomes.WriteSamHeader(sam_output);
+                    // {
+                    //     Benchmark count_lines_bm{"Count lines for fastq"};
+                    //     count_lines_bm.Start();
+                    //     igzstream is1 { options.GetFirstFile(index).c_str() };
+                    //     igzstream is2 { options.GetSecondFile(index).c_str() };
+                    //     auto is1_lines = Utils::CountLines(is1);
+                    //     auto is2_lines = Utils::CountLines(is2);
+                    //     count_lines_bm.Stop();
+                    //     count_lines_bm.PrintResults();
+                    //     std::cout << is1_lines << " " << is2_lines << std::endl;
+                    //     if (is1_lines != is2_lines) {
+                    //         bm_classify_sample.Stop();
+                    //         bm_classify.PrintResults();
+                    //         std::cerr << "Error: Paired end files have different line counts" << std::endl;
+                    //         std::cerr << options.GetFirstFile(index).c_str() << std::endl;
+                    //         std::cerr << options.GetSecondFile(index).c_str() << std::endl;
+                    //         continue;
+                    //     }
+                    // }
+
                     igzstream is1 { options.GetFirstFile(index).c_str() };
                     igzstream is2 { options.GetSecondFile(index).c_str() };
                     SeqReaderPE reader{is1, is2};
@@ -230,20 +254,18 @@ namespace protal {
                     bm_classify_sample.Stop();
                     bm_classify_sample.PrintResults();
 
-//                auto protal_stats = protal::classify::RunPairedEnd<
-//                        SimpleKmerHandler<ClosedSyncmer>,
-//                        AnchorFinder,
-//                        SimpleAlignmentHandler,
-//                        OutputHandler,
-//                        DEBUG_NONE,
-//                        AlignmentBenchmark>(
-//                        reader, options, anchor_finder, alignment_handler, output_handler, iterator, genomes, benchmark);
-//                protal_stats.WriteStats();
-
                     is1.close();
                     is2.close();
                     sam_output.close();
 
+                    // CleanUp
+                    if (!reader.Success()) {
+                        std::cerr << "There was an error reading the fastq files with sample " << options.GetSampleId(index) << " (" << index << ")" << std::endl;
+                        std::cerr << options.GetFirstFile(index) << std::endl;
+                        std::cerr << options.GetSecondFile(index) << std::endl;
+                        std::cerr << "Remove sam file: " << sam << std::endl;
+                        std::filesystem::remove(sam);
+                    }
                 }
 
             } else {
@@ -284,34 +306,36 @@ namespace protal {
     using Profile = profiler::MicrobialProfile;
     using Profiles = std::vector<Profile>;
 
-    void ProfileWrapper2(Options& options, ProtalDB& db) {
-        std::cout << "ProfileWrapper2" << std::endl;
-        GenomeLoader& genomes = db.GetGenomes();
-
-        if (!db.IsTaxonomyLoaded()) db.LoadTaxonomy(options.GetInternalTaxonomyFile());
-        auto& taxonomy = db.GetTaxonomy();
-
-//        omp_set_num_threads(6);
-
-#pragma omp parallel for default(none) shared(options, cout, taxonomy, genomes, db)
-        for (auto i : options.GetRange()) {
-        //for (auto i = 0; i < options.GetFileCount(); i++) {
-
-            Profiler::AlignmentContainer ac;
-            auto sam = options.SamFile(i);
-#pragma omp critical(read_sam)
-            ac.LoadSam(sam);
-
-            const auto& alignments = ac.AlignmentPairs();
-            Profiler::ReadFilter filter;
-            Profiler::Profiler<Profiler::ReadFilter> profiler(filter);
-            profiler.Profile(ac);//, db);
-
-//             profiler(genomes);
+//     void ProfileWrapper2(Options& options, ProtalDB& db) {
+//         std::cout << "ProfileWrapper2" << std::endl;
+//         GenomeLoader& genomes = db.GetGenomes();
 //
-//            profiler.FromSam(sam);
-        }
-    }
+//         if (!db.IsTaxonomyLoaded()) db.LoadTaxonomy(options.GetInternalTaxonomyFile());
+//         auto& taxonomy = db.GetTaxonomy();
+//
+// //        omp_set_num_threads(6);
+//
+// #pragma omp parallel for default(none) shared(options, cout, taxonomy, genomes, db)
+//         for (auto i : options.GetRange()) {
+//         //for (auto i = 0; i < options.GetFileCount(); i++) {
+//
+//             Profiler::AlignmentContainer ac;
+//             auto sam = options.SamFile(i);
+//
+//
+// #pragma omp critical(read_sam)
+//             ac.LoadSam(sam);
+//
+//             const auto& alignments = ac.AlignmentPairs();
+//             Profiler::ReadFilter filter;
+//             Profiler::Profiler<Profiler::ReadFilter> profiler(filter);
+//             profiler.Profile(ac);//, db);
+//
+// //             profiler(genomes);
+// //
+// //            profiler.FromSam(sam);
+//         }
+//     }
 
     Profiles ProfileWrapper(Options& options, ProtalDB& db) {
         GenomeLoader& genomes = db.GetGenomes();
@@ -349,6 +373,15 @@ namespace protal {
 #pragma omp critical(print)
             std::cerr << omp_get_thread_num() << " File " << i << " of " << options.GetRange().size() << ":\n\t" << options.SamFile(i) << std::endl;
 
+            auto sam = options.SamFile(i);
+
+            if (!Utils::exists(sam)) {
+                std::cerr << "Sam file does not exist for sample " << options.GetSampleId(i) << " (" << i << ")" << std::endl;
+                profiles.emplace_back(profiler::MicrobialProfile{genomes});
+                std::cerr << sam << std::endl;
+                continue;
+            }
+
             Benchmark bm_read_alignments{ "Load read alignments" };
             Benchmark bm_profile{ "Profile sample" };
 
@@ -362,17 +395,19 @@ namespace protal {
             std::vector<AlignmentPair> unique_pairs;
             std::vector<std::vector<AlignmentPair>> pairs;
 
-            auto sam = options.SamFile(i);
+
 #pragma omp critical(print)
             std::cout << "Thread " << omp_get_thread_num() << " read sam file " << sam << std::endl;
             if (!Utils::exists(sam)) {
                 std::cerr << "File does not exist" << sam << std::endl;
                 exit(90);
             }
+            std::cout << "Thread " << omp_get_thread_num() << " read now" << std::endl;
 
 #pragma omp critical(load_sam)
             profiler.FromSam(sam);
 
+            std::cout << "Thread " << omp_get_thread_num() << " after Load" << std::endl;
 
             if (!profiler.HasReads()) {
                 std::cerr << "Empty sam file" << std::endl;
@@ -1152,8 +1187,8 @@ namespace protal {
 
 
         // Load protal DB into RAM
-        ProtalDB db = options.HittableGenesMapExists() ?
-            ProtalDB(options.GetSequenceFile(), options.GetSequenceMapFile(), options.GetHittableGenesMap()) :
+        ProtalDB db = options.UniqueKmersFileExists() ?
+            ProtalDB(options.GetSequenceFile(), options.GetSequenceMapFile(), options.GetHittableGenesMap(), options.GetUniqueKmersFile()) :
             ProtalDB(options.GetSequenceFile(), options.GetSequenceMapFile());
 
         // Load fasta sequences of reference into RAM (advised)
@@ -1175,6 +1210,8 @@ namespace protal {
             std::cout << "All alignments are present." << std::endl;
             goto Profile;
         }
+
+
 
         /*
          *  READ ALIGNMENT SECTION

@@ -7,6 +7,8 @@
 #include <string>
 #include <fstream>
 #include <err.h>
+#include <KmerUtils.h>
+#include <ranges>
 #include <sparse_set.h>
 
 #include "Utils.h"
@@ -23,6 +25,11 @@ namespace protal {
         size_t m_start_byte;
         size_t m_length = DEFAULT;
         std::ifstream* m_is = nullptr;
+
+        size_t m_short_unique = 0;
+        size_t m_long_unique = 0;
+        size_t m_long_super_unique = 0;
+        size_t m_total_kmers = 0;
 
         void Load(std::string& into, size_t start_byte, size_t length) {
             if(m_is && m_is->is_open())
@@ -75,6 +82,25 @@ namespace protal {
         const size_t GetId() const {
             return m_id;
         }
+
+        void SetUniqueValues(size_t short_unique, size_t long_unique, size_t long_super_unique, size_t total_kmers) {
+            m_short_unique = short_unique;
+            m_long_unique = long_unique;
+            m_long_super_unique = long_super_unique;
+            m_total_kmers = total_kmers;
+        }
+
+        [[nodiscard]] std::tuple<size_t, size_t, size_t, size_t> GetUniqueKmerCounts() const {
+            return { m_short_unique, m_long_unique, m_long_super_unique, m_total_kmers };
+        }
+
+        double UniqueRate() const {
+            return m_long_unique/static_cast<double>(m_total_kmers);
+        }
+
+        double SuperUniqueRate() const {
+            return m_long_super_unique/static_cast<double>(m_total_kmers);
+        }
     };
 
 
@@ -91,6 +117,13 @@ namespace protal {
         tsl::sparse_set<GeneID> m_hittable_genes;
         bool m_is_loaded = false;
 
+        size_t m_short_unique = 0;
+        size_t m_long_unique = 0;
+        size_t m_long_super_unique = 0;
+        size_t m_total_kmers = 0;
+
+
+
         const size_t GeneKeyToIndex(GeneKey const& key) const {
             return key - 1;
         }
@@ -101,6 +134,20 @@ namespace protal {
 
         GenomeKey GetKey() {
             return m_key;
+        }
+
+        void SetUniqueValues() {
+            for (auto& gene : m_genes) {
+                auto [su, lu, lsu, total] = gene.GetUniqueKmerCounts();
+                m_short_unique += su;
+                m_long_unique += lu;
+                m_long_super_unique += lsu;
+                m_total_kmers += total;
+            }
+        }
+
+        [[nodiscard]] std::tuple<size_t, size_t, size_t, size_t> GetUniqueKmerCounts() const {
+            return { m_short_unique, m_long_unique, m_long_super_unique, m_total_kmers };
         }
 
         void AddGene(GeneKey key, size_t id, size_t start_byte, size_t length, std::ifstream* is) {
@@ -216,6 +263,54 @@ namespace protal {
 
         ~GenomeLoader() {
             m_is.close();
+        }
+
+        void PrintHittableGenes() {
+            for (auto& [gid, _] : m_genomes) {
+                auto& genome = m_genomes.at(gid);
+                auto hg = genome.GetHittableGenes();
+                std::string hgstr = "";
+                for (auto gene : hg) {
+                    hgstr += std::to_string(gene) + ',';
+                }
+                std::cout << "Hittable\t" << gid << '\t' << hg.size() << '\t' << hgstr << std::endl;
+            }
+        }
+
+        void LoadUniqueKmers(std::string const& file) {
+            std::ifstream is(file, std::ios::in);
+
+            std::vector<std::string> tokens;
+            std::string line;
+            while (std::getline(is, line)) {
+                Utils::split(tokens, line, "\t");
+
+
+                auto taxid = std::stoull(tokens[0]);
+                auto geneid = std::stoull(tokens[1]);
+
+                auto short_unique = std::stoull(tokens[2]);
+                auto short_unique_rate = std::stod(tokens[3]);
+                auto long_unique = std::stoull(tokens[4]);
+                auto long_unique_rate = std::stod(tokens[5]);
+                auto long_super_unique = std::stoull(tokens[6]);
+                auto long_super_unique_rate = std::stod(tokens[7]);
+                auto total_kmers = std::stoull(tokens[8]);
+
+                auto& taxon = m_genomes.at(taxid);
+                if (short_unique + long_unique > 0) {
+                    taxon.AddHittableGene(geneid);
+                }
+                auto& gene = taxon.GetGene(geneid);
+                gene.SetUniqueValues(short_unique, long_unique, long_super_unique, total_kmers);
+            }
+            is.close();
+
+            for (auto& tid : views::keys(m_genomes)) {
+                m_genomes.at(tid).SetUniqueValues();
+            }
+
+            // PrintHittableGenes();
         }
 
         void LoadHittableGenes(std::string const& file) {

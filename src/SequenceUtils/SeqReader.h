@@ -46,6 +46,9 @@ namespace protal {
     };
 
     class SeqReaderPE {
+        enum SeqReaderPEError {
+            NO_ERROR,DIFF_LENGTH_SEQUENCE, DIFFERENT_LENGTH_BLOCK
+        };
     private:
 //        const size_t m_block_size = (10 * 1024 * 1024);
         const size_t m_block_size = (1024);
@@ -61,6 +64,9 @@ namespace protal {
 
         std::istream& m_is1;
         std::istream& m_is2;
+
+        SeqReaderPEError m_error_code = NO_ERROR;
+        bool m_success = true;
 
     public:
         SeqReaderPE(std::istream& is1, std::istream& is2) :
@@ -96,9 +102,22 @@ namespace protal {
             }
         }
 
+        bool Success() const {
+            return m_success;
+        }
+
+        void UpdateSuccess(SeqReaderPE const& other) {
+            m_success &= other.m_success;
+        }
+
         bool operator() (FastxRecord &record1, FastxRecord &record2) {
             m_valid_fragment_1 = m_reader_1.NextSequence(record1);
             m_valid_fragment_2 = m_reader_2.NextSequence(record2);
+
+            if (m_reader_1.Error() || m_reader_2.Error()) {
+                m_success = false;
+                return false;
+            }
 
             if (m_valid_fragment_1 && m_valid_fragment_2) {
                 return true;
@@ -106,8 +125,10 @@ namespace protal {
 
             // Paired end states must always be identical.
             if (m_valid_fragment_1 != m_valid_fragment_2) {
-                std::cerr << "Error with next sequence. Paired end file streams are not of the same length. Abort. (R1: " << m_valid_fragment_1 << ", R2: " << m_valid_fragment_2 << ")" << std::endl;
-                exit(8);
+                std::cerr << omp_get_thread_num() << "Error with next sequence. Paired end file streams are not of the same length. Abort. (R1: " << m_valid_fragment_1 << ", R2: " << m_valid_fragment_2 << ")" << std::endl;
+                m_error_code = DIFF_LENGTH_SEQUENCE;
+                m_success = false;
+                return false;
             }
 
             LoadBlockOMP();
@@ -117,18 +138,26 @@ namespace protal {
 
             // Paired end states must always be identical.
             if (m_valid_block_1 != m_valid_block_2) {
-                std::cerr << "Error after load block. Paired end file streams are not of the same length. Abort." << std::endl;
-                exit(8);
+                std::cerr << omp_get_thread_num() << " Error after load block. Paired end file streams are not of the same length. Abort." << std::endl;
+                m_error_code = DIFFERENT_LENGTH_BLOCK;
+                m_success = false;
+                return false;
             }
 
             m_valid_fragment_1 = m_reader_1.NextSequence(record1);
             m_valid_fragment_2 = m_reader_2.NextSequence(record2);
 
+            if (m_reader_1.Error() || m_reader_2.Error()) {
+                m_success = false;
+                return false;
+            }
 
             // Paired end states must always be identical.
             if (m_valid_fragment_1 != m_valid_fragment_2) {
                 std::cerr << "2 Error with next sequence. Paired end file streams are not of the same length. Abort." << std::endl;
-                exit(8);
+                m_error_code = DIFF_LENGTH_SEQUENCE;
+                m_success = false;
+                return false;
             }
 
             return m_valid_fragment_1 && m_valid_fragment_2;

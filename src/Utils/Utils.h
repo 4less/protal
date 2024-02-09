@@ -57,6 +57,10 @@ namespace Utils {
         }
     };
 
+    static size_t CountLines(std::istream& is) {
+        return std::count_if(std::istreambuf_iterator<char>{is}, {}, [](char c) { return c == '\n'; });
+    }
+
     static void shift(uint8_t * array, size_t length, size_t by) {
         for (int i = 0; i < length-1; i++) {
             array[i] <<= by;

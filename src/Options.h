@@ -123,6 +123,7 @@ namespace protal {
         static inline const std::string PROTAL_SEQUENCE_FILE = "reference.fna";
         static inline const std::string PROTAL_SEQUENCE_MAP_FILE = "reference.map";
         static inline const std::string PROTAL_HITTABLE_GENES_FILE = "species_gene_mask.tsv";
+        static inline const std::string PROTAL_UNIQUE_KMER_FILE = "unique_kmers.tsv";
         static inline const std::string PROTAL_TAXONOMY_FILE = "internal_taxonomy.dmp";
 
         // DEPRECATED
@@ -348,8 +349,16 @@ namespace protal {
             return m_database_path + "/" + PROTAL_HITTABLE_GENES_FILE;
         }
 
+        std::string GetUniqueKmersFile() const {
+            return m_database_path + "/" + PROTAL_UNIQUE_KMER_FILE;
+        }
+
         bool HittableGenesMapExists() const {
             return Utils::exists(GetHittableGenesMap());
+        }
+
+        bool UniqueKmersFileExists() const {
+            return Utils::exists(GetUniqueKmersFile());
         }
 
         void SetCurrentIndex(size_t i) {
@@ -1045,7 +1054,7 @@ namespace protal {
                 for (auto i = 0; i < prefix_list.size(); i++) {
 
                     profile_list.emplace_back(prefix_list[i] + ".profile");
-                    std::cout << profile_list[i] << std::endl;
+                    // std::cout << profile_list[i] << std::endl;
                 }
             }
 

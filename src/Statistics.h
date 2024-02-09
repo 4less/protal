@@ -12,6 +12,7 @@ namespace protal {
     struct Statistics {
         size_t reads = 0;
         size_t kmers_accepted = 0;
+        size_t errors_anchor_finding = 0;
         size_t kmers_total = 0;
         size_t total_anchors = 0;
         size_t total_alignments = 0;
@@ -23,6 +24,7 @@ namespace protal {
             reads += statistics.reads;
             kmers_total += statistics.kmers_total;
             kmers_accepted += statistics.kmers_accepted;
+            errors_anchor_finding += statistics.errors_anchor_finding;
             total_anchors += statistics.total_anchors;
             total_alignments += statistics.total_alignments;
             output_alignments += statistics.output_alignments;
@@ -34,6 +36,7 @@ namespace protal {
                 os << "Thread num:      " << thread_num << std::endl;
 
             os << "Processed reads:    \t" << reads << std::endl;
+            os << "Reads with errors:  \t" << errors_anchor_finding << std::endl;
             os << "Total kmers:        \t" << kmers_total << std::endl;
             os << "Minimizers kmers:   \t" << kmers_accepted << std::endl;
             os << "Anchors:            \t" << total_anchors << std::endl;

@@ -55,7 +55,10 @@ private:
     size_t block_buffer_size_;
     bool strip_space_ = true;
     size_t last_block_size_ = 0;
-    
+
+    bool m_error = false;
+
+
 public:
     BufferedFastxReader();
     
@@ -70,9 +73,14 @@ public:
     bool LoadBlock(std::istream &ifs, size_t block_size);
     
     bool NextSequence(FastxRecord &record);
-    
-    static bool ReadNextSequence(std::istream &is, FastxRecord &record,
+
+    // static
+    bool ReadNextSequence(std::istream &is, FastxRecord &record,
                                  std::string &str_buffer_ptr, FileFormat format = FORMAT_AUTO_DETECT);
+
+    bool Error() {
+        return m_error;
+    }
 
     size_t LastBlockSize();
 

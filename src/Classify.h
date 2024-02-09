@@ -273,14 +273,14 @@ namespace protal::classify {
             // TODO this is a fix to get varkit output as quickly as possible
             OutputHandler output_handler(output_handler_global);
 
-            // Extract variables from kmi_global
+            // Extract variables from kmi_globalF
             KmerHandler kmer_handler(kmer_handler_global);
             AnchorFinder anchor_finder1(anchor_finder_global);
             AnchorFinder anchor_finder2(anchor_finder_global);
             AlignmentHandler alignment_handler(alignment_handler_global);
 
             // Alignment data output handler (set with flag)
-//            ProtalAlignmentDataOutputHandler adoh(adoh_global);
+            //            ProtalAlignmentDataOutputHandler adoh(adoh_global);
 
             // IO
             SeqReaderPE reader{reader_global};
@@ -363,32 +363,36 @@ namespace protal::classify {
                 anchor_finder2(kmers2, seeds2, anchors2, record2.sequence);
                 bm_anchor_finder.Stop();
 
-//                std::cout << "Anchors1" << std::endl;
-//                for (auto& a : anchors1) {
-//                    std::cout << a.ToString() << std::endl;
-//                }
-//                std::cout << "Anchors2" << std::endl;
-//                for (auto& a : anchors2) {
-//                    std::cout << a.ToString() << std::endl;
-//                }
+                if (!anchor_finder1.Success() || !anchor_finder2.Success()) {
+                    thread_statistics.errors_anchor_finding++;
+                }
+
+                //                std::cout << "Anchors1" << std::endl;
+                //                for (auto& a : anchors1) {
+                //                    std::cout << a.ToString() << std::endl;
+                //                }
+                //                std::cout << "Anchors2" << std::endl;
+                //                for (auto& a : anchors2) {
+                //                    std::cout << a.ToString() << std::endl;
+                //                }
 
                 bm_anchor_recovery.Start();
                 auto recover1 = anchor_finder1.RecoverAnchors(anchors1, anchor_finder2.BestAnchors(), options.GetAlignTop());
                 auto recover2 = anchor_finder2.RecoverAnchors(anchors2, anchor_finder1.BestAnchors(), options.GetAlignTop());
                 bm_anchor_recovery.Stop();
 
-//                std::cout << "Anchors1 after" << std::endl;
-//                for (auto& a : anchors1) {
-//                    std::cout << a.ToString() << std::endl;
-//                }
-//                std::cout << "Anchors2 after" << std::endl;
-//                for (auto& a : anchors2) {
-//                    std::cout << a.ToString() << std::endl;
-//                }
-//
-//                if (recover1 || recover2) {
-//                    Utils::Input();
-//                }
+                //                std::cout << "Anchors1 after" << std::endl;
+                //                for (auto& a : anchors1) {
+                //                    std::cout << a.ToString() << std::endl;
+                //                }
+                //                std::cout << "Anchors2 after" << std::endl;
+                //                for (auto& a : anchors2) {
+                //                    std::cout << a.ToString() << std::endl;
+                //                }
+                //
+                //                if (recover1 || recover2) {
+                //                    Utils::Input();
+                //                }
 
                 seed_sizes.AddObservation(seeds1.size());
                 seed_sizes.AddObservation(seeds2.size());
@@ -412,8 +416,8 @@ namespace protal::classify {
                 JoinAlignmentPairs(paired_alignment_results, alignment_results1,
                                    alignment_results2, genome_loader);
 
-//                SortAlignmentPairs1(paired_alignment_results);
-//                SortAlignmentPairs2(paired_alignment_results);
+                //                SortAlignmentPairs1(paired_alignment_results);
+                //                SortAlignmentPairs2(paired_alignment_results);
                 SortAlignmentPairs3(paired_alignment_results);
                 bm_alignment_join_sort.Stop();
 
@@ -425,8 +429,8 @@ namespace protal::classify {
                 if constexpr (benchmark_active) {
                     thread_core_benchmark(seeds1, anchors1, alignment_results1, record1.id);
                     thread_core_benchmark(seeds2, anchors2, alignment_results2, paired_alignment_results, record1.id);
-//#pragma omp critical(write)
-//                    thread_core_benchmark.ErrorOutput(seeds1, seeds2, anchors1, anchors2, alignment_results1, alignment_results2, paired_alignment_results, record1, record2);
+                    //#pragma omp critical(write)
+                    //                    thread_core_benchmark.ErrorOutput(seeds1, seeds2, anchors1, anchors2, alignment_results1, alignment_results2, paired_alignment_results, record1, record2);
                 }
 
                 if constexpr(debug == DEBUG_VERBOSE) {
@@ -468,6 +472,8 @@ namespace protal::classify {
                 anchor_finder_global.recovered_count += anchor_finder2.recovered_count;
                 anchor_finder_global.total_count += anchor_finder1.total_count;
                 anchor_finder_global.total_count += anchor_finder2.total_count;
+
+                reader_global.UpdateSuccess(reader);
 
                 bm_reader_global.Join(bm_reader);
 

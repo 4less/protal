@@ -356,6 +356,12 @@ namespace protal {
 //            auto& read = anchor.forward ? fwd : rev;
             auto& read = anchor.forward ? fwd : rev;
 
+
+            // Get Resources
+            auto& genome = m_genome_loader.GetGenome(anchor.taxid);
+            auto& gene = genome.GetGeneOMP(anchor.geneid);
+
+
             // If complete anchor matches without errors dont even do alignment.
             //TODO: Update this and allow anchor.total_length + #anchors + 1 == read.length()
             if (anchor.total_length == read.length()) {
@@ -369,15 +375,28 @@ namespace protal {
                 info.matches = read.length();
                 info.UpdateScore();
                 alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward, anchor.unique, anchor.unique_best_two);
+
+                bool valid = IsAlignmentValid(info, read, gene.Sequence());
+
+                if (!valid) {
+                    std::cerr << "Invalid no alignment\t" <<  std::endl;
+                    std::cerr << read << std::endl;
+                    std::cerr << anchor.ToString() << std::endl;
+                    std::cerr << anchor.ToVisualString2() << std::endl;
+
+                    int abs_pos = static_cast<int>(anchor.Front().genepos) - static_cast<int>(anchor.Front().readpos);
+                    m_alignment_orientation.Update(abs_pos, read.length(), gene.Sequence().length(), 0);
+                    std::string reference_str = gene.Sequence().substr(m_alignment_orientation.reference_start, m_alignment_orientation.reference_len);
+                    std::cerr << reference_str << std::endl;
+                    return false;
+                }
+
                 return true;
             }
 
             // Is indel between anchor seeds?
             int anchor_indels = SeedIndel(anchor);
 
-            // Get Resources
-            auto& genome = m_genome_loader.GetGenome(anchor.taxid);
-            auto& gene = genome.GetGeneOMP(anchor.geneid);
 
             // Absolute read positioning with respect to gene
             int abs_pos = static_cast<int>(anchor.Front().genepos) - static_cast<int>(anchor.Front().readpos);
@@ -476,37 +495,13 @@ namespace protal {
                 info.UpdateScore();
                 alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward, anchor.unique, anchor.unique_best_two);
 
+                //TODO: remove or figure out whats going on
+                bool valid = IsAlignmentValid(info, read, gene.Sequence());
+                if (!valid) {
+                    std::cerr << "Invalid after alignment\t" << reference_str << " " << info.ToString() << std::endl;
+                    return false;
+                }
 
-//                record.id = id;
-//                record.sequence = fwd;
-//                ArtoSAM(sam, alignment, alignment.GetAlignmentInfo(), record);
-//                auto success = ExtractSNPs(sam, gene.Sequence(), snps, anchor.taxid, anchor.geneid);
-//                if (!success) {
-//#pragma omp critical(debug_out)
-//                    {
-//                        std::cout
-//                                << "EXTRACT SNP NO SUCCESS -------------------------------------------------------------------"
-//                                << std::endl;
-//                        std::cout << orig_cigar << std::endl;
-//                        std::cout << read << std::endl;
-////                        std::cout << "rview1: " << reference_view << std::endl;
-//                        std::cout << "rview2: " << reference_str << std::endl;
-//                        m_aligner.PrintAlignment();
-//                        std::cout << sam.ToString() << std::endl;
-//                        std::cout << id << std::endl;
-//                        std::cout << read << std::endl;
-//                        std::cout << "dove_left_required:  " << dove_left_required << " -> "
-//                                  << (m_alignment_orientation.reference_dove_left * 2) << std::endl;
-//                        std::cout << "dove_right_required: " << dove_right_required << " -> "
-//                                  << (m_alignment_orientation.reference_dove_right * 2) << std::endl;
-//                        std::cout << info.cigar << std::endl;
-//                        PrintAlignment(sam, gene.Sequence());
-//                        std::cout << info.ToString() << std::endl;
-//                        std::cout << std::endl;
-//                        std::cout << std::flush;
-//                    }
-//                    exit(9);
-//                }
                 if (info.Valid(read.length())) {
                     exit(90);
                 }

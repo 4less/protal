@@ -151,7 +151,7 @@ namespace protal {
 
         std::vector<uint16_t> flex_vector;
 
-        size_t m_flex_k = 12;
+        size_t m_flex_k = 16;
         size_t m_flex_k_half = m_flex_k/2;
         size_t m_flex_k_bits = m_flex_k*2;
         size_t m_max_ubiquity = 16;

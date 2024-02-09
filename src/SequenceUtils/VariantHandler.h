@@ -169,7 +169,7 @@ namespace protal {
             bm_next_compressed_cigar.Stop();
 
             if (output) {
-                std::cout << std::flush << std::endl;
+                std::cout << "Problemo: " << std::flush << std::endl;
                 Utils::Input();
             }
 

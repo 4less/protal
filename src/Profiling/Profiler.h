@@ -28,7 +28,7 @@
 
 namespace protal {
     bool IsDigit(std::string &test) {
-
+        return false;
     }
 
     using TruthSet = tsl::robin_set<uint32_t>;
@@ -117,6 +117,7 @@ namespace protal {
 
             size_t m_mapped_reads = 0;
             size_t m_mapped_length = 0;
+            size_t m_total_kmers = 0;
             size_t m_mapq_sum = 0;
             size_t m_unique_mers = 0;
             size_t m_unique_two_mers = 0;
@@ -237,6 +238,7 @@ namespace protal {
 
                 m_mapped_reads++;
                 m_mapped_length += length;
+                m_total_kmers += (length - 30) * 0.2;
                 m_mapq_sum += sam.m_mapq;
                 m_ani_sum += ani;
 
@@ -268,6 +270,19 @@ namespace protal {
             size_t UniqueTwoKmersReads() const {
                 return m_unique_two_mers_reads;
             }
+
+            size_t TotalKmers() const {
+                return m_total_kmers;
+            }
+
+            double UniqueRate() const {
+                return m_unique_mers / static_cast<double>(m_total_kmers);
+            }
+
+            double SuperUniqueRate() const {
+                return m_unique_two_mers / static_cast<double>(m_total_kmers);
+            }
+
 
             double VerticalCoverage() const {
 
@@ -323,6 +338,7 @@ namespace protal {
             size_t m_id;
             std::string m_name;
             size_t m_total_hits = 0;
+            size_t m_total_kmers = 0;
             size_t m_unique_mers = 0;
             size_t m_unique_mer_reads = 0;
             size_t m_unique_hits = 0;
@@ -390,6 +406,7 @@ namespace protal {
                 m_unique_mers += sam.m_uniques;
                 m_unique_mer_reads += sam.m_uniques > 0;
                 m_total_hits++;
+                m_total_kmers += (sam.m_seq.length() - 30) * 0.2; //TODO: store that info in sam
                 m_ani_sum += score;
                 m_mapq_sum += sam.m_mapq;
                 m_unique_hits += unique;
@@ -894,7 +911,7 @@ namespace protal {
                     filtered_alleles.resize(5, 0);
 
 
-                    os << positive << "\t";
+                    os << positive << "\t"; //1
                     os << prediction << "\t";
                     os << key << "\t";
                     os << taxon.PresentGenes() << "\t";
@@ -903,7 +920,7 @@ namespace protal {
                     os << taxon.GetMeanANI() << "\t";
                     os << TaxonFilter::ExpectedGenePresence(taxon) << '\t';
                     os << TaxonFilter::ExpectedGenePresenceRatio(taxon) << '\t';
-                    os << taxon.Uniqueness() << '\t';
+                    os << taxon.Uniqueness() << '\t'; //10
                     os << taxon.GetMeanMAPQ() << '\t';
                     os << taxon.GetGeneVariance(1) << '\t';
                     os << taxon.GetGeneVariance(5) << '\t';
@@ -913,13 +930,23 @@ namespace protal {
                     for (auto i = 0; i < 5; i++) {
                         os << filtered_alleles[i] << '\t';
                     }
-                    os << taxon.VCovStdDev() << '\t';
+                    os << taxon.VCovStdDev() << '\t'; // 24
                     os << taxon.GetGenomeGeneNumber() << '\t';
-                    os << taxon.UniqueKmers() << '\t';
+                    os << taxon.UniqueKmers() << '\t'; //26
                     os << taxon.GenesWithUniqueKmers() << '\t';
                     os << taxon.UniqueTwoKmers() << '\t';
-                    os << taxon.GenesWithUniqueTwoKmers();
+                    os << taxon.GenesWithUniqueTwoKmers() << '\t'; // 29
 
+                    auto [su, lu, lsu, all] = m_genome_loader.GetGenome(key).GetUniqueKmerCounts();
+
+                    // Defined in index for each species (genome)
+                    os << su << '\t';
+                    os << lu << '\t';
+                    os << lsu << '\t';
+                    os << all << '\t';
+
+                    os << lu/static_cast<double>(taxon.UniqueKmers()) << '\t';
+                    os << lsu/static_cast<double>(taxon.GenesWithUniqueTwoKmers());
                     os << std::endl;
 
 //
@@ -1170,7 +1197,7 @@ namespace protal {
                 std::string current_qname = "__";
                 std::string next_qname = "__";
                 std::string last_qname = "__";
-                
+
                 if (!std::getline(file, line)) {
                     std::cerr << "sam file is empty " << file_path << std::endl;
                     exit(9);

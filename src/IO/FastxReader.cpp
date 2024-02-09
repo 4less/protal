@@ -64,6 +64,9 @@ bool BufferedFastxReader::LoadBlock(std::istream &ifs, size_t block_size) {
             case '@' : file_format_ = FORMAT_FASTQ; break;
             case '>' : file_format_ = FORMAT_FASTA; break;
             default:
+                m_error = true;
+                std::cerr << "sequence reader - unrecognized file format " << block_buffer_[0] << std::endl;
+                return false;
                 errx(EX_DATAERR, "sequence reader - unrecognized file format %c", block_buffer_[0]);
         }
     }
@@ -118,7 +121,10 @@ bool BufferedFastxReader::LoadBatch(std::istream &ifs, size_t record_count) {
             case EOF :
                 return false;
             default:
-                errx(EX_DATAERR, "sequence reader - unrecognized file format");
+                m_error = true;
+                std::cerr << "sequence reader - unrecognized file format" << std::endl;
+                return false;
+                // errx(EX_DATAERR, "sequence reader - unrecognized file format");
         }
         valid = true;
     }
@@ -156,7 +162,6 @@ bool BufferedFastxReader::NextSequence(FastxRecord &seq) {
 
 bool BufferedFastxReader::ReadNextSequence(std::istream &is, FastxRecord &record,
                                            std::string &str_buffer, FileFormat file_format) {
-//    if (!getline(is >> std::ws, str_buffer)) {
     str_buffer.clear();
 
     if (!getline(is, str_buffer)) {
@@ -177,25 +182,38 @@ bool BufferedFastxReader::ReadNextSequence(std::istream &is, FastxRecord &record
                 }
                 break;
             default:
-                errx(EX_DATAERR, "sequence reader - unrecognized file format");
+                m_error = true;
+                std::cerr << "sequence reader - unrecognized file format" << std::endl;
+                return false;
+                // errx(EX_DATAERR, "sequence reader - unrecognized file format");
         }
     }
     record.format = file_format;
     if (record.format == FORMAT_FASTQ) {
         if (str_buffer.empty()) { // Allow empty line to end file
-            std::cout << "2 false.... " << std::endl;
             return false;
         }
         if (str_buffer[0] != '@') {
-            errx(EX_DATAERR, "malformed FASTQ file (exp. '@', saw \"%s\"), aborting",
-                 str_buffer.c_str());
+            m_error = true;
+            std::cerr << "malformed FASTQ file (exp. '@', saw " << str_buffer.c_str() << ")" << std::endl;
+            return false;
+            // errx(EX_DATAERR, "malformed FASTQ file (exp. '@', saw \"%s\"), aborting",
+            //      str_buffer.c_str());
         }
     } else if (record.format == FORMAT_FASTA || record.format == FORMAT_FASTA_QUAL) {
-        if (str_buffer[0] != '>')
-            errx(EX_DATAERR, "malformed FASTA file (exp. '>', saw \"%s\"), aborting",
-                 str_buffer.c_str());
-    } else
-        errx(EX_SOFTWARE, "illegal sequence format encountered in parsing");
+        if (str_buffer[0] != '>') {
+            m_error = true;
+            std::cerr << "malformed FASTQ file (exp. '@', saw " << str_buffer.c_str() << ")" << std::endl;
+            return false;
+            // errx(EX_DATAERR, "malformed FASTA file (exp. '>', saw \"%s\"), aborting",
+            //      str_buffer.c_str());
+        }
+    } else {
+        m_error = true;
+        std::cerr << "illegal sequence format encountered in parsing" << std::endl;
+        return false;
+        // errx(EX_SOFTWARE, "illegal sequence format encountered in parsing");
+    }
     record.header.assign(str_buffer);
     auto first_whitespace_ch = str_buffer.find_first_of(" \t\r", 1);
     auto substr_len = first_whitespace_ch;
@@ -206,8 +224,7 @@ bool BufferedFastxReader::ReadNextSequence(std::istream &is, FastxRecord &record
     else {
         return false;
     }
-    
-    
+
     if (record.format == FORMAT_FASTQ) {
         if (!getline(is, str_buffer))
             return false;
@@ -220,26 +237,6 @@ bool BufferedFastxReader::ReadNextSequence(std::istream &is, FastxRecord &record
         StripString(str_buffer);
         record.quality.assign(str_buffer);
 
-    } else if (record.format == FORMAT_FASTA) {
-        record.quality.assign("");
-        record.sequence.assign("");
-        while (is && is.peek() != '>') {
-            if (!getline(is, str_buffer))
-                return !record.sequence.empty();
-            StripString(str_buffer);
-            record.sequence.append(str_buffer);
-        }
-    } else if (record.format == FORMAT_FASTA_QUAL) {
-        record.quality.assign("");
-        record.sequence.assign("");
-        while (is && is.peek() != '>') {
-            if (!getline(is, str_buffer))
-                return !record.sequence.empty();
-            StripString(str_buffer);
-            record.sequence.append(str_buffer);
-            record.sequence.append(" ");
-        }
-        StripString(record.sequence);
     }
     return true;
 }

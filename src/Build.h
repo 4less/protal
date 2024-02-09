@@ -235,8 +235,8 @@ namespace protal::build {
         statistics.Join(thread_statistics);
     }
 
-        std::cout << "Save unique kmer info: \n" << options.GetIndexFolder() + "/unique_kmers.tsv" << std::endl;
-        std::ofstream os(options.GetIndexFolder() + "/unique_kmers.tsv");
+        std::cout << "Save unique kmer info: \n" << options.GetUniqueKmersFile() << std::endl;
+        std::ofstream os(options.GetUniqueKmersFile());
         putter.GetMap().CountUniqueKmers(os, true, true);
         os.close();
 

@@ -878,10 +878,10 @@ namespace protal {
 
 
         void CountUniqueKmers(std::ostream& os, bool silence_zero_keys = true, bool silent=true) {
-            tsl::sparse_map<int32_t, uint32_t> short_unique_kmers;
-            tsl::sparse_map<int32_t, uint32_t> long_unique_kmers;
-            tsl::sparse_map<int32_t, uint32_t> long_unique_two_kmers;
-            tsl::sparse_map<int32_t, uint32_t> all_kmers;
+            tsl::sparse_map<std::string, uint32_t> short_unique_kmers;
+            tsl::sparse_map<std::string, uint32_t> long_unique_kmers;
+            tsl::sparse_map<std::string, uint32_t> long_unique_two_kmers;
+            tsl::sparse_map<std::string, uint32_t> all_kmers;
 
             std::vector<size_t> closest_flex;
 
@@ -962,6 +962,7 @@ namespace protal {
                     for (; i < key_value_block_size; i++) {
                         auto& entry = m_map[key_value_start + i];
                         auto [taxid, geneid, pos] = entry.Get();
+                        std::string key_str = std::to_string(taxid) + '_' + std::to_string(geneid);
                         if (entry.IsFlagUnique() && has_flex_block && closest_flex[idx] > 1) {
                             entry.SetFlagUniqueDistanceMinTwo();
                             if (!entry.IsFlagUniqueDistanceMinTwo()) exit(213);
@@ -970,20 +971,20 @@ namespace protal {
                         if (!silent)
                             std::cout << idx << " - " << key_value_start + i << ": " << entry.ToString() << "/" << (has_flex_block ? std::to_string(closest_flex[idx]) : "") << std::endl;
 
-                        if (!short_unique_kmers.contains(taxid)) {
-                            short_unique_kmers.insert({taxid, 0});
-                            long_unique_kmers.insert({taxid, 0});
-                            long_unique_two_kmers.insert({taxid, 0});
-                            all_kmers.insert({taxid, 0});
+                        if (!short_unique_kmers.contains(key_str)) {
+                            short_unique_kmers.insert({key_str, 0});
+                            long_unique_kmers.insert({key_str, 0});
+                            long_unique_two_kmers.insert({key_str, 0});
+                            all_kmers.insert({key_str, 0});
                         }
-                        long_unique_two_kmers[taxid] += entry.IsFlagUnique() & entry.IsFlagUniqueDistanceMinTwo() & has_flex_block;
-                        long_unique_kmers[taxid] += entry.IsFlagUnique() & has_flex_block;
-                        short_unique_kmers[taxid] += entry.IsFlagUnique() & !has_flex_block;
-                        all_kmers[taxid]++;
+                        long_unique_two_kmers[key_str] += entry.IsFlagUnique() && entry.IsFlagUniqueDistanceMinTwo() && has_flex_block;
+                        long_unique_kmers[key_str] += entry.IsFlagUnique() && has_flex_block;
+                        short_unique_kmers[key_str] += entry.IsFlagUnique() && !has_flex_block;
+                        all_kmers[key_str]++;
 
-                        long_uniques_two += entry.IsFlagUnique() & entry.IsFlagUniqueDistanceMinTwo() & has_flex_block;
-                        long_uniques += entry.IsFlagUnique() & has_flex_block;
-                        short_uniques += entry.IsFlagUnique() & !has_flex_block;
+                        long_uniques_two += entry.IsFlagUnique() && entry.IsFlagUniqueDistanceMinTwo() && has_flex_block;
+                        long_uniques += entry.IsFlagUnique() && has_flex_block;
+                        short_uniques += entry.IsFlagUnique() && !has_flex_block;
                         non_uniques += !entry.IsFlagUnique();
                         idx++;
                     }
@@ -1003,7 +1004,10 @@ namespace protal {
                 auto long_uniques_two = long_unique_two_kmers[key];
                 auto long_uniques = long_unique_kmers[key];
                 auto total = all_kmers[key];
-                os << key << '\t';
+
+                auto [taxid, geneid] = KmerUtils::ExtractHeaderInformation(key);
+                os << taxid << '\t';
+                os << geneid << '\t';
                 os << short_uniques << '\t';
                 os << static_cast<double>(short_uniques)/total << '\t';
                 os << long_uniques << '\t';
@@ -1019,9 +1023,9 @@ namespace protal {
         }
 
         void PrintUniqueKmers(std::ostream& os, bool silence_zero_keys = true, bool silent=true) {
-            tsl::sparse_map<int32_t, uint32_t> short_unique_kmers;
-            tsl::sparse_map<int32_t, uint32_t> long_unique_kmers;
-            tsl::sparse_map<int32_t, uint32_t> all_kmers;
+            tsl::sparse_map<std::string, uint32_t> short_unique_kmers;
+            tsl::sparse_map<std::string, uint32_t> long_unique_kmers;
+            tsl::sparse_map<std::string, uint32_t> all_kmers;
 
 
             size_t short_uniques = 0;
@@ -1082,17 +1086,19 @@ namespace protal {
                     for (; i < key_value_block_size; i++) {
                         auto& entry = m_map[key_value_start + i];
                         auto [taxid, geneid, pos] = entry.Get();
+                        std::string key_str = std::to_string(taxid) + '_' + std::to_string(geneid);
+
                         if (!silent)
                             std::cout << key_value_start + i << ": " << entry.ToString() << std::endl;
 
-                        if (!short_unique_kmers.contains(taxid)) {
-                            short_unique_kmers.insert({taxid, 0});
-                            long_unique_kmers.insert({taxid, 0});
-                            all_kmers.insert({taxid, 0});
+                        if (!short_unique_kmers.contains(key_str)) {
+                            short_unique_kmers.insert({key_str, 0});
+                            long_unique_kmers.insert({key_str, 0});
+                            all_kmers.insert({key_str, 0});
                         }
-                        long_unique_kmers[taxid] += entry.IsFlagUnique() & has_flex_block;
-                        short_unique_kmers[taxid] += entry.IsFlagUnique() & !has_flex_block;
-                        all_kmers[taxid]++;
+                        long_unique_kmers[key_str] += entry.IsFlagUnique() & has_flex_block;
+                        short_unique_kmers[key_str] += entry.IsFlagUnique() & !has_flex_block;
+                        all_kmers[key_str]++;
 
                         long_uniques += entry.IsFlagUnique() & has_flex_block;
                         short_uniques += entry.IsFlagUnique() & !has_flex_block;
@@ -1110,7 +1116,7 @@ namespace protal {
             for (auto [key, short_uniques] : short_unique_kmers) {
                 auto long_uniques = long_unique_kmers[key];
                 auto total = all_kmers[key];
-                os << key << '\t';
+                os << key.replace(key.find('_'), 1, "\t") << '\t';
                 os << short_uniques << '\t';
                 os << static_cast<double>(short_uniques)/total << '\t';
                 os << long_uniques << '\t';

@@ -9,6 +9,7 @@
 #include <string>
 #include "LineSplitter.h"
 #include <iostream>
+#include <omp.h>
 
 namespace protal {
     using QNAME_t = std::string;
@@ -187,6 +188,10 @@ namespace protal {
 
 
     static void SamFromTokens(std::vector<std::string>& tokens, SamEntry &sam) {
+        if (tokens.size() < 11) {
+            std::cerr << omp_get_thread_num() << " Broken SAM file "<< std::endl;
+            exit(120);
+        }
         sam.m_qname = tokens[0];
         sam.m_flag = std::stoul(tokens[1]);
         sam.m_rname = tokens[2];
@@ -199,10 +204,18 @@ namespace protal {
         sam.m_seq = tokens[9];
         sam.m_qual = tokens[10];
 
+        if (tokens.size() < 13) {
+            std::cerr << omp_get_thread_num() << " Sam file lacks unique information"<< std::endl;
+            sam.m_uniques = 0;
+            sam.m_uniques_two = 0;
+            return;
+        }
+
         const auto s = tokens[11];
         sam.m_uniques = s.size() > 4 && s[4] == ':' ? std::stoul(s.substr(5)) : 0;
         const auto s2 = tokens[12];
         sam.m_uniques_two = s2.size() > 4 && s2[4] == ':' ? std::stoul(s2.substr(5)) : 0;
+
     }
 
 
