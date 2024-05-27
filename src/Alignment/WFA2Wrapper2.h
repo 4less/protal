@@ -7,7 +7,8 @@
 #include <string>
 #include <istream>
 #include <iostream>
-#include "wfa2-lib-2.3.4/bindings/cpp/WFAligner.hpp"
+#include "wfa2-lib/bindings/cpp/WFAligner.hpp"
+//#include "wfa2-lib-2.3.4/bindings/cpp/WFAligner.hpp"
 // #include "wfa2-lib-2.3.4/bindings/cpp/WFAligner.hpp"
 
 
