@@ -48,15 +48,15 @@ namespace protal {
         };
 
         inline std::string Cigar() {
-            return m_aligner.getAlignmentCigar();
+            return m_aligner.getCIGAR(true);
         }
 
         void Reset() {
-            m_status = WFAligner::AlignmentStatus::StatusUnfeasible;
+            m_status = WFAligner::AlignmentStatus::StatusMaxStepsReached;
         }
 
         bool Success() {
-            return m_status == WFAligner::AlignmentStatus::StatusSuccessful;
+            return m_status == WFAligner::AlignmentStatus::StatusAlgCompleted;
         }
 
         void Alignment(std::string& query, std::string& ref, int max_score=INT32_MAX) {
@@ -65,7 +65,7 @@ namespace protal {
 //            std::cout << ref << std::endl;
             seq1 = query;
             seq2 = ref;
-            m_aligner.setMaxAlignmentScore(INT32_MAX);
+//            m_aligner.setMaxAlignmentScore(INT32_MAX); //TODO
 //            std::cout << "alignEnd2End()" << std::endl;
             m_status = m_aligner.alignEnd2End(ref, query);
             auto& cc = m_aligner.GetAligner()->cigar;
@@ -79,7 +79,7 @@ namespace protal {
                     std::cout << "Alignment End2End -> " << m_status << std::endl;
                     std::cout << a << std::endl;
                     std::cout << b << std::endl;
-                    std::cout << m_aligner.getAlignmentCigar() << std::endl;
+                    std::cout << m_aligner.getCIGAR(true) << std::endl;
                     PrintAlignment(std::string_view(query), std::string_view(ref));
                     std::cout << std::flush << std::endl;
 
@@ -90,14 +90,14 @@ namespace protal {
                     auto& cigar = aligner.GetAligner()->cigar;
                     std::cout << "CIG: " << std::string(cigar->operations + cigar->begin_offset, cigar->end_offset - cigar->begin_offset) << std::endl;
                     if (aligner.getAlignmentStatus() == 0) {
-                        aligner.cigarPrintPretty(stdout, a, b);
+                        aligner.printPretty(stdout, a.c_str(), a.size(), b.c_str(), b.size());
                         fflush(stdout);
                     }
                     std::cout << "Align end2end" << std::endl;
                     aligner.alignEnd2End(query, ref);
                     std::cout << "CIG: " << std::string(cigar->operations + cigar->begin_offset, cigar->end_offset - cigar->begin_offset) << std::endl;
                     if (aligner.getAlignmentStatus() == 0) {
-                        aligner.cigarPrintPretty(stdout, a, b);
+                        aligner.printPretty(stdout, a.c_str(), a.size(), b.c_str(), b.size());
                         fflush(stdout);
                     }
                     std::cout << "Old aligner but new strings" << std::endl;
@@ -105,7 +105,7 @@ namespace protal {
                     auto& cig = m_aligner.GetAligner()->cigar;
                     std::cout << "lastCIG: " << std::string(cig->operations + cig->begin_offset, cig->end_offset - cig->begin_offset) << std::endl;
                     if (m_aligner.getAlignmentStatus() == 0) {
-                        m_aligner.cigarPrintPretty(stdout, a, b);
+                        aligner.printPretty(stdout, a.c_str(), a.size(), b.c_str(), b.size());
                         fflush(stdout);
                     }
                     std::cout << "-----" << std::endl;
@@ -129,7 +129,7 @@ namespace protal {
         void Alignment(std::string query, std::string ref, int q_begin_free, int q_end_free, int r_begin_free, int r_end_free, int max_score=INT32_MAX) {
             seq1 = query;
             seq2 = ref;
-            m_aligner.setMaxAlignmentScore(max_score);
+//            m_aligner.setMaxAlignmentScore(max_score); //TODO
             m_status = m_aligner.alignEndsFree(ref, r_begin_free, r_end_free, query, q_begin_free, q_end_free);
 //            if (Success()) {
 //#pragma omp critical(debug_out)
@@ -142,18 +142,18 @@ namespace protal {
         void Alignment(std::string_view &query, std::string_view &ref, int q_begin_free, int q_end_free, int r_begin_free, int r_end_free, int max_score=INT32_MAX) {
             seq1 = query;
             seq2 = ref;
-            m_aligner.setMaxAlignmentScore(max_score);
+//            m_aligner.setMaxAlignmentScore(max_score); //TODO
             m_status = m_aligner.alignEndsFree(ref.cbegin(), ref.length(), r_begin_free, r_end_free, query.cbegin(), query.length(), q_begin_free, q_end_free);
         }
 
         void Alignment(const char* query, size_t query_len, const char* ref, size_t ref_length, int q_begin_free, int q_end_free, int r_begin_free, int r_end_free, int max_score=INT32_MAX) {
-            m_aligner.setMaxAlignmentScore(max_score);
+//            m_aligner.setMaxAlignmentScore(max_score); //TODO
             m_status = m_aligner.alignEndsFree(query, query_len, q_begin_free, q_end_free, ref, ref_length, r_begin_free, r_end_free);
 //            m_status = m_aligner.alignEndsFree(query, q_begin_free, q_end_free, ref, ref_length, r_begin_free, r_end_free);
         }
 
         void PrintCigar(std::ostream &os = std::cout) {
-            std::string cigar = m_aligner.getAlignmentCigar();
+            std::string cigar = m_aligner.getCIGAR(true);
             os << cigar << std::endl;
         }
 
@@ -165,12 +165,12 @@ namespace protal {
             return m_aligner;
         }
 
-        int GetAlignmentScore() const {
+        int GetAlignmentScore() {
             return m_aligner.getAlignmentScore();
         }
 
-        std::string GetAlignmentCigar() const {
-            return m_aligner.getAlignmentCigar();
+        std::string GetAlignmentCigar() {
+            return m_aligner.getCIGAR(true);
         }
 
         void PrintAlignment() {
@@ -183,7 +183,7 @@ namespace protal {
             }
 
 //            m_aligner.cigarPrintPretty(stdout, seq1, seq2);
-            m_aligner.cigarPrintPretty(stdout, seq2, seq1);
+            m_aligner.printPretty(stdout, seq1.c_str(), seq1.size(), seq2.c_str(), seq2.size());
         }
         void PrintAlignment(std::string_view& query, std::string_view& ref) {
             PrintCigar(std::cout);
@@ -195,7 +195,7 @@ namespace protal {
             }
 
 //            m_aligner.cigarPrintPretty(stdout, seq1, seq2);
-            m_aligner.cigarPrintPretty(stdout, ref, query);
+            m_aligner.printPretty(stdout, seq1.c_str(), seq1.size(), seq2.c_str(), seq2.size());
         }
         void PrintAlignment(std::string_view&& query, std::string_view&& ref) {
             std::cout << "PRINT START -------------------_" << std::endl;
@@ -208,7 +208,7 @@ namespace protal {
             }
 
 //            m_aligner.cigarPrintPretty(stdout, seq1, seq2);
-            m_aligner.cigarPrintPretty(stdout, ref, query);
+            m_aligner.printPretty(stdout, ref.cbegin(), ref.size(), query.cbegin(), query.size());
             fflush(stdout);
             std::cout << "PRINT END -------------------_" << std::endl;
         }
@@ -223,7 +223,7 @@ namespace protal {
             }
 
 //            m_aligner.cigarPrintPretty(stdout, seq1, seq2);
-            m_aligner.cigarPrintPretty(stderr, seq2, seq1);
+            m_aligner.printPretty(stderr, seq2.c_str(), seq2.size(), seq1.c_str(), seq1.size());
         }
     };
 }
