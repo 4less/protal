@@ -79,8 +79,8 @@ add_library(protal_lib
         Profiling/TreeFilter.h
 #        Profiling/ProfilerNew.cpp
 #        Profiling/ProfilerNew.h
-        Profiling/MSA.cpp
-        Profiling/MSA.h
+#        Profiling/MSA.cpp
+#        Profiling/MSA.h
         Profiler/GeneBase.h
         Profiler/TaxonBase.h
         Profiler/StrainBase.h
