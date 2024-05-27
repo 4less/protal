@@ -87,17 +87,17 @@ add_library(protal_lib
 #        Profiler/ProfilerDefinitions.h
 #        Profiler/Gene.cpp
 #        Profiler/Gene.h
-        Profiler/AlignmentContainerBase.h
-        Profiler/AlignmentContainer.cpp
-        Profiler/AlignmentContainer.h
-        Profiler/SampleBase.h
-        Profiler/Sample.cpp
-        Profiler/Sample.h
-        Profiler/Profiler.cpp
-        Profiler/Profiler.h
-        Profiler/Taxon.cpp
-        Profiler/Taxon.h
-        Profiler/ReadFilter.h
+#        Profiler/AlignmentContainerBase.h
+#        Profiler/AlignmentContainer.cpp
+#        Profiler/AlignmentContainer.h
+#        Profiler/SampleBase.h
+#        Profiler/Sample.cpp
+#        Profiler/Sample.h
+#        Profiler/Profiler.cpp
+#        Profiler/Profiler.h
+#        Profiler/Taxon.cpp
+#        Profiler/Taxon.h
+#        Profiler/ReadFilter.h
         Alignment/WFA2Wrapper2.h)
 
 
