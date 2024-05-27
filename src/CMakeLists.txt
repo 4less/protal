@@ -81,12 +81,12 @@ add_library(protal_lib
 #        Profiling/ProfilerNew.h
 #        Profiling/MSA.cpp
 #        Profiling/MSA.h
-        Profiler/GeneBase.h
-        Profiler/TaxonBase.h
-        Profiler/StrainBase.h
-        Profiler/ProfilerDefinitions.h
-        Profiler/Gene.cpp
-        Profiler/Gene.h
+#        Profiler/GeneBase.h
+#        Profiler/TaxonBase.h
+#        Profiler/StrainBase.h
+#        Profiler/ProfilerDefinitions.h
+#        Profiler/Gene.cpp
+#        Profiler/Gene.h
         Profiler/AlignmentContainerBase.h
         Profiler/AlignmentContainer.cpp
         Profiler/AlignmentContainer.h
