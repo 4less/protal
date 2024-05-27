@@ -199,8 +199,8 @@ find_package(ZLIB REQUIRED)
 #target_include_directories(varkit_lib PUBLIC ${BHM_INCLUDE_DIR})
 #target_link_libraries(varkit_lib LINK_PUBLIC ${BHM_LIBRARY})
 
-target_include_directories(protal_lib PUBLIC /usr/users/QIB_fr017/fritsche/library_cpp/robin)
-target_include_directories(protal_lib PUBLIC /usr/users/QIB_fr017/fritsche/library_cpp/tsl)
+target_include_directories(protal_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../lib/robin)
+target_include_directories(protal_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../lib/tsl)
 
 # Add-Subdirectory with ${CMAKE_CURRENT_SOURCE_DIR}/
 add_subdirectory(../lib/wfa2-lib/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa)
