@@ -1,0 +1,3 @@
+[submodule "lib/cPMML"]
+	path = lib/cPMML
+	url = git@github.com:AmadeusITGroup/cPMML.git
