@@ -77,8 +77,8 @@ add_library(protal_lib
         Utils/Matrix.h
         Strains/MSA.h
         Profiling/TreeFilter.h
-        Profiling/ProfilerNew.cpp
-        Profiling/ProfilerNew.h
+#        Profiling/ProfilerNew.cpp
+#        Profiling/ProfilerNew.h
         Profiling/MSA.cpp
         Profiling/MSA.h
         Profiler/GeneBase.h
