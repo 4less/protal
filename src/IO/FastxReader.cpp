@@ -195,7 +195,7 @@ bool BufferedFastxReader::ReadNextSequence(std::istream &is, FastxRecord &record
         }
         if (str_buffer[0] != '@') {
             m_error = true;
-            std::cerr << "malformed FASTQ file (exp. '@', saw " << str_buffer.c_str() << ")" << std::endl;
+            std::cerr << "malformed FASTQ file (exp. '@', saw " << str_buffer.c_str() << ")" << __LINE__ << " in " << __FILE__ << std::endl;
             return false;
             // errx(EX_DATAERR, "malformed FASTQ file (exp. '@', saw \"%s\"), aborting",
             //      str_buffer.c_str());
@@ -203,7 +203,7 @@ bool BufferedFastxReader::ReadNextSequence(std::istream &is, FastxRecord &record
     } else if (record.format == FORMAT_FASTA || record.format == FORMAT_FASTA_QUAL) {
         if (str_buffer[0] != '>') {
             m_error = true;
-            std::cerr << "malformed FASTQ file (exp. '@', saw " << str_buffer.c_str() << ")" << std::endl;
+            std::cerr << "malformed FASTQ file (exp. '>', saw " << str_buffer.c_str() << ")" << __LINE__ << " in " << __FILE__ << std::endl;
             return false;
             // errx(EX_DATAERR, "malformed FASTA file (exp. '>', saw \"%s\"), aborting",
             //      str_buffer.c_str());
@@ -237,6 +237,26 @@ bool BufferedFastxReader::ReadNextSequence(std::istream &is, FastxRecord &record
         StripString(str_buffer);
         record.quality.assign(str_buffer);
 
+    } else if (record.format == FORMAT_FASTA) {
+        record.quality.assign("");
+        record.sequence.assign("");
+        while (is && is.peek() != '>') {
+            if (!getline(is, str_buffer))
+                return !record.sequence.empty();
+            StripString(str_buffer);
+            record.sequence.append(str_buffer);
+        }
+    } else if (record.format == FORMAT_FASTA_QUAL) {
+        record.quality.assign("");
+        record.sequence.assign("");
+        while (is && is.peek() != '>') {
+            if (!getline(is, str_buffer))
+                return !record.sequence.empty();
+            StripString(str_buffer);
+            record.sequence.append(str_buffer);
+            record.sequence.append(" ");
+        }
+        StripString(record.sequence);
     }
     return true;
 }

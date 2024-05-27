@@ -94,6 +94,16 @@ namespace protal {
             return { m_short_unique, m_long_unique, m_long_super_unique, m_total_kmers };
         }
 
+        bool HasShortUniques(const size_t threshold=0) const {
+            return m_short_unique > threshold;
+        }
+        bool HasLongUniques(const size_t threshold=0) const {
+            return m_long_unique > threshold;
+        }
+        bool HasLongSuperUniques(const size_t threshold=0) const {
+            return m_long_super_unique > threshold;
+        }
+
         double UniqueRate() const {
             return m_long_unique/static_cast<double>(m_total_kmers);
         }
@@ -164,6 +174,16 @@ namespace protal {
 
         bool IsGeneHittable(GeneID geneid) const {
             return m_hittable_genes.empty() ? true : m_hittable_genes.contains(geneid);
+        }
+
+        size_t GenesWithShortUniques(size_t threshold=0) {
+            return ranges::count_if(m_genes, [threshold](Gene const& gene) { return gene.HasShortUniques(threshold); });
+        }
+        size_t GenesWithLongUniques(size_t threshold=0) const {
+            return ranges::count_if(m_genes, [threshold](Gene const& gene) { return gene.HasLongUniques(threshold); });
+        }
+        size_t GenesWithLongSuperUniques(size_t threshold=0) const {
+            return ranges::count_if(m_genes, [threshold](Gene const& gene) { return gene.HasLongSuperUniques(threshold); });
         }
 
         std::vector<uint32_t> GetHittableGenes() {

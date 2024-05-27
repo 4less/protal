@@ -337,44 +337,42 @@ namespace protal {
         return true;
     }
 
-
-    static bool MSA(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum) {
-        if (msa.size() != items.size()) {
-            std::cerr << msa.size() << " != " << items.size() << " <- items" << std::endl;
-            std::cerr << "Msa object must be of the same length as items" << std::endl;
-            return false;
-        }
-        if (items.empty()) return false;
-
+    static CoverageVecs LoadCoverageVectors(MSASequenceItems const& items, std::string const& reference) {
         CoverageVecs covs;
+
         for (auto i = 0; i < items.size(); i++) {
             auto& optional_item = items[i];
-            auto& msa_item = msa[i];
+
+            if (optional_item.has_value()) {
+                auto  valid = optional_item.value().second.get().AreRangesValid(reference.length());
+                std::cerr << "Ranges valid? " << valid << std::endl;
+            }
+
             covs.emplace_back(optional_item.has_value() ?
                               optional_item.value().second.get().CalculateCoverageVector2() :
                               CoverageVec());
 
-            // if (optional_item.has_value()) {
-            //     auto& [var, srh] = optional_item.value();
-            //     std::cout << (!var.empty() ? var.front().front().ToString() + " " + var.back().front().ToString() : "empty") << std::endl;
-            //     std::cout << srh.get().ToString() << std::endl;
-            // }
-
-            msa_item.reserve(msa_item.size() + covs.back().size());
-        }
-
-        int valid_bases = 0;
-
-        for (auto& cv : covs) {
-            for (auto& c : cv) {
-                valid_bases += (c >= min_cov);
+            if (covs.size() > reference.size()) {
+                std:: cerr << "ITEM " << i << " " << covs.size() << " > " << reference.size() << std::endl;
+                for (auto c : covs[i]) {
+                    std::cerr << std::to_string(c);
+                }
+                std::cerr << std::endl;
             }
         }
-        if (valid_bases == 0) return false;
+        return covs;
+    }
 
+    static size_t GetValidBases(CoverageVecs const& covs, uint32_t min_cov) {
+        return ranges::count_if(covs, [min_cov](auto const& cv) {
+            return ranges::count_if(cv, [min_cov](auto c){ return c >= min_cov; });
+        });
+    }
+
+    static std::vector<bool> HasVariantVector(MSASequenceItems const& items, std::string const& reference) {
         std::vector<bool> has_variant(reference.length(), false);
 
-//        std::cout << "Loop items and check if pos has variant " << std::endl;
+        //        std::cout << "Loop items and check if pos has variant " << std::endl;
         // Extract information if position has variant or not.
         for (auto& item : items) {
             if (!item.has_value()) {
@@ -384,20 +382,34 @@ namespace protal {
                 has_variant[var.front().Position()] = true;
             }
         }
+        return has_variant;
+    }
+
+    static bool MSA(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum) {
+        if (msa.size() != items.size()) {
+            std::cerr << msa.size() << " != " << items.size() << " <- items" << std::endl;
+            std::cerr << "Msa object must be of the same length as items" << std::endl;
+            return false;
+        }
+
+        if (items.empty()) return false;
+
+        CoverageVecs covs = LoadCoverageVectors(items, reference);
+        auto valid_bases = GetValidBases(covs, min_cov);
+
+        if (valid_bases == 0) return false;
+
+        std::vector<bool> has_variant = HasVariantVector(items, reference);
+
 
         std::vector<size_t> indices(items.size(), 0);
         std::vector<uint16_t> pause_timer(items.size(), 0);
-
         std::vector<OptionalVariant> column( items.size(), OptionalVariant{} );
         std::vector<bool> column_pass( items.size(), false );
-
         bool had_indel = false;
 
-
-//        std::cout << "Loop over: " << reference.length() << std::endl;
         for (size_t rpos = 0; rpos < reference.length(); rpos++) {
             std::fill(column.begin(), column.end(), OptionalVariant{});
-//            std::cout << "rpos: " << rpos << std::endl;
             char ref = reference[rpos];
             auto max_ins = 0;
 
@@ -411,6 +423,7 @@ namespace protal {
                     std::cerr << "abort." << std::endl;
                     exit(4);
                 }
+
                 outs[i] += std::to_string(i) + '\t' + std::to_string(rpos < cov.size() ? cov[rpos] : -1) + '\t';
                 outs[i] += std::to_string(rpos) + '\t' + std::to_string(indices[i]) + '\t';
                 if (!items[i].has_value() || (rpos < cov.size() && cov[rpos] == 0)) {

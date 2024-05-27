@@ -12,3 +12,6 @@
 *.C.o
 *.csv
 *.zip
+*.html
+*.doctree
+*.css

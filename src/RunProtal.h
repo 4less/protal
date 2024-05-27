@@ -190,8 +190,9 @@ namespace protal {
 
 
                     options.SetCurrentIndex(index);
-//                    std::ofstream sam_output(sam, std::ios::out);
-                    ogzstream sam_output(sam.c_str());
+                    std::ofstream sam_output(sam, std::ios::out);
+//                    ogzstream sam_output(sam.c_str());
+
                     genomes.WriteSamHeader(sam_output);
                     // {
                     //     Benchmark count_lines_bm{"Count lines for fastq"};
@@ -374,6 +375,7 @@ namespace protal {
             std::cerr << omp_get_thread_num() << " File " << i << " of " << options.GetRange().size() << ":\n\t" << options.SamFile(i) << std::endl;
 
             auto sam = options.SamFile(i);
+            auto sample_name = options.GetSampleId(i);
 
             if (!Utils::exists(sam)) {
                 std::cerr << "Sam file does not exist for sample " << options.GetSampleId(i) << " (" << i << ")" << std::endl;
@@ -422,7 +424,7 @@ namespace protal {
             bm_profile.Start();
 #pragma omp critical(print)
             std::cout << "Thread " << omp_get_thread_num() << " run profile" << std::endl;
-            auto profile = profiler.Profile(std::optional<std::reference_wrapper<std::ostream>>{erro});
+            auto profile = profiler.Profile(sample_name, std::optional<std::reference_wrapper<std::ostream>>{erro});
             erro.close();
             bm_profile.Stop();
 #pragma omp critical(print)
@@ -931,7 +933,7 @@ namespace protal {
         return gene_ids;
     }
 
-    static void GetMSAForTaxon (uint32_t taxid, std::string taxon_name, GenomeLoader& loader, Options& options, Profiles& profiles, std::optional<profiler::TaxonFilter> filter={}) {
+    static void GetMSAForTaxon (uint32_t taxid, std::string taxon_name, GenomeLoader& loader, Options& options, Profiles& profiles, std::ostream* os_meta=nullptr, std::optional<profiler::TaxonFilter> filter={}) {
         auto min_hcov = 5000;
         auto min_cov = 2;
         auto min_qual_sum = 60;
@@ -976,10 +978,10 @@ namespace protal {
                 std::cout << "profile: " << i << std::endl;
 
                 auto& profile = profiles[profile_indices[i]];
+
                 auto& taxon_map = profile.GetTaxa();
 
                 if (!taxon_map.contains(taxid)) continue;
-
 
                 names.emplace_back(profile.GetName());
                 auto& genes = profile.GetTaxa().at(taxid).GetGenes();
@@ -988,11 +990,26 @@ namespace protal {
                     items.emplace_back(OptionalMSASequenceItem{});
                 } else {
                     samples_with_gene++;
-                    auto& strain = genes.at(geneid).GetStrainLevel();
+                    auto& gene_obs = genes.at(geneid);
+                    auto& strain = gene_obs.GetStrainLevel();
                     auto snps = SharedAlignmentRegion::GetSNPs(strain.GetVariantHandler());
-
                     auto& region = strain.GetSequenceRangeHandler();
                     items.emplace_back( OptionalMSASequenceItem { { std::move(snps), region } } );
+
+                    if (os_meta) {
+#pragma omp critical(metaout)
+                        {
+                            auto ac = gene_obs.AlleleSNPCounts(min_cov, min_qual_sum);
+                            auto length = ranges::count_if(region.CalculateCoverageVector(), [](auto val){ return(val >= 2);});
+                            *os_meta << profile.GetName() << '\t';
+                            *os_meta << geneid << '\t';
+                            *os_meta << "gene" << geneid << '\t';
+                            *os_meta << geneid << '\t';
+                            *os_meta << (length > 0 ? ac.Multi()/static_cast<double>(length) : 0) << '\t';
+                            *os_meta << (length > 0 ? ac.Filtered()/static_cast<double>(length) : 0) << '\t';
+                            *os_meta << gene_obs.VerticalCoverage() << std::endl;
+                        }
+                    }
                 }
             }
 
@@ -1011,6 +1028,7 @@ namespace protal {
                         exit(3);
                     }
                 }
+
 
                 bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum);
 
@@ -1150,7 +1168,9 @@ namespace protal {
             }
 
             std::cout << "GetMSAForTaxon " << taxonomy.Get(taxid).ToString() << std::endl;
-            GetMSAForTaxon(taxid, name, loader, options, profiles);
+            std::ofstream os_meta(options.GetSpeciesMetaOutput(name));
+            GetMSAForTaxon(taxid, name, loader, options, profiles, &os_meta);
+            os_meta.close();
             std::cout << "Check " << taxid << " " << name << std::endl;
 //            Utils::Input();
         }

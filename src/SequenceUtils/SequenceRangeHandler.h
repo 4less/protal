@@ -49,6 +49,7 @@ public:
 
     CoverageVec CalculateCoverageVector();
     CoverageVec CalculateCoverageVector2() const;
+    bool AreRangesValid(size_t const& reference_length) const;
     CoverageVec& GetCoverageVector() {
         return m_cov;
     }

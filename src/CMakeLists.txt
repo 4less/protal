@@ -97,7 +97,8 @@ add_library(protal_lib
         Profiler/Profiler.h
         Profiler/Taxon.cpp
         Profiler/Taxon.h
-        Profiler/ReadFilter.h)
+        Profiler/ReadFilter.h
+        Alignment/WFA2Wrapper2.h)
 
 
 set_target_properties(protal_lib PROPERTIES LINKER_LANGUAGE CXX)
@@ -203,6 +204,7 @@ target_include_directories(protal_lib PUBLIC /usr/users/QIB_fr017/fritsche/libra
 
 # Add-Subdirectory with ${CMAKE_CURRENT_SOURCE_DIR}/
 add_subdirectory(../lib/wfa2-lib/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa)
+add_subdirectory(../lib/wfa2-lib-2.3.4/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa2)
 add_subdirectory(../lib/gzstream/ ${CMAKE_CURRENT_SOURCE_DIR}/gzstream)
 add_subdirectory(../lib/cPMML/ ${CMAKE_CURRENT_SOURCE_DIR}/cPMML)
 
@@ -213,6 +215,7 @@ target_link_libraries(protal_lib
         cPMML_lib
         stdc++fs
         wfa_lib
+        wfa2lib
         gzstream_lib
         ZLIB::ZLIB
         -static # WITHOUT THIS IT WILL NOT COMPILE INTO A STATIC LIBRARY
