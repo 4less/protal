@@ -97,7 +97,7 @@ add_library(protal_lib
 #        Profiler/Profiler.h
 #        Profiler/Taxon.cpp
 #        Profiler/Taxon.h
-#        Profiler/ReadFilter.h
+        Profiler/ReadFilter.h
         Alignment/WFA2Wrapper2.h)
 
 
