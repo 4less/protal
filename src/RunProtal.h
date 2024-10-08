@@ -10,6 +10,7 @@
 #include "Options.h"
 #include "Build.h"
 #include "Alignment/WFA2Wrapper.h"
+#include "Alignment/WFA2Wrapper2.h"
 #include "Classify.h"
 #include "ChainAnchorFinder.h"
 #include "Taxonomy.h"
@@ -113,6 +114,11 @@ namespace protal {
             KmerPutterSM kmer_putter{};
             auto protal_stats = protal::build::Run<SimpleKmerHandler<ClosedSyncmer>, KmerPutterSM, DEBUG_NONE>(
                     options, kmer_putter, iterator);
+
+            std::cout << "Check" << std::endl;
+            protal::build::Check<SimpleKmerHandler<ClosedSyncmer>, KmerPutterSM, DEBUG_NONE>(
+                    options, kmer_putter, iterator);
+
             bm_build.PrintResults();
             protal_stats.WriteStats(std::cout);
 
@@ -451,11 +457,15 @@ namespace protal {
                 profile.AnnotateWithTruth(truth.value(), filter, truth_output);
             }
 
+            std::cout << "Write profile to: \n" << options.ProfileFile(i) << std::endl;
             auto dir = std::filesystem::path(options.ProfileFile(i)).parent_path();
-            if (!std::filesystem::create_directories(dir.string()) && !std::filesystem::exists(dir)) {
-                std::cout << "Cannot create directories for this path " << options.ProfileFile(i) << std::endl;
-                exit(2);
-            };
+            if (!std::filesystem::exists(dir)) {
+                std::cout << "Dir does not exist: " << dir << std::endl;
+                if (!std::filesystem::create_directories(dir.string())) {
+                    std::cout << "Cannot create directories for this path " << options.ProfileFile(i) << std::endl;
+                    exit(2);
+                }
+            }
 
             std::ofstream os(options.ProfileFile(i), std::ios::out);
             std::ofstream os_total(options.ProfileFile(i) + ".log", std::ios::out);
@@ -1016,6 +1026,7 @@ namespace protal {
             if (samples_with_gene > min_samples_with_gene) {
                 previous_size = msa.front().size();
 
+                //
                 for (auto& opt : items)  {
                     if (!opt.has_value()) continue;
                     auto& [var, shr] = opt.value();

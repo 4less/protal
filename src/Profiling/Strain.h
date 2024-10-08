@@ -432,6 +432,7 @@ namespace protal {
                     continue;
                 }
 
+                // Not part of program logic. Ensures that variants are valid.
                 const VariantVec& const_variants = items[i].value().first;
                 if (std::any_of(const_variants.begin(), const_variants.end(), [](std::vector<Variant> const& vv) {
                     return std::any_of(vv.begin(), vv.end(), [](Variant const&  v) {
@@ -445,13 +446,16 @@ namespace protal {
 
 
 
-                // update index;
+                // Find next variant. If variant position is smaller than current ref position move on
+                // Until the variant position is identical with the reference position or larger.
                 while (indices[i] < variants.size() && variants[indices[i]].front().Position() < rpos) indices[i]++;
 //                std::cout << (indices[i] == variants.size() || variants[indices[i]].front().Position() != rpos) << std::endl;
                 if (indices[i] == variants.size() || variants[indices[i]].front().Position() != rpos) {
+                    // Position has not variant.
                     outs[i] += "B(" + std::to_string(variants.size()) + ", " + std::to_string(indices[i] < variants.size() ? variants[indices[i]].front().Position() : -1) + ")\t";
                     column[i] = OptionalVariant();
                 } else {
+                    // Position has variant.
                     auto& variant = variants[indices[i]];
                     auto& call = GetConsensusCall(variant);
                     bool pass = VariantPass(call, variant, min_qual_sum);
@@ -502,6 +506,7 @@ namespace protal {
                     continue;
                 }
 
+                //
                 bool no_cov = (rpos < cov.size() && cov[rpos] == 0) || rpos >= cov.size();
                 bool lower_min_cov = rpos < cov.size() && cov[rpos] < min_cov;
                 bool sufficient_cov = rpos < cov.size() && cov[rpos] >= min_cov;
@@ -515,12 +520,18 @@ namespace protal {
                     msa_row.emplace_back(LACKING_COVERAGE);
                     outs[i] += "A";
                 } else if (cov[rpos] > 0) {
+                    auto coverage = cov[rpos];
+                    bool coverage_pass = coverage >= min_cov;
+
                     outs[i] += "B";
                     if (!var.has_value()) {
                         // NO VARIANT: ---------------------------------------------------------------------------------
                         outs[i] += "C";
                         for (auto j = max_ins; j > 0; j--) msa_row.emplace_back('-');
-                        msa_row.emplace_back(column_pass[i] ? ref : REFERENCE_NO_PASS);
+                        // Is it really appropriate to incorporate the reference position here?
+                        // Problem is, if var has no value, column_pass is never set to true.
+                        //msa_row.emplace_back(column_pass[i] ? ref : REFERENCE_NO_PASS);
+                        msa_row.emplace_back(coverage_pass ? ref : REFERENCE_NO_PASS); // Triple check but this should be the solution here
                     } else {
                         // VARIANT: ------------------------------------------------------------------------------------
                         outs[i] += "D";

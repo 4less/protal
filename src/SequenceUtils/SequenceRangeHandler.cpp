@@ -228,11 +228,31 @@ CoverageVec SequenceRangeHandler::CalculateCoverageVector2() const {
     for (auto &range : m_ranges) {
         if (range.m_start > cov.size()) {
             cov.resize(range.m_start, 0);
+        } else if (range.m_start > cov.size()) {
+            std::cerr << "Ranges should not overlap" << std::endl;
+
+            for (auto &range : m_ranges) {
+                std::cerr << range.ToVerboseString() << std::endl;
+            }
         }
         auto rcov = range.CoverageVector();
         cov.insert(cov.end(), rcov.begin(), rcov.end());
     }
     return cov;
+}
+
+bool SequenceRangeHandler::AreRangesValid(size_t const& reference_length) const {
+    for (auto &range : m_ranges) {
+        if (range.End() > reference_length) {
+            for (auto const& r : m_ranges) {
+                std::cerr << r.ToVerboseString() << std::endl;
+            }
+            std::cerr << "Error in " << __FILE__ << " at pos " << __LINE__ << std::endl;
+            std::cerr << "Ranges do not comply. Range end " << range.End() << " exceeds length of reference " << reference_length << std::endl;
+            return false;
+        }
+    }
+    return true;
 }
 
 size_t SequenceRangeHandler::CoveredPortion(uint16_t min_cov) {

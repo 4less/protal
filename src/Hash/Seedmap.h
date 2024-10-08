@@ -1006,12 +1006,12 @@ namespace protal {
                 auto total = all_kmers[key];
 
                 auto [taxid, geneid] = KmerUtils::ExtractHeaderInformation(key);
-                os << taxid << '\t';
-                os << geneid << '\t';
-                os << short_uniques << '\t';
-                os << static_cast<double>(short_uniques)/total << '\t';
-                os << long_uniques << '\t';
-                os << static_cast<double>(long_uniques)/total << '\t';
+                os << taxid << '\t'; //1
+                os << geneid << '\t'; //2
+                os << short_uniques << '\t'; //3
+                os << static_cast<double>(short_uniques)/total << '\t'; //4
+                os << long_uniques << '\t'; //5
+                os << static_cast<double>(long_uniques)/total << '\t'; //6
                 os << long_uniques_two << '\t';
                 os << static_cast<double>(long_uniques_two)/total << '\t';
                 os << total << std::endl;

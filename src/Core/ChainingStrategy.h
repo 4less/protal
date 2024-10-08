@@ -45,7 +45,7 @@ namespace protal {
                 length(length) {}
 
         bool OverlapsWithLeft(ChainLink const& left) const {
-            return ReadStart() <= left.ReadEnd();
+            return ReadStart() <= left.ReadEnd() && (readpos - genepos) == (left.readpos - left.genepos);
         }
 
         void Merge(uint32_t other_readpos, size_t other_length) {
@@ -94,7 +94,18 @@ namespace protal {
         }
 
         bool OverlapWithLeft(Seed const& seed) {
-            return seed.readpos <= Back().readpos + Back().length;
+            auto offa1 = (seed.genepos - seed.readpos);
+            auto offa2 = (Back().genepos - Back().readpos);
+            int indel = abs(int(offa1) - int(offa2));
+//            if (seed.readpos <= Back().readpos + Back().length && indel != 0) {
+//                std::cout << ToString() << std::endl;
+//                std::cout << ToVisualString2() << std::endl;
+//                std::cout << Back().ToString() << std::endl;
+//                std::cout << seed.ToString() << std::endl;
+//                std::cout << "indel: " << indel << std::endl;
+////                Utils::Input();
+//            }
+            return seed.readpos <= Back().readpos + Back().length && indel == 0;
         }
         void MergeWithLeft(Seed const& seed, size_t length) {
             total_length -= Back().length;
@@ -103,14 +114,13 @@ namespace protal {
         }
 
         void AddSeed(Seed const& seed, size_t length) {
-//            std::cout << "Add Seed " << seed.ToString() << std::endl;
+
             if (!chain.empty() && OverlapWithLeft(seed)) {
                 MergeWithLeft(seed, length);
             } else {
                 chain.emplace_back(ChainLink(seed.genepos, seed.readpos, length));
                 total_length += length;
             }
-//            std::cout << ToString() << std::endl;
         }
         size_t UpdateLength() {
             total_length = std::accumulate(chain.begin(), chain.end(), 0, [](size_t acc, ChainLink const& link) {

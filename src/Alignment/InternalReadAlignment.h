@@ -6,7 +6,8 @@
 
 #include "Constants.h"
 #include "SamHandler.h"
-#include "WFA2Wrapper.h"
+//#include "WFA2Wrapper.h"
+//#include "WFA2Wrapper2.h"
 #include <cstdio>
 #include <cstddef>
 #include "AlignmentUtils.h"

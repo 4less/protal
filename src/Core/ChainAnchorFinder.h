@@ -32,6 +32,7 @@ namespace protal {
         SeedList m_seed_tmp_other;
 
         size_t m_k = 15;// Update and put hat in as parameter
+        int m_indel = 6;
 
         TaxonCountPairs m_count_pairs;
         TaxaCounts m_taxa_counts;
@@ -49,6 +50,8 @@ namespace protal {
         ChainAnchorList m_anchors;
 
         bool m_error_in_read = false;
+
+        size_t skip_count = 0;
 
 
         using RecoverySet = tsl::robin_set<uint64_t>;
@@ -96,6 +99,10 @@ namespace protal {
             return a.first == b.first || a.second == b.second;
         }
 
+        static bool OffsetPairMatch(OffsetPair const& a, OffsetPair const& b, int indel = 0) {
+            return min(abs(a.first - b.first), abs(a.second - b.second)) <= indel;
+        }
+
         static bool OffsetPairAmbiguous(OffsetPair const& a, OffsetPair const& b) {
             return a.first == b.first && a.second == b.second;
         }
@@ -125,6 +132,15 @@ namespace protal {
         static bool IdenticalIgnoreN(std::string_view a, std::string_view b) {
             for (auto i = 0; i < a.length(); i++) {
                 if (a[i] != b[i] && a[i] != 'N' && b[i] != 'N') {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        static bool IdenticalIgnoreAmbig(std::string_view a, std::string_view b) {
+            for (auto i = 0; i < a.length(); i++) {
+                if (a[i] != b[i] && (a[i] == 'A' || a[i] == 'C' || a[i] == 'G' || a[i] == 'T') && (b[i] == 'A' || b[i] == 'C' || b[i] == 'G' || b[i] == 'T')) {
                     return false;
                 }
             }
@@ -170,7 +186,18 @@ namespace protal {
         }
 
         Anchor ExtractAnchor(SeedList &seeds, size_t read_length) {
+            if (seeds.size() == 1) {
+                std::cout << "Seeds==1 "<< std::endl;
+                std::cout << seeds.back().ToString() << std::endl;
+                Utils::Input();
+            }
+
+            if (seeds.front().genepos == seeds.back().genepos) {
+                seeds.pop_back();
+            }
+
             bool forward = seeds.front().genepos < seeds.back().genepos;
+            if (seeds.front().genepos)
             if (!forward) {
                 ReverseSeedList(seeds, read_length);
             }
@@ -181,16 +208,28 @@ namespace protal {
 
             Anchor anchor(seeds.front().taxid, seeds.front().geneid, forward, uniques, uniques_two);
             bool stop = false;
-            bool skip_first = true;
+            bool is_first = true;
+            auto& first = seeds.front();
+            auto& prev = first;
             for (auto& seed : seeds) {
-                if (!skip_first && (seeds.front().genepos >= seed.genepos)) {
-//                    std::cout << "Skip " << seed.ToString() << " " << (seeds.front().genepos < seed.genepos != forward) << "  detected: " << forward << std::endl;
-                    stop = true;
-                    skip_first = false;
+//                if (!(seed.readpos > first.readpos && seed.genepos > first.genepos)) {
+//                    std::cout << first.ToString() << std::endl;
+//                    std::cout << seed.ToString() << std::endl;
+//                    Utils::Input();
+//                }
+
+                if (!is_first && (prev.genepos >= seed.genepos || prev.readpos >= seed.readpos)) {
+//                    std::cout << "Skip seeds because gene positions do not work out" << std::endl;
+//                    std::cout << prev.ToString() << std::endl;
+//                    std::cout << seed.ToString() << std::endl;
+//                    std::cout << "Skip" << std::endl;
+//                    skip_count += 1;
+//                    std::cout << skip_count << std::endl;
                     continue;
                 }
-                skip_first = false;
+                is_first = false;
                 anchor.AddSeed(seed, m_k);
+                prev = seed;
             }
 
             return anchor;
@@ -204,12 +243,23 @@ namespace protal {
 
                 m_seed_tmp_take.emplace_back(init_seed);
 
+                auto& prev = init_seed;
                 for (auto i = 1; i < seeds.size(); i++) {
                     auto& seed = seeds[i];
                     auto seed_offset = Offset(seed);
 
-                    if (OffsetPairMatch(init_offset, seed_offset)) {
+                    if (seed.genepos == prev.genepos || seed.readpos == prev.readpos) {
+//                        std::cout << "________________Skip" << std::endl;
+//                        std::cout << prev.ToString() << std::endl;
+//                        std::cout << seed.ToString() << std::endl;
+                        skip_count += 1;
+//                        std::cout << skip_count << std::endl;
+                        continue;
+                    }
+
+                    if (OffsetPairMatch(init_offset, seed_offset, m_indel)) {
                         m_seed_tmp_take.emplace_back(seed);
+                        prev = seed;
                     } else {
                         m_seed_tmp_other.emplace_back(seed);
                     }
@@ -457,7 +507,7 @@ namespace protal {
             ExtendSeed1(seed, nullptr, nullptr, query, ref);
         }
 
-        void CheckSeedsInAnchor(ChainAlignmentAnchor& anchor, std::string const& query) {
+        bool CheckSeedsInAnchor(ChainAlignmentAnchor& anchor, std::string const& query) {
             auto& genome = m_genome_loader.GetGenome(anchor.taxid);
             auto& gene = genome.GetGeneOMP(anchor.geneid);
 
@@ -474,32 +524,38 @@ namespace protal {
                 }
             }
             if (faulty) {
-#pragma omp critical(print_error)
-{
-                std::cerr << "Error with seed -------------------------" << anchor.forward << std::endl;
-                std::cerr << "Original orientation: " << anchor.forward << std::endl;
-                std::cerr << query << std::endl;
-                std::cerr << anchor.ToString() << std::endl;
-                std::cerr << anchor.ToVisualString2() << std::endl;
-                for (auto i = 0; i < anchor.chain.size(); i++) {
-                    auto& seed = anchor.chain[i];
-
-                    auto seed_q = query.substr(seed.readpos, seed.length);
-                    auto seed_r = gene.Sequence().substr(seed.genepos, seed.length);
-
-                    std::cerr << seed.ToString() << std::endl;
-                    std::cerr << std::string(seed.readpos, ' ') << seed_q << " fwd? " << anchor.forward << std::endl;
-                    std::cerr << std::string(seed.readpos, ' ') << KmerUtils::ReverseComplement(seed_q) << " fwd? " << !anchor.forward << std::endl;
-                    std::cerr << std::string(seed.readpos, ' ') << seed_r << " Reference" << std::endl;
-                }
-                std:cerr << " -------------------------" << anchor.forward << std::endl;
-                m_error_in_read = true;
-}
+//#pragma omp critical(print_error)
+//{
+//                std::cerr << "Error with seed -------------------------" << anchor.forward << std::endl;
+//                std::cerr << "Original orientation: " << anchor.forward << std::endl;
+//                std::cerr << query << std::endl;
+//                std::cerr << anchor.ToString() << std::endl;
+//                std::cerr << anchor.ToVisualString2() << std::endl;
+//                for (auto i = 0; i < anchor.chain.size(); i++) {
+//                    auto& seed = anchor.chain[i];
+//
+//                    auto seed_q = query.substr(seed.readpos, seed.length);
+//                    auto seed_r = gene.Sequence().substr(seed.genepos, seed.length);
+//
+//                    std::cerr << seed.ToString() << std::endl;
+//                    std::cerr << std::string(seed.readpos, ' ') << seed_q << " fwd? " << anchor.forward << std::endl;
+//                    std::cerr << std::string(seed.readpos, ' ') << KmerUtils::ReverseComplement(seed_q) << " fwd? " << !anchor.forward << std::endl;
+//                    std::cerr << std::string(seed.readpos, ' ') << seed_r << " Reference" << std::endl;
+//                }
+//                std:cerr << " -------------------------" << anchor.forward << std::endl;
+//                m_error_in_read = true;
+//}
             }
+            return faulty;
         }
 
         void ExtendAnchor(ChainAlignmentAnchor& anchor, std::string const& query) {
-            CheckSeedsInAnchor(anchor, query);
+            bool faulty = CheckSeedsInAnchor(anchor, query);
+
+//            if (faulty) {
+//                std::cerr << "Faulty___________" << anchor.chain.size() << std::endl;
+//                std::cerr << anchor.ToString() << std::endl;
+//            }
 
             auto& genome = m_genome_loader.GetGenome(anchor.taxid);
             auto& gene = genome.GetGeneOMP(anchor.geneid);
@@ -512,14 +568,47 @@ namespace protal {
 
                 auto seed_q = query.substr(seed.readpos, seed.length);
                 auto seed_r = gene.Sequence().substr(seed.genepos, seed.length);
+                bool validseed = IdenticalIgnoreAmbig(seed_q, seed_r);
 
-                if (!IdenticalIgnoreN(seed_q, seed_r) && IdenticalIgnoreN(KmerUtils::ReverseComplement(seed_q), seed_r)) {
-                    if (changed_once) {
-                        std::cerr << "ERROR ERROR ERROR" << std::endl;
-                    }
+                if (!validseed) {
+//                    std::cerr << "Invalid seed" << std::endl;
+                    skip_count += 1;
+                    return;
+                }
+
+                if (!IdenticalIgnoreAmbig(seed_q, seed_r) && IdenticalIgnoreAmbig(KmerUtils::ReverseComplement(seed_q), seed_r)) {
+
+                    std::cout << "Is forward? " << anchor.forward << std::endl;
+                    std::cout << anchor.ToString() << std::endl;
+                    std::cout << "Query: " << query << std::endl;
+
                     m_error_in_read = true;
                     anchor.forward = !anchor.forward;
                     changed_once = true;
+                }
+
+                if (m_error_in_read) {
+                    std::cerr << seed.ToString() << std::endl;
+                    std::cerr << seed_q << std::endl;
+                    std::cerr << seed_r << std::endl;
+                }
+
+                if (i > 0) {
+                    auto offa1 = (seed.genepos - seed.readpos);
+                    auto offa2 = (anchor.chain[i-1].genepos - anchor.chain[i-1].readpos);
+                    int indel = abs(int(offa1) - int(offa2));
+                    if (indel > 6 || !validseed) {
+                        std::cout << "Index: " << i << std::endl;
+                        std::cout << anchor.ToString() << std::endl;
+                        std::cout << anchor.ToVisualString2() << std::endl;
+                        std::cout << "Offa1: " << offa1 << " Offa2: " << offa2 << ", Valid seed? " << validseed << std::endl;
+                        std::cout << "Indels: " << indel << std::endl;
+                        std::cout << "Previous: " << anchor.chain[i-1].ToString() << std::endl;
+                        std::cout << "Current:  " << seed.ToString() << std::endl;
+
+                        std::cout << seed_q << std::endl;
+                        std::cout << seed_r << std::endl;
+                    }
                 }
 
 
@@ -571,40 +660,65 @@ namespace protal {
 
             m_bm_extend_anchors.Start();
             for (auto& anchor : anchors) {
+                if (anchor.chain.size() == 1 && anchor.total_length < 20) {
+                    auto& seed = anchor.chain.back();
+                    auto& genome = m_genome_loader.GetGenome(anchor.taxid);
+                    auto& gene = genome.GetGeneOMP(anchor.geneid);
+                    auto seed_q_fwd = m_fwd->substr(seed.readpos, seed.length);
+                    auto seed_q_rev = m_rev.substr(seed.readpos, seed.length);
+                    auto seed_r = gene.Sequence().substr(seed.genepos, seed.length);
+
+//                    std::cout << "Single anchor " << anchor.forward << std::endl;
+//                    std::cout << seed_q_fwd << " FWD" << std::endl;
+//                    std::cout << seed_q_rev << " REV" << std::endl;
+//                    std::cout << seed_r << " REF" << std::endl;
+
+                    if (IdenticalIgnoreAmbig(seed_q_fwd, seed_r)) {
+                        anchor.forward = true;
+                    } else if (IdenticalIgnoreAmbig(seed_q_rev, seed_r)) {
+                        anchor.forward = false;
+                    } else {
+                        std::cout << "Skip" << std::endl;
+                        continue;
+                    }
+
+//                    Utils::Input();
+                }
+
                 ExtendAnchor(anchor, anchor.forward ? *m_fwd : m_rev);
             }
             m_bm_extend_anchors.Stop();
 
-            if (m_error_in_read) {
-#pragma omp critical(print_error)
-                {
-                    std::cerr << "\nMinimizers (" << kmer_list.size() << ")" << std::endl;
-                    for (auto& [kmer, pos] : kmer_list) {
-                        std::cerr << std::string(pos, ' ') << string_view(query.c_str() + pos, m_k) << "(" << KmerUtils::ToString(kmer, m_k*2) << ")" << std::endl;
-                    }
-                    std::cerr << "\nSeeds (" << seeds.size() << ")" << std::endl;
-                    for (auto& seed : seeds) {
-                        auto& gene = m_genome_loader.GetGenome(seed.taxid).GetGene(seed.geneid).Sequence();
-                        std::cerr << std::string(seed.readpos, ' ') << string_view(query.c_str() + seed.readpos, m_k) << "  " << seed.ToString() << std::endl;
-                        std::cerr << std::string(seed.readpos, ' ') << string_view(gene.c_str() + seed.genepos, m_k) << std::endl;
-                    }
-                    std::cerr << "\nAnchors (" << anchors.size() << ")" << std::endl;
-                    for (auto& anchor : anchors) {
-                        std::cerr << anchor.ToString() << " Forward? " << anchor.forward << std::endl;
-                        std::cerr << query << std::endl;
-                        std::cerr << KmerUtils::ReverseComplement(query) << std::endl;
-                        std::cerr << anchor.ToString() << std::endl;
-                        std::cerr << anchor.ToVisualString2() << std::endl;
-                        auto& gene = m_genome_loader.GetGenome(anchor.taxid).GetGene(anchor.geneid).Sequence();
-                        for (auto& s : anchor.chain) {
-                            std::cerr << std::string(s.readpos, ' ') << string_view(query.c_str() + s.readpos, m_k) << "  " << s.ToString() << std::endl;
-                            std::cerr << std::string(s.readpos, ' ') << string_view(gene.c_str() + s.genepos, m_k) << std::endl;
-                        }
-                        std::cerr << std::endl;
-                    }
-                    std::cerr << "-----------------------------------------------------------" << std::endl;
-                }
-            }
+//            if (m_error_in_read) {
+//#pragma omp critical(print_error)
+//                {
+//                    std::cerr << "\nMinimizers (" << kmer_list.size() << ")" << std::endl;
+//                    for (auto& [kmer, pos] : kmer_list) {
+//                        std::cerr << std::string(pos, ' ') << string_view(query.c_str() + pos, m_k) << "(" << KmerUtils::ToString(kmer, m_k*2) << ")" << std::endl;
+//                    }
+//                    std::cerr << "\nSeeds (" << seeds.size() << ")" << std::endl;
+//                    for (auto& seed : seeds) {
+//                        auto& gene = m_genome_loader.GetGenome(seed.taxid).GetGene(seed.geneid).Sequence();
+//                        std::cerr << std::string(seed.readpos, ' ') << string_view(query.c_str() + seed.readpos, m_k) << "  " << seed.ToString() << std::endl;
+//                        std::cerr << std::string(seed.readpos, ' ') << string_view(gene.c_str() + seed.genepos, m_k) << std::endl;
+//                    }
+//                    std::cerr << "\nAnchors (" << anchors.size() << ")" << std::endl;
+//                    for (auto& anchor : anchors) {
+//                        std::cerr << anchor.ToString() << " Forward? " << anchor.forward << std::endl;
+//                        std::cerr << query << std::endl;
+//                        std::cerr << KmerUtils::ReverseComplement(query) << std::endl;
+//                        std::cerr << anchor.ToString() << std::endl;
+//                        std::cerr << anchor.ToVisualString2() << std::endl;
+//                        auto& gene = m_genome_loader.GetGenome(anchor.taxid).GetGene(anchor.geneid).Sequence();
+//                        for (auto& s : anchor.chain) {
+//                            std::cerr << std::string(s.readpos, ' ') << string_view(query.c_str() + s.readpos, m_k) << "  " << s.ToString() << std::endl;
+//                            std::cerr << std::string(s.readpos, ' ') << string_view(gene.c_str() + s.genepos, m_k) << std::endl;
+//                        }
+//                        std::cerr << std::endl;
+//                    }
+//                    std::cerr << "-----------------------------------------------------------" << std::endl;
+//                }
+//            }
 
             m_bm_sorting_anchors.Start();
             std::sort(anchors.begin(), anchors.end() ,

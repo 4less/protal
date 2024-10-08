@@ -95,10 +95,10 @@ namespace protal {
     }
 
 
-    static bool IsAlignmentValid(AlignmentInfo const& info, std::string const& query, std::string const& reference) {
+    static bool IsAlignmentValid(AlignmentInfo const& info, std::string const& query, std::string const& reference, int offset = 0, bool silent=false) {
 //        snps.clear();
         int qpos = 0;
-        int rpos = info.gene_alignment_start;
+        int rpos = info.gene_alignment_start + offset;
 
         int count = 0;
         char op = ' ';
@@ -107,30 +107,40 @@ namespace protal {
         int cpos = 0;
         bool faulty = false;
 
-        while (NextCompressedCigar(cpos, info.compressed_cigar, count, op)) {
-            if (op == 'M') {
-                for (auto i = 0; i < count; i++) {
-                    if (qpos+i < 0 || qpos+i >= query.size()) {
-                        std::cerr << "Access out of bounds in IsAlignmentValid: " << qpos+i << " read len: " << query.size() << std::endl;
-                    }
-                    if (rpos+i < 0 || rpos+i >= reference.size()) {
-                        std::cerr << "Access out of bounds in IsAlignmentValid: " << rpos+i << " read len: " << reference.size() << std::endl;
-                    }
+#pragma omp critical (invalid_align)
+        {
+            while (NextCompressedCigar(cpos, info.compressed_cigar, count, op)) {
 
-                    if (query[qpos + i] != 'N' && reference[rpos+i] != 'N' && query[qpos + i] != reference[rpos+i]) {
-                        std::cerr << query[qpos + i] << "-" << reference[rpos+i] << '\t' << qpos+i << "-" << rpos+i << '\t' << query.size() << "-" << reference.size() << std::endl;
-                        faulty = true;
+                if (op == 'M') {
+                    for (auto i = 0; i < count; i++) {
+                        if (qpos + i < 0 || qpos + i >= query.size()) {
+                            std::cerr << "Access out of bounds in IsAlignmentValid: " << qpos + i << " read len: "
+                                      << query.size() << std::endl;
+                        }
+                        if (rpos + i < 0 || rpos + i >= reference.size()) {
+                            std::cerr << "Access out of bounds in IsAlignmentValid: " << rpos + i << " read len: "
+                                      << reference.size() << std::endl;
+                        }
+
+                        if (query[qpos + i] != 'N' && reference[rpos + i] != 'N' &&
+                            query[qpos + i] != reference[rpos + i]) {
+                            if (!silent) {
+                                std::cerr << query[qpos + i] << "-" << reference[rpos + i] << '\t' << qpos + i << "-"
+                                          << rpos + i << '\t' << query.size() << "-" << reference.size() << std::endl;
+
+                            }
+
+                            faulty = true;
+                        }
                     }
                 }
+
+                qpos += (op != 'D') * count;
+                rpos += (!(op == 'I' || op == 'S')) * count;
+
             }
-
-            qpos += (op != 'D') * count;
-            rpos += (!(op == 'I' || op == 'S')) * count;
-
         }
 
         return !faulty;
     }
-
-
 }

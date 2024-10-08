@@ -10,6 +10,7 @@
 #include "LineSplitter.h"
 #include <fstream>
 #include <regex>
+#include "Utils.h"
 
 
 namespace protal {
@@ -233,7 +234,7 @@ namespace protal {
             std::string profile_list_str = m_profile_list.empty() ? "" : m_profile_list.front();
             for (auto i = 1; i < m_profile_list.size(); i++) profile_list_str += ", " + m_profile_list[i];
 
-            for (auto& file : m_profile_list) std::cout << file << std::endl;
+//            for (auto& file : m_profile_list) std::cout << file << std::endl;
 
             result_str += "------ General ------" + std::string(30, '-') + '\n';
             result_str += "build:               " + std::to_string(m_build) + '\n';
@@ -725,6 +726,8 @@ namespace protal {
                         sam_list.emplace_back(sam_path);
                     }
                     if (profile_column != -1) {
+//                        std::cout << "Profile paths" << std::endl;
+//                        std::cout << profile_output_dir << " " << tokens[profile_column] << std::endl;
                         auto profile_path = path(profile_output_dir).append(tokens[profile_column]);
                         profile_list.emplace_back(profile_path);
                     }

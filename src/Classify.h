@@ -367,6 +367,7 @@ namespace protal::classify {
                     thread_statistics.errors_anchor_finding++;
                 }
 
+
                 //                std::cout << "Anchors1" << std::endl;
                 //                for (auto& a : anchors1) {
                 //                    std::cout << a.ToString() << std::endl;

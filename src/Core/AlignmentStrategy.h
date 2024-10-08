@@ -262,6 +262,23 @@ namespace protal {
                     qpos--, rpos--) {
                 extension_left++;
             }
+
+            for (int qpos = s.readpos, rpos = s.genepos;
+                 qpos < qpos + s.length && rpos < gene.length();
+                 qpos++, rpos++) {
+
+                auto invalid = (query[qpos] == 'A' || query[qpos] == 'C' || query[qpos] == 'G' || query[qpos] == 'T') &&
+                        (gene[rpos] == 'A' || gene[rpos] == 'C' || gene[rpos] == 'G' || gene[rpos] == 'T') && query[qpos] != gene[rpos];
+
+                if (invalid) {
+                    std::cerr << "____________________________" << std::endl;
+                    std::cerr << query << std::endl;
+                    std::cerr << string_view(gene.c_str() + s.genepos, s.length) << std::endl;
+                    std::cerr << "____________________________" << std::endl;
+                }
+            }
+
+
 //            std::cout << "extension_left: " << extension_left << std::endl;
 //            size_t max_extension_len = std::min(static_cast<uint32_t>(s.readpos), s.genepos);
 //            for (int qpos = s.readpos - 1, rpos = s.genepos - 1;
@@ -303,6 +320,7 @@ namespace protal {
                 auto [lefta, righta] = ExtendSeed(seed, ref, gene.Sequence(),
                                                   ((i > 0) ? anchor.chain[i-1].readpos + anchor.chain[i-1].length : 0),
                                                   ((i+1) < anchor.chain.size() ? anchor.chain[i+1].readpos : ref.length()));
+
 
                 if (i > 0 && seed.OverlapsWithLeft(anchor.chain[i-1])) {
                     anchor.chain[i-1].Merge(seed.readpos, seed.length);
@@ -381,6 +399,7 @@ namespace protal {
                 if (!valid) {
                     std::cerr << "Invalid no alignment\t" <<  std::endl;
                     std::cerr << read << std::endl;
+//                    std::cerr << gene. << std::endl;
                     std::cerr << anchor.ToString() << std::endl;
                     std::cerr << anchor.ToVisualString2() << std::endl;
 
@@ -388,6 +407,7 @@ namespace protal {
                     m_alignment_orientation.Update(abs_pos, read.length(), gene.Sequence().length(), 0);
                     std::string reference_str = gene.Sequence().substr(m_alignment_orientation.reference_start, m_alignment_orientation.reference_len);
                     std::cerr << reference_str << std::endl;
+
                     return false;
                 }
 

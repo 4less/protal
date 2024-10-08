@@ -155,10 +155,17 @@ namespace protal {
         const uint32_t m_m{};
 
         size_t m_kmer{};
+        size_t m_kmer_fwd{};
+        size_t m_kmer_rev{};
+
         size_t m_mmer{};
+        size_t m_mmer_fwd{};
+        size_t m_mmer_rev{};
+
         size_t m_mask{};
         size_t m_mmask{};
         size_t m_mshift{};
+
         uint32_t m_pos = 0;
 
 //        char* m_seq = nullptr;
@@ -212,10 +219,10 @@ namespace protal {
         }
 
         SimpleKmerHandler(size_t k, size_t m, CFMinimizer& minimizer) :
-                m_k(k), m_m(m), m_mshift((k-m)*2), m_mmask((1llu << (m*2)) -1), m_mask((1llu << (k*2)) -1), m_minimizer(minimizer) {
+                m_k(k), m_m(m), m_mshift((k-m)), m_mmask((1llu << (m*2)) -1), m_mask((1llu << (k*2)) -1), m_minimizer(minimizer) {
         }
         SimpleKmerHandler(SimpleKmerHandler const& other) :
-                m_k(other.m_k), m_m(other.m_m), m_mshift((other.m_k-other.m_m)*2), m_mmask((1llu << (other.m_m*2)) -1), m_mask((1llu << (other.m_k*2)) -1), m_minimizer(other.m_minimizer) {
+                m_k(other.m_k), m_m(other.m_m), m_mshift((other.m_k-other.m_m)), m_mmask((1llu << (other.m_m*2)) -1), m_mask((1llu << (other.m_k*2)) -1), m_minimizer(other.m_minimizer) {
         }
         Syncmer minimizer{15, 7, 2};
 
@@ -262,8 +269,12 @@ namespace protal {
                 return;
             }
 
-            while (NextWrapper(m_kmer)) {
-                m_mmer = (m_kmer >> m_mshift) & m_mmask;
+            while (NextWrapper(m_kmer_fwd, m_kmer_rev)) {
+                m_mmer_fwd = (m_kmer_fwd >> m_mshift) & m_mmask;
+                m_mmer_rev = (m_kmer_rev >> m_mshift) & m_mmask;
+
+                m_kmer = m_mmer_fwd < m_mmer_rev ? m_kmer_fwd : m_kmer_rev;
+                m_mmer = m_mmer_fwd < m_mmer_rev ? m_mmer_fwd : m_mmer_rev;
 
                 if (m_minimizer(m_mmer)) {
                     m_total_minimizers++;
@@ -280,8 +291,18 @@ namespace protal {
                 return;
             }
 
-            while (NextWrapper(m_kmer)) {
-                m_mmer = (m_kmer >> m_mshift) & m_mmask;
+            while (NextWrapper(m_kmer_fwd, m_kmer_rev)) {
+
+                m_mmer_fwd = (m_kmer_fwd >> m_mshift) & m_mmask;
+                m_mmer_rev = (m_kmer_rev >> m_mshift) & m_mmask;
+
+
+                m_kmer = m_mmer_fwd < m_mmer_rev ? m_kmer_fwd : m_kmer_rev;
+                m_mmer = m_mmer_fwd < m_mmer_rev ? m_mmer_fwd : m_mmer_rev;
+
+//                std::cout << "core-mer = " << m_mmer_fwd << " (" << m_mshift << ")" << std::endl;
+//                std::cout << "K-mer: " << KmerUtils::ToString(m_kmer_fwd, 62) << std::endl;
+//                std::cout << "Core-mer: " << KmerUtils::ToString(m_mmer_fwd, 30) << std::endl;
 
                 if (m_minimizer(m_mmer)) {
                     m_total_minimizers++;
@@ -291,6 +312,7 @@ namespace protal {
         }
 
         inline bool Next(size_t& key) {
+            exit(127);
             while (NextWrapper(m_kmer)) {
                 if (m_minimizer(m_kmer)) {
                     key = m_kmer;
@@ -301,6 +323,7 @@ namespace protal {
         }
 
         inline bool NextWrapper(size_t& key) {
+            exit(127);
             if (!HasNext()) return false;
             m_total_kmers++;
             if (m_first) {
@@ -313,6 +336,24 @@ namespace protal {
             }
             bool take_normal = m_canonical_kmer_fwd < m_canonical_kmer_rev;
             key = (take_normal * m_canonical_kmer_fwd) + (!take_normal * m_canonical_kmer_rev);
+
+            m_pos++;
+            return true;
+        }
+
+        inline bool NextWrapper(size_t& key_fwd, size_t& key_rev) {
+            if (!HasNext()) return false;
+            m_total_kmers++;
+            if (m_first) {
+                GetKey(m_canonical_kmer_fwd);
+                GetKeyC(m_canonical_kmer_rev);
+                m_first = false;
+            } else {
+                RollKey(m_canonical_kmer_fwd);
+                RollKeyC(m_canonical_kmer_rev);
+            }
+            key_fwd = m_canonical_kmer_fwd;
+            key_rev = m_canonical_kmer_rev;
 
             m_pos++;
             return true;
