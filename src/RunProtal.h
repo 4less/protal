@@ -189,7 +189,7 @@ namespace protal {
                     }
 
                     // AnchorFinder
-                    AnchorFinder anchor_finder(kmer_lookup, mmer_size, 4, options.GetMaxSeedSize(), genomes);
+                    AnchorFinder anchor_finder(kmer_lookup, mmer_size, options.GetMinSuccessfulLookups(), options.GetMaxSeedSize(), genomes);
                     // AlignmentHandler approach
                     SimpleAlignmentHandler alignment_handler(genomes, aligner, kmer_size, options.GetAlignTop(), options.GetMaxScoreAni(), options.FastAlign());
 
@@ -929,15 +929,15 @@ namespace protal {
         os3.close();
 
 
-        for (auto gi = 0; gi < per_sample_gene_noise.front().size(); gi++) {
-            std::cout << gi;
-            for (auto si = 0; si < selected_profiles.size(); si++) {
-                auto sample_index = selected_profiles[si];
-                auto sample_name = options.GetSampleId(sample_index);
-                std::cout << '\t' << (per_sample_gene_noise[si][gi]/static_cast<double>(per_sample_gene_cov[si][gi])) << "(" << per_sample_gene_noise[si][gi] << "/" << per_sample_gene_cov[si][gi] << ")";
-            }
-            std::cout << std::endl;
-        }
+//        for (auto gi = 0; gi < per_sample_gene_noise.front().size(); gi++) {
+//            std::cout << gi;
+//            for (auto si = 0; si < selected_profiles.size(); si++) {
+//                auto sample_index = selected_profiles[si];
+//                auto sample_name = options.GetSampleId(sample_index);
+//                std::cout << '\t' << (per_sample_gene_noise[si][gi]/static_cast<double>(per_sample_gene_cov[si][gi])) << "(" << per_sample_gene_noise[si][gi] << "/" << per_sample_gene_cov[si][gi] << ")";
+//            }
+//            std::cout << std::endl;
+//        }
 
 
         return gene_ids;
@@ -962,13 +962,13 @@ namespace protal {
         size_t partition_start = 0;
         size_t previous_size = 0;
 
-        std::cout << "MULTIALLELIC: " << taxid << " " << taxon_name << std::endl;
+//        std::cout << "MULTIALLELIC: " << taxid << " " << taxon_name << std::endl;
         std::vector<uint32_t> selected_genes = SelectGenesForTaxon(taxid, taxon_name, profile_indices, loader, options, profiles);
 
         ProgressBar prog(120);
-        std::cout << "Process " << selected_genes.size() << std::endl;
+//        std::cout << "Process " << selected_genes.size() << std::endl;
         for (auto& geneid : selected_genes) {
-            std::cout << "GID: " << geneid << std::endl;
+//            std::cout << "GID: " << geneid << std::endl;
             // if (!loader.GetGenome(taxid).IsGeneHittable(geneid)) {
             //     continue;
             // }
@@ -985,7 +985,7 @@ namespace protal {
             size_t samples_with_gene = 0;
 
             for (auto i = 0; i < profile_indices.size(); i++) {
-                std::cout << "profile: " << i << std::endl;
+//                std::cout << "profile: " << i << std::endl;
 
                 auto& profile = profiles[profile_indices[i]];
 

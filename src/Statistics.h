@@ -14,9 +14,14 @@ namespace protal {
         size_t kmers_accepted = 0;
         size_t errors_anchor_finding = 0;
         size_t kmers_total = 0;
+        size_t successful_lookups = 0;
+        size_t at_least_one_lookup = 0;
+        size_t total_seeds = 0;
         size_t total_anchors = 0;
         size_t total_alignments = 0;
         size_t output_alignments = 0;
+        size_t at_least_one_anchor = 0;
+        size_t best_anchor_seed_count = 0;
         int thread_num = -1;
         size_t num_threads = 0;
 
@@ -25,9 +30,14 @@ namespace protal {
             kmers_total += statistics.kmers_total;
             kmers_accepted += statistics.kmers_accepted;
             errors_anchor_finding += statistics.errors_anchor_finding;
+            total_seeds += statistics.total_seeds;
             total_anchors += statistics.total_anchors;
             total_alignments += statistics.total_alignments;
             output_alignments += statistics.output_alignments;
+            best_anchor_seed_count += statistics.best_anchor_seed_count;
+            at_least_one_anchor += statistics.at_least_one_anchor;
+            successful_lookups += statistics.successful_lookups;
+            at_least_one_lookup += statistics.at_least_one_lookup;
             num_threads++;
         }
 
@@ -39,6 +49,9 @@ namespace protal {
             os << "Reads with errors:  \t" << errors_anchor_finding << std::endl;
             os << "Total kmers:        \t" << kmers_total << std::endl;
             os << "Minimizers kmers:   \t" << kmers_accepted << std::endl;
+            os << "Seeds:              \t" << total_seeds << " (per read avg " << total_seeds/ (double) reads << ")" << std::endl;
+            os << "Best anchor seeds:  \t" << best_anchor_seed_count << " (per best anchor avg " << best_anchor_seed_count / (double) at_least_one_anchor << ")" << std::endl;
+            os << "Total succ. lookups:\t" << successful_lookups << " (per reads with at least one successful lookup " << successful_lookups / (double) at_least_one_lookup << ")" << std::endl;
             os << "Anchors:            \t" << total_anchors << std::endl;
             os << "Total alignments:   \t" << total_alignments << std::endl;
             os << "Output alignments:  \t" << output_alignments << std::endl;

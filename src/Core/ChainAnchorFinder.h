@@ -23,6 +23,10 @@ namespace protal {
     template<typename KmerLookup>
     requires KmerLookupConcept<KmerLookup>
     class ChainAnchorFinder {
+    public:
+        size_t m_successful_lookups = 0;
+
+    private:
         KmerLookup m_kmer_lookup;
         LookupResultList m_lookups;
 
@@ -59,23 +63,27 @@ namespace protal {
 
         inline void FindSeeds(KmerList &kmer_list, SeedList& seeds) {
             m_lookups.clear();
+
+            // Get ranges in values (no seeds yet)
             for (auto [mmer, pos] : kmer_list) {
                 m_kmer_lookup.Get(m_lookups, mmer, pos);
             }
+
+            // Sort these per core-mer ranges by number of values in range.
             std::sort(m_lookups.begin(), m_lookups.end(), [](LookupPointer const& a, LookupPointer const& b) {
                 return a.size < b.size;
             });
 
 
             uint32_t previous_size = 0;
-            uint32_t successful_lookups = 0;
+            m_successful_lookups = 0;
             uint32_t total_lookups = 0;
             for (m_lookup_index = 0; m_lookup_index < m_lookups.size(); m_lookup_index++) {
                 auto& lookup = m_lookups[m_lookup_index];
                 m_kmer_lookup.GetFromLookup(seeds, lookup);
                 total_lookups++;
-                successful_lookups += (seeds.size() > previous_size);
-                if (seeds.size() > m_max_seed_size && successful_lookups > m_min_successful_lookups) {
+                m_successful_lookups += (seeds.size() > previous_size);
+                if (seeds.size() > m_max_seed_size && m_successful_lookups > m_min_successful_lookups) {
                     break;
                 }
                 previous_size = seeds.size();
@@ -576,40 +584,40 @@ namespace protal {
                     return;
                 }
 
-                if (!IdenticalIgnoreAmbig(seed_q, seed_r) && IdenticalIgnoreAmbig(KmerUtils::ReverseComplement(seed_q), seed_r)) {
+//                if (!IdenticalIgnoreAmbig(seed_q, seed_r) && IdenticalIgnoreAmbig(KmerUtils::ReverseComplement(seed_q), seed_r)) {
+//
+//                    std::cout << "Is forward? " << anchor.forward << std::endl;
+//                    std::cout << anchor.ToString() << std::endl;
+//                    std::cout << "Query: " << query << std::endl;
+//
+//                    m_error_in_read = true;
+//                    anchor.forward = !anchor.forward;
+//                    changed_once = true;
+//                }
+//
+//                if (m_error_in_read) {
+//                    std::cerr << seed.ToString() << std::endl;
+//                    std::cerr << seed_q << std::endl;
+//                    std::cerr << seed_r << std::endl;
+//                }
 
-                    std::cout << "Is forward? " << anchor.forward << std::endl;
-                    std::cout << anchor.ToString() << std::endl;
-                    std::cout << "Query: " << query << std::endl;
-
-                    m_error_in_read = true;
-                    anchor.forward = !anchor.forward;
-                    changed_once = true;
-                }
-
-                if (m_error_in_read) {
-                    std::cerr << seed.ToString() << std::endl;
-                    std::cerr << seed_q << std::endl;
-                    std::cerr << seed_r << std::endl;
-                }
-
-                if (i > 0) {
-                    auto offa1 = (seed.genepos - seed.readpos);
-                    auto offa2 = (anchor.chain[i-1].genepos - anchor.chain[i-1].readpos);
-                    int indel = abs(int(offa1) - int(offa2));
-                    if (indel > 6 || !validseed) {
-                        std::cout << "Index: " << i << std::endl;
-                        std::cout << anchor.ToString() << std::endl;
-                        std::cout << anchor.ToVisualString2() << std::endl;
-                        std::cout << "Offa1: " << offa1 << " Offa2: " << offa2 << ", Valid seed? " << validseed << std::endl;
-                        std::cout << "Indels: " << indel << std::endl;
-                        std::cout << "Previous: " << anchor.chain[i-1].ToString() << std::endl;
-                        std::cout << "Current:  " << seed.ToString() << std::endl;
-
-                        std::cout << seed_q << std::endl;
-                        std::cout << seed_r << std::endl;
-                    }
-                }
+//                if (i > 0) {
+//                    auto offa1 = (seed.genepos - seed.readpos);
+//                    auto offa2 = (anchor.chain[i-1].genepos - anchor.chain[i-1].readpos);
+//                    int indel = abs(int(offa1) - int(offa2));
+//                    if (indel > 6 || !validseed) {
+//                        std::cout << "Index: " << i << std::endl;
+//                        std::cout << anchor.ToString() << std::endl;
+//                        std::cout << anchor.ToVisualString2() << std::endl;
+//                        std::cout << "Offa1: " << offa1 << " Offa2: " << offa2 << ", Valid seed? " << validseed << std::endl;
+//                        std::cout << "Indels: " << indel << std::endl;
+//                        std::cout << "Previous: " << anchor.chain[i-1].ToString() << std::endl;
+//                        std::cout << "Current:  " << seed.ToString() << std::endl;
+//
+//                        std::cout << seed_q << std::endl;
+//                        std::cout << seed_r << std::endl;
+//                    }
+//                }
 
 
 
@@ -647,6 +655,7 @@ namespace protal {
 
             m_bm_seeding.Start();
             FindSeeds(kmer_list, seeds);
+
 //            FindSeeds2(kmer_list, seeds);
             m_bm_seeding.Stop();
 

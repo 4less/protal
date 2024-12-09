@@ -397,16 +397,16 @@ namespace protal {
                 bool valid = IsAlignmentValid(info, read, gene.Sequence());
 
                 if (!valid) {
-                    std::cerr << "Invalid no alignment\t" <<  std::endl;
-                    std::cerr << read << std::endl;
-//                    std::cerr << gene. << std::endl;
-                    std::cerr << anchor.ToString() << std::endl;
-                    std::cerr << anchor.ToVisualString2() << std::endl;
-
-                    int abs_pos = static_cast<int>(anchor.Front().genepos) - static_cast<int>(anchor.Front().readpos);
-                    m_alignment_orientation.Update(abs_pos, read.length(), gene.Sequence().length(), 0);
-                    std::string reference_str = gene.Sequence().substr(m_alignment_orientation.reference_start, m_alignment_orientation.reference_len);
-                    std::cerr << reference_str << std::endl;
+                    std::cerr << "Invalid no alignment\t" << record.header <<  std::endl;
+//                    std::cerr << read << std::endl;
+////                    std::cerr << gene. << std::endl;
+//                    std::cerr << anchor.ToString() << std::endl;
+//                    std::cerr << anchor.ToVisualString2() << std::endl;
+//
+//                    int abs_pos = static_cast<int>(anchor.Front().genepos) - static_cast<int>(anchor.Front().readpos);
+//                    m_alignment_orientation.Update(abs_pos, read.length(), gene.Sequence().length(), 0);
+//                    std::string reference_str = gene.Sequence().substr(m_alignment_orientation.reference_start, m_alignment_orientation.reference_len);
+//                    std::cerr << reference_str << std::endl;
 
                     return false;
                 }

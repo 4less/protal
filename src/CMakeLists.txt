@@ -206,13 +206,16 @@ target_include_directories(protal_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../lib/
 add_subdirectory(../lib/wfa2-lib/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa)
 add_subdirectory(../lib/wfa2-lib-2.3.4/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa2)
 add_subdirectory(../lib/gzstream/ ${CMAKE_CURRENT_SOURCE_DIR}/gzstream)
+
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries")  # Set to OFF for static build
+
 add_subdirectory(../lib/cPMML/ ${CMAKE_CURRENT_SOURCE_DIR}/cPMML)
 
 
 # Necessary to link to stdc++fs (filesystem experimental support)
 target_link_libraries(protal_lib
         LINK_PUBLIC
-        cPMML_lib
+        cPMML
         stdc++fs
         wfa_lib
         wfa2lib

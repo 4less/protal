@@ -18,6 +18,7 @@ namespace protal {
     static const size_t DEFAULT_ALIGN_TOP = 3;
     static const double DEFAULT_MAX_SCORE_ANI = 0.9;
     static const double DEFAULT_MSA_MIN_VCOV = 0.5;
+    static const size_t DEFAULT_MIN_SUCCESSFUL_LOOKUPS = 4;
     static const size_t DEFAULT_X_DROP = 1000;
     static const size_t DEFAULT_MAX_KEY_UBIQUITY = 256;
     static const size_t DEFAULT_MAX_SEED_SIZE = 128;
@@ -57,6 +58,7 @@ namespace protal {
                 ("m,max_out", "Maximum alignments that should be outputted", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_OUT)))
                 ("u,max_key_ubiquity", "Max key ubiquity. Best matching Flexkey count for seed must be lower or equal", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_KEY_UBIQUITY)))
                 ("s,max_seed_size", "Max seed size after which seeding is stopped.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_SEED_SIZE)))
+                ("w,min_successful_lookups", "If the number of seeds is >=max_seed_size and the number of successful core-mer lookups is >= min_successful_lookups, stop looking for further seeds.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MIN_SUCCESSFUL_LOOKUPS)))
                 ("a,max_score_ani", "A max score makes an alignment stop if the alignment diverges too much. This parameter estimates the score for a given ani and is a tradeoff between speed/accuracy. [ Default: " + std::to_string(DEFAULT_MAX_SCORE_ANI) + "]", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MAX_SCORE_ANI)))
                 ("x,x_drop", "Value determines when to cut of branches in the aligment process that are unpromising. [ Default: " + std::to_string(DEFAULT_X_DROP) + "]", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_X_DROP)))
                 ("e,output_top", "After alignment, alignments are sorted by score. <output_top> specifies how many alignments should be reported starting with the highest scoring alignment.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_OUTPUT_TOP)))
@@ -116,6 +118,7 @@ namespace protal {
         size_t m_x_drop = DEFAULT_X_DROP;
         size_t m_max_key_ubiquity = DEFAULT_MAX_KEY_UBIQUITY;
         size_t m_max_seed_size = DEFAULT_MAX_SEED_SIZE;
+        size_t m_min_successful_lookups = DEFAULT_MIN_SUCCESSFUL_LOOKUPS;
         size_t m_max_out = DEFAULT_MAX_OUT;
         double m_msa_min_vcov = DEFAULT_MSA_MIN_VCOV;
 
@@ -155,7 +158,7 @@ namespace protal {
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
                 std::string database_path, std::vector<std::string>& output_prefix_list, std::string full_sequence_file,
                 std::string sequence_file, std::string map_file, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
-                double msa_min_vcov, size_t x_drop, size_t max_key_ubiquity, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
+                double msa_min_vcov, size_t x_drop, size_t max_key_ubiquity, size_t min_successful_lookups, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
                 std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
                 bool force, bool verbose, std::vector<size_t> range) :
                 m_build(build),
@@ -183,6 +186,7 @@ namespace protal {
                 m_x_drop(x_drop),
                 m_max_key_ubiquity(max_key_ubiquity),
                 m_max_seed_size(max_seed_size),
+                m_min_successful_lookups(min_successful_lookups),
                 m_fastalign(fastalign),
                 m_profile_truth(std::move(profile_truth)),
                 m_benchmark_alignment(benchmark_alignment),
@@ -545,6 +549,10 @@ namespace protal {
 
         size_t GetMaxKeyUbiquity() const {
             return m_max_key_ubiquity;
+        }
+
+        size_t GetMinSuccessfulLookups() const {
+            return m_min_successful_lookups;
         }
 
         double GetMaxScoreAni() const {
@@ -969,6 +977,7 @@ namespace protal {
             size_t align_top = result["align_top"].as<size_t>();
             size_t x_drop = result["x_drop"].as<size_t>();
             size_t max_key_ubiquity = result["max_key_ubiquity"].as<size_t>();
+            size_t min_successful_lookups = result["min_successful_lookups"].as<size_t>();
             size_t max_seed_size = result["max_seed_size"].as<size_t>();
             double max_score_ani = result["max_score_ani"].as<double>();
             double msa_min_vcov = result["msa_min_vcov"].as<double>();
@@ -1111,6 +1120,7 @@ namespace protal {
                     msa_min_vcov,
                     x_drop,
                     max_key_ubiquity,
+                    min_successful_lookups,
                     max_seed_size,
                     fastalign,
                     sam_list,

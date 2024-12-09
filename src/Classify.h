@@ -363,6 +363,13 @@ namespace protal::classify {
                 anchor_finder2(kmers2, seeds2, anchors2, record2.sequence);
                 bm_anchor_finder.Stop();
 
+                thread_statistics.successful_lookups += anchor_finder1.m_successful_lookups;
+                thread_statistics.at_least_one_lookup += (anchor_finder1.m_successful_lookups > 0);
+                thread_statistics.successful_lookups += anchor_finder2.m_successful_lookups;
+                thread_statistics.at_least_one_lookup += (anchor_finder2.m_successful_lookups > 0);
+                thread_statistics.total_seeds += seeds1.size();
+                thread_statistics.total_seeds += seeds2.size();
+
                 if (!anchor_finder1.Success() || !anchor_finder2.Success()) {
                     thread_statistics.errors_anchor_finding++;
                 }
@@ -402,6 +409,15 @@ namespace protal::classify {
 
                 thread_statistics.total_anchors += anchors1.size();
                 thread_statistics.total_anchors += anchors2.size();
+
+                if (!anchors1.empty()) {
+                    thread_statistics.at_least_one_anchor += 1;
+                    thread_statistics.best_anchor_seed_count += anchors1.front().chain.size();
+                }
+                if (!anchors2.empty()) {
+                    thread_statistics.at_least_one_anchor += 1;
+                    thread_statistics.best_anchor_seed_count += anchors2.front().chain.size();
+                }
 
                 // Do Alignment
                 bm_alignment.Start();
