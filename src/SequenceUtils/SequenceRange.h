@@ -11,6 +11,7 @@
 #include <vector>
 #include <cassert>
 #include <iostream>
+#include <algorithm>
 
 using CoverageVec = std::vector<uint16_t>;
 

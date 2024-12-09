@@ -1,5 +1,5 @@
 project(protal_lib)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 
 
 set(CMAKE_EXE_LINKER_FLAGS " -lwfa -lCPMML -flto")
@@ -11,7 +11,7 @@ set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
 message(${CMAKE_CXX_FLAGS_DEBUG})
 message("CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 
-set(CMAKE_PREFIX_PATH "/usr/users/QIB_fr017/fritsche/miniconda3/envs/gcconda/" ${CMAKE_PREFIX_PATH})
+#set(CMAKE_PREFIX_PATH "/usr/users/QIB_fr017/fritsche/miniconda3/envs/gcconda/" ${CMAKE_PREFIX_PATH})
 
 # This creates the target and must be specified before using target_include etc
 add_library(protal_lib
