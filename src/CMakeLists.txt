@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(CMAKE_EXE_LINKER_FLAGS " -lwfa -lCPMML -flto")
 set(CMAKE_CXX_FLAGS_DEBUG " -pthread -ggdb -g -std=c++2a -fopenmp -Wall -mavx2 -mavx -march=native")
-set(CMAKE_CXX_FLAGS_RELEASE "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
+set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
 
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
 
@@ -146,7 +146,8 @@ target_link_directories(protal_lib
         SequenceUtils/
         Taxonomy/
         SNPs/
-        cPMML/)
+        cPMML/
+)
 
 target_include_directories(protal_lib
         PUBLIC
@@ -161,6 +162,9 @@ target_include_directories(protal_lib
         SequenceUtils/
         Taxonomy/
         SNPs/)
+
+
+
 
 
 # Adding this to the path makes find_package find the required BHM library
@@ -210,7 +214,7 @@ add_subdirectory(../lib/gzstream/ ${CMAKE_CURRENT_SOURCE_DIR}/gzstream)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries")  # Set to OFF for static build
 
 add_subdirectory(../lib/cPMML/ ${CMAKE_CURRENT_SOURCE_DIR}/cPMML)
-
+#add_subdirectory(../lib/range-v3/ ${CMAKE_CURRENT_SOURCE_DIR}/range-v3) # weird
 
 # Necessary to link to stdc++fs (filesystem experimental support)
 target_link_libraries(protal_lib

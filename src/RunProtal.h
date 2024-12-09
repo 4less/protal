@@ -1,7 +1,3 @@
-//
-// Created by fritsche on 14/08/22.
-//
-
 #pragma once
 
 #include "Profiler.h"
@@ -19,18 +15,8 @@
 #include "TaxonStatisticsOutput.h"
 #include "ProgressBar.h"
 
-// #include "Profiler/AlignmentContainer.h"
-// #include "Profiler/Profiler.h"
-
 #include "Profiler/ReadFilter.h"
 
-//#include "AnchorFinder.h"
-//#include "AlignmentStrategy.h"
-//#include "gzstream/gzstream.h"
-//#include "Profiler.h"
-//#include "Taxonomy.h"
-//#include "TaxonStatisticsOutput.h"
-//#include <math.h>
 #include <unistd.h>
 #include <algorithm>
 
@@ -1010,7 +996,9 @@ namespace protal {
 #pragma omp critical(metaout)
                         {
                             auto ac = gene_obs.AlleleSNPCounts(min_cov, min_qual_sum);
-                            auto length = ranges::count_if(region.CalculateCoverageVector(), [](auto val){ return(val >= 2);});
+
+                            auto tmp_vec = region.CalculateCoverageVector();
+                            auto length = std::count_if(tmp_vec.begin(), tmp_vec.end(), [](auto val){ return(val >= 2);});
                             *os_meta << profile.GetName() << '\t';
                             *os_meta << geneid << '\t';
                             *os_meta << "gene" << geneid << '\t';

@@ -8,7 +8,8 @@
 #include <fstream>
 #include <err.h>
 #include <KmerUtils.h>
-#include <ranges>
+
+
 #include <sparse_set.h>
 
 #include "Utils.h"
@@ -176,14 +177,22 @@ namespace protal {
             return m_hittable_genes.empty() ? true : m_hittable_genes.contains(geneid);
         }
 
-        size_t GenesWithShortUniques(size_t threshold=0) {
-            return ranges::count_if(m_genes, [threshold](Gene const& gene) { return gene.HasShortUniques(threshold); });
+        size_t GenesWithShortUniques(size_t threshold = 0) {
+            return std::count_if(m_genes.begin(), m_genes.end(), [threshold](Gene const& gene) {
+                return gene.HasShortUniques(threshold);
+            });
         }
-        size_t GenesWithLongUniques(size_t threshold=0) const {
-            return ranges::count_if(m_genes, [threshold](Gene const& gene) { return gene.HasLongUniques(threshold); });
+
+        size_t GenesWithLongUniques(size_t threshold = 0) const {
+            return std::count_if(m_genes.begin(), m_genes.end(), [threshold](Gene const& gene) {
+                return gene.HasLongUniques(threshold);
+            });
         }
-        size_t GenesWithLongSuperUniques(size_t threshold=0) const {
-            return ranges::count_if(m_genes, [threshold](Gene const& gene) { return gene.HasLongSuperUniques(threshold); });
+
+        size_t GenesWithLongSuperUniques(size_t threshold = 0) const {
+            return std::count_if(m_genes.begin(), m_genes.end(), [threshold](Gene const& gene) {
+                return gene.HasLongSuperUniques(threshold);
+            });
         }
 
         std::vector<uint32_t> GetHittableGenes() {
@@ -326,8 +335,9 @@ namespace protal {
             }
             is.close();
 
-            for (auto& tid : views::keys(m_genomes)) {
-                m_genomes.at(tid).SetUniqueValues();
+
+            for (auto& tid : m_genomes) {
+                m_genomes.at(tid.first).SetUniqueValues();
             }
 
             // PrintHittableGenes();
