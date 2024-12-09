@@ -4,8 +4,10 @@
 
 #pragma once
 
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include <string>
-#include <istream>
+//#include <istream>
 #include <iostream>
 #include "wfa2-lib/bindings/cpp/WFAligner.hpp"
 //#include "wfa2-lib-2.3.4/bindings/cpp/WFAligner.hpp"

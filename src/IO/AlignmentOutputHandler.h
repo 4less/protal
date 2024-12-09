@@ -4,8 +4,9 @@
 
 #pragma once
 
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include "WFA2Wrapper.h"
-#include <cstdint>
 #include <string>
 #include <vector>
 #include "Constants.h"
@@ -15,7 +16,6 @@
 #include "FastxReader.h"
 #include "SamHandler.h"
 #include "SNP.h"
-//#include <htslib/sam.h>
 #include "AlignmentUtils.h"
 #include "SNPUtils.h"
 

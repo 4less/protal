@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <cstdint>
-#include <cstddef>
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include <assert.h>
 #include <string>
 #include <bitset>

@@ -19,6 +19,7 @@
 
 #include <unistd.h>
 #include <algorithm>
+#include <string_view>
 
 namespace protal {
 

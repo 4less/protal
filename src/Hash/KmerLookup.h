@@ -4,6 +4,8 @@
 
 #pragma once
 
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include "Seedmap.h"
 #include "Constants.h"
 
