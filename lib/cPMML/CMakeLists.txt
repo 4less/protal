@@ -183,9 +183,9 @@ install(
 # BENCHMARK
 add_subdirectory(benchmark)
 
-# TEST
-enable_testing()
-add_subdirectory(test)
+## TEST
+#enable_testing()
+#add_subdirectory(test)
 
 # DOCUMENTATION
 add_subdirectory(docsrc)

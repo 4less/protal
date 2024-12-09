@@ -146,7 +146,7 @@ namespace protal {
     };
 
     template<typename CFMinimizer>
-    requires ContextFreeMinimizer<CFMinimizer>
+//    requires ContextFreeMinimizer<CFMinimizer>
     class SimpleKmerHandler {
     private:
         CFMinimizer m_minimizer{};

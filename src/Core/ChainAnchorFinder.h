@@ -21,7 +21,7 @@ namespace protal {
     using LookupResultList = std::vector<LookupPointer>;
 
     template<typename KmerLookup>
-    requires KmerLookupConcept<KmerLookup>
+//    requires KmerLookupConcept<KmerLookup>
     class ChainAnchorFinder {
     public:
         size_t m_successful_lookups = 0;

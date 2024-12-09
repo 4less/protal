@@ -98,7 +98,8 @@ add_library(protal_lib
 #        Profiler/Taxon.cpp
 #        Profiler/Taxon.h
         Profiler/ReadFilter.h
-        Alignment/WFA2Wrapper2.h)
+        Alignment/WFA2Wrapper2.h
+        Profiler/ProfilerDefinitions.h)
 
 
 set_target_properties(protal_lib PROPERTIES LINKER_LANGUAGE CXX)

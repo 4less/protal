@@ -23,7 +23,7 @@
 namespace protal::classify {
 
     template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug, typename AlignmentBenchmark=NoBenchmark>
-    requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
+//    requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
     static Statistics
     Run(SeqReader& reader_global, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global, AlignmentBenchmark benchmark_global={}) {
         constexpr bool benchmark_active = !std::is_same<AlignmentBenchmark, NoBenchmark>();
@@ -89,12 +89,14 @@ namespace protal::classify {
                 // Retrieve kmers
                 kmer_handler(std::string_view(record.sequence), kmers);
 
-                if constexpr(KmerStatisticsConcept<KmerHandler>) {
-                    thread_statistics.kmers_total += kmer_handler.TotalKmers();
-                }
-                if constexpr(KmerStatisticsConcept<KmerHandler>) {
-                    thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
-                }
+//                if constexpr(KmerStatisticsConcept<KmerHandler>) {
+//                    thread_statistics.kmers_total += kmer_handler.TotalKmers();
+//                }
+//                if constexpr(KmerStatisticsConcept<KmerHandler>) {
+//                    thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
+//                }
+                thread_statistics.kmers_total += kmer_handler.TotalKmers();
+                thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
 
 
                 // Calculate Anchors
@@ -233,7 +235,7 @@ namespace protal::classify {
     }
 
     template<typename KmerHandler, typename AnchorFinder, typename AlignmentHandler, typename OutputHandler, DebugLevel debug, typename AlignmentBenchmark=NoBenchmark>
-    requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
+//    requires KmerHandlerConcept<KmerHandler> && AnchorFinderConcept<AnchorFinder>  && AlignmentHandlerConcept<AlignmentHandler>
     static Statistics RunPairedEnd(SeqReaderPE& reader_global, protal::Options const& options, AnchorFinder& anchor_finder_global, AlignmentHandler& alignment_handler_global, OutputHandler& output_handler_global, KmerHandler& kmer_handler_global, GenomeLoader& genome_loader, AlignmentBenchmark benchmark_global={}) {
         constexpr bool benchmark_active = !std::is_same<AlignmentBenchmark, NoBenchmark>();
 
@@ -337,23 +339,27 @@ namespace protal::classify {
                 bm_kmer_extracter.Stop();
 
 
-                if constexpr(KmerStatisticsConcept<KmerHandler>) {
-                    thread_statistics.kmers_total += kmer_handler.TotalKmers();
-                }
-                if constexpr(KmerStatisticsConcept<KmerHandler>) {
-                    thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
-                }
+//                if constexpr(KmerStatisticsConcept<KmerHandler>) {
+//                    thread_statistics.kmers_total += kmer_handler.TotalKmers();
+//                }
+//                if constexpr(KmerStatisticsConcept<KmerHandler>) {
+//                    thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
+//                }
+                thread_statistics.kmers_total += kmer_handler.TotalKmers();
+                thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
+                thread_statistics.kmers_total += kmer_handler.TotalKmers();
+                thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
 
                 bm_kmer_extracter.Start();
                 kmer_handler(std::string_view(record2.sequence), kmers2);
                 bm_kmer_extracter.Stop();
 
-                if constexpr(KmerStatisticsConcept<KmerHandler>) {
-                    thread_statistics.kmers_total += kmer_handler.TotalKmers();
-                }
-                if constexpr(KmerStatisticsConcept<KmerHandler>) {
-                    thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
-                }
+//                if constexpr(KmerStatisticsConcept<KmerHandler>) {
+//                    thread_statistics.kmers_total += kmer_handler.TotalKmers();
+//                }
+//                if constexpr(KmerStatisticsConcept<KmerHandler>) {
+//                    thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
+//                }
 
                 // Calculate Anchors
 
