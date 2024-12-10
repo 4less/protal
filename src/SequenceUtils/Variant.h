@@ -3,8 +3,7 @@
 //
 
 #pragma once
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
+#include "Constants.h"
 #include <string>
 #include <vector>
 #include <numeric>

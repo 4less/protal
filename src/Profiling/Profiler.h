@@ -4,11 +4,8 @@
 
 #pragma once
 
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
 #include "Strain.h"
 #include "AlignmentUtils.h"
-#include <cstddef>
 #include <vector>
 #include <sparse_map.h>
 #include <numeric>
@@ -26,6 +23,7 @@
 #include "cPMML.h"
 #include "sparse_map.h"
 #include "Benchmark.h"
+#include <string>
 
 namespace protal {
     bool IsDigit(std::string &test) {
@@ -46,7 +44,12 @@ namespace protal {
             LineSplitter::Split(line, delim, tokens);
             if (lineage_column == -1) {
                 for (auto i = 0; i < tokens.size(); i++) {
-                    if (tokens[i].starts_with("d__") || tokens[i].starts_with("s__")) {
+//                    if (tokens[i].starts_with("d__") || tokens[i].starts_with("s__")) {
+//                        lineage_column = i;
+//                        break;
+//                    }
+                    if ((tokens[i].size() >= 3 && tokens[i].compare(0, 3, "d__") == 0) ||
+                        (tokens[i].size() >= 3 && tokens[i].compare(0, 3, "s__") == 0)) {
                         lineage_column = i;
                         break;
                     }
@@ -64,9 +67,13 @@ namespace protal {
             LineSplitter::Split(lineage_str, ";", tokens);
             std::string species = "";
             for (auto& e : tokens) {
-                if (e.starts_with("s__")) {
+                if (e.size() >= 3 && e.compare(0, 3, "s__") == 0) {
                     species = e;
                 }
+
+//                if (e.starts_with("s__")) {
+//                    species = e;
+//                }
             }
             if (species == "s__") {
                 std::cerr << "No Species classification in Gold Profile: " << line << std::endl;
@@ -161,7 +168,7 @@ namespace protal {
 
             size_t Coverage(size_t above=0) {
                 auto cov_vec = GetStrainLevel().GetSequenceRangeHandler().CalculateCoverageVector2();
-                auto cov = ranges::count_if(cov_vec, [above](const uint16_t e){ return e > above; });
+                auto cov = std::count_if(cov_vec.begin(), cov_vec.end(), [above](const uint16_t e){ return e > above; });
                 return cov;
             }
 

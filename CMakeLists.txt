@@ -37,13 +37,13 @@ include_directories(src/ lib/)
 add_executable(protal
         src/main.cpp
         protal_config.h.in)
-set_target_properties(protal PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas")
+set_target_properties(protal PROPERTIES COMPILE_FLAGS "-std=c++17 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas")
 
 add_executable(protal_avx2
         src/main.cpp
         protal_config.h.in)
 #target_compile_options(protal_avx2 PRIVATE -std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx)
-set_target_properties(protal_avx2 PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx")
+set_target_properties(protal_avx2 PROPERTIES COMPILE_FLAGS "-std=c++17 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx")
 
 
 # Link to cmake file in src

@@ -12,11 +12,11 @@
 
 namespace protal {
 
-    template <typename T>
-    concept IsConceptFreeMinimizer =
-    requires(T t, size_t s) {
-        { t.IsMinimizer(s) } -> std::same_as<bool>;
-    };
+//    template <typename T>
+//    concept IsConceptFreeMinimizer =
+//    requires(T t, size_t s) {
+//        { t.IsMinimizer(s) } -> std::same_as<bool>;
+//    };
 
 
     class None {};

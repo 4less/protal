@@ -778,7 +778,8 @@ namespace protal {
 
             if (row.empty()) continue;
             os << ">" << names[i] << std::endl;
-            os << std::string_view(row.begin(), row.end()) << std::endl;
+            os << std::string_view(&row[0], std::distance(row.begin(), row.end())) << std::endl;
+//            os << std::string_view(row.begin(), row.end()) << std::endl;
         }
     }
 
@@ -1062,7 +1063,10 @@ namespace protal {
 
             if (!IsRowGood(row, min_hcov)) continue;
             os << ">" << names[i] << std::endl;
-            os << std::string_view(row.begin(), row.end()) << std::endl;
+
+            os << std::string_view(&row[0], std::distance(row.begin(), row.end())) << std::endl;
+//
+//            os << std::string_view(row.begin(), row.end()) << std::endl;
         }
         os.close();
         std::cout << " Saved MSA to " << options.GetMSAOutput(taxon_name);

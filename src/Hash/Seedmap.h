@@ -4,8 +4,7 @@
 
 #pragma once
 
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
+#include <Constants.h>
 #include <assert.h>
 #include <string>
 #include <bitset>
@@ -14,6 +13,7 @@
 #include <fstream>
 #include "Utils.h"
 #include <bit>
+#include <bits/stdc++.h>
 
 namespace protal {
     template<uint64_t taxid_bits, uint64_t geneid_bits, uint64_t genepos_bits>
@@ -587,7 +587,8 @@ namespace protal {
 //            return std::popcount(((~(a ^ b) >> 1) & ~(a ^ b)) & 0b00000000010101010101010101010101);
 //        }
         static uint32_t Similarity(uint32_t a, uint32_t b) {
-            return std::popcount(((~(a ^ b) >> 1) & ~(a ^ b)) & 0b01010101010101010101010101010101);
+            return __builtin_popcount(((~(a ^ b) >> 1) & ~(a ^ b)) & 0b01010101010101010101010101010101);
+//            return std::popcount(((~(a ^ b) >> 1) & ~(a ^ b)) & 0b01010101010101010101010101010101);
         }
 
         bool PutOMP(uint64_t &key, uint64_t &taxid, uint64_t &geneid, uint64_t &genepos) {

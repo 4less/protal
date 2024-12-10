@@ -116,62 +116,64 @@ namespace protal::build {
         }
 
         std::cout << "Run Build" << std::endl;
-        if constexpr(protal::HasFirstPut<KmerPutter>) {
+//        if constexpr(protal::HasFirstPut<KmerPutter>) {
+        if (true) {
 #pragma omp parallel default(none) shared(std::cout, options, is, dummy, read_count, kmer_handler_global, statistics, putter, main_k_bits, flex_k_bits)
-            {
-                // Private variables
-                FastxRecord record;
+                {
+                    // Private variables
+                    FastxRecord record;
 
-                // Extract variables from kmi_global
-                KmerHandler kmer_handler(kmer_handler_global);
-                SeqReader reader{ is };
-                Statistics thread_statistics;
-                thread_statistics.thread_num = omp_get_thread_num();
+                    // Extract variables from kmi_global
+                    KmerHandler kmer_handler(kmer_handler_global);
+                    SeqReader reader{ is };
+                    Statistics thread_statistics;
+                    thread_statistics.thread_num = omp_get_thread_num();
 
-                KmerList kmers;
+                    KmerList kmers;
 
-                std::cout << "Build: iterate records" << std::endl;
+                    std::cout << "Build: iterate records" << std::endl;
 
-                while (reader(record)) {
-                    thread_statistics.reads++;
+                    while (reader(record)) {
+                        thread_statistics.reads++;
 
-                    // Retrieve kmers
-                    kmers.clear();
-                    kmer_handler(std::string_view(record.sequence), kmers);
-                    for (auto pair : kmers) {
-                        putter.FirstPut(pair.first);
+                        // Retrieve kmers
+                        kmers.clear();
+                        kmer_handler(std::string_view(record.sequence), kmers);
+                        for (auto pair : kmers) {
+                            putter.FirstPut(pair.first);
+                        }
+
+                        //                    if constexpr(KmerStatisticsConcept<KmerHandler>) {
+                        //                        thread_statistics.kmers_total += kmer_handler.TotalKmers();
+                        //                    }
+                        //
+                        //                    if constexpr(KmerStatisticsConcept<KmerHandler>) {
+                        //                        thread_statistics.kmers_accepted += kmers.size();
+                        //                    }
+                        //
+                        //                    if constexpr(debug == DEBUG_VERBOSE) {
+                        //                        thread_statistics.WriteStats(std::cout);
+                        //                    }
+                        //                    if constexpr(debug == DEBUG_EXTRAVERBOSE) {
+                        //
+                        //                    }
+
+
+
+                        thread_statistics.kmers_total += kmer_handler.TotalKmers();
+                        thread_statistics.kmers_accepted += kmers.size();
+                        thread_statistics.WriteStats(std::cout);
                     }
 
-//                    if constexpr(KmerStatisticsConcept<KmerHandler>) {
-//                        thread_statistics.kmers_total += kmer_handler.TotalKmers();
-//                    }
-//
-//                    if constexpr(KmerStatisticsConcept<KmerHandler>) {
-//                        thread_statistics.kmers_accepted += kmers.size();
-//                    }
-//
-//                    if constexpr(debug == DEBUG_VERBOSE) {
-//                        thread_statistics.WriteStats(std::cout);
-//                    }
-//                    if constexpr(debug == DEBUG_EXTRAVERBOSE) {
-//
-//                    }
-
-
-
-                    thread_statistics.kmers_total += kmer_handler.TotalKmers();
-                    thread_statistics.kmers_accepted += kmers.size();
-                    thread_statistics.WriteStats(std::cout);
+#pragma omp critical(statistics)
+                    statistics.Join(thread_statistics);
+                    std::cout << "minimizers: " << thread_statistics.kmers_accepted << std::endl;
                 }
 
-#pragma omp critical(statistics)
-                statistics.Join(thread_statistics);
-                std::cout << "minimizers: " << thread_statistics.kmers_accepted << std::endl;
-            }
+                // E.g. if k-mers are counted before they are inserted, call Initialize for put
+                // To calculate the bucket sizes
+                putter.InitializeForPut();
 
-            // E.g. if k-mers are counted before they are inserted, call Initialize for put
-            // To calculate the bucket sizes
-            putter.InitializeForPut();
         }
 
         // Make sure input stream is reset to start

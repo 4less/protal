@@ -86,7 +86,7 @@ public:
     }
 
     bool HasName(std::string& name) {
-        return m_row_names_to_index.contains(name);
+        return m_row_names_to_index.count(name) > 0;
     }
 
     bool HasIdx(uint32_t index) {

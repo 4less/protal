@@ -18,19 +18,19 @@ namespace protal {
 //        { t.FirstPut(s, s, s, s) } -> std::same_as<void>;
 //    };
 
-
-    template <typename T>
-    concept HasPut =
-            requires(T t, size_t s) {
-                { t.Put(s, s, s, s) } -> std::same_as<void>;
-            };
-
-    template <typename T>
-    concept HasFirstPut =
-            requires(T t, size_t s) {
-                { t.FirstPut(s) } -> std::same_as<void>;
-                { t.InitializeForPut() } -> std::same_as<void>;
-            };
+//
+//    template <typename T>
+//    concept HasPut =
+//            requires(T t, size_t s) {
+//                { t.Put(s, s, s, s) } -> std::same_as<void>;
+//            };
+//
+//    template <typename T>
+//    concept HasFirstPut =
+//            requires(T t, size_t s) {
+//                { t.FirstPut(s) } -> std::same_as<void>;
+//                { t.InitializeForPut() } -> std::same_as<void>;
+//            };
 
     class KmerPutterSM {
         Seedmap m_sm;

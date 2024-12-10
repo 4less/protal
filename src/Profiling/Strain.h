@@ -11,6 +11,7 @@
 #include <unordered_set>
 #include "VariantHandler.h"
 #include "SequenceRangeHandler.h"
+#include <string_view>
 
 namespace protal {
     static Variant& GetConsensusCall(VariantBin& bin) {
@@ -656,9 +657,9 @@ namespace protal {
                 size_t show = 200;
                 size_t start = first_len < show ? 0 : first_len - show;
                 auto index = 0;
-                for (auto& row : msa) {
-                    std::cout << index++ << " " << row.size() << std::string_view(row.begin() + start, row.end()) << std::endl;
-                }
+//                for (auto& row : msa) {
+//                    std::cout << index++ << " " << row.size() << std::string_view(row.begin() + start, row.end()) << std::endl;
+//                }
                 std::cout << "CURRENT INDEL" << std::endl;
                 Utils::Input();
             }

@@ -601,7 +601,10 @@ namespace protal {
                 splitter.Split(line);
                 auto& tokens = splitter.Tokens();
                 // Header
-                if (line.starts_with('#')) {
+
+
+                if (line.size() >= 1 && line.compare(0, 1, "#") == 0) {
+                //if (line.starts_with('#')) {
                     // Check if header is expected
                     if (!header) {
                         std::cerr << "Line " << line_num << ": Did not expect header line but line starts with #" << std::endl;
@@ -1046,14 +1049,24 @@ namespace protal {
                     prefix_list.resize(sam_list.size());
                     for (auto i = 0; i < sam_list.size(); i++) {
                         auto& sam_file = sam_list[i];
-                        if (sam_file.ends_with(".sam")) {
-                            prefix_list[i] = sam_file.substr(0, sam_file.length() - 4);
-                        } else if (sam_file.ends_with(".sam.gz")) {
-                            prefix_list[i] = sam_file.substr(0, sam_file.length() - 7);
+
+                        if (sam_file.size() >= 4 && sam_file.compare(sam_file.size() - 4, 4, ".sam") == 0) {
+                            prefix_list[i] = sam_file.substr(0, sam_file.size() - 4);
+                        } else if (sam_file.size() >= 7 && sam_file.compare(sam_file.size() - 7, 7, ".sam.gz") == 0) {
+                            prefix_list[i] = sam_file.substr(0, sam_file.size() - 7);
                         } else {
-                            std::cerr << sam_file << " does not end on .sam" << std::endl;
+                            std::cerr << sam_file << " does not end with .sam" << std::endl;
                             exit(35);
                         }
+
+//                        if (sam_file.ends_with(".sam")) {
+//                            prefix_list[i] = sam_file.substr(0, sam_file.length() - 4);
+//                        } else if (sam_file.ends_with(".sam.gz")) {
+//                            prefix_list[i] = sam_file.substr(0, sam_file.length() - 7);
+//                        } else {
+//                            std::cerr << sam_file << " does not end on .sam" << std::endl;
+//                            exit(35);
+//                        }
                     }
                 }
 

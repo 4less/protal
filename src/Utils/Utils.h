@@ -14,8 +14,6 @@
 #include <iostream>
 #include <emmintrin.h>
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <time.h>
 #include <fstream>
 
