@@ -4,8 +4,9 @@
 
 #pragma once
 
-#include <cstdint>
-#include <cstddef>
+
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include <iostream>
 #include <err.h>
 #include <sysexits.h>

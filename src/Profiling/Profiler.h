@@ -4,9 +4,10 @@
 
 #pragma once
 
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include "Strain.h"
 #include "AlignmentUtils.h"
-#include <cstdint>
 #include <cstddef>
 #include <vector>
 #include <sparse_map.h>
