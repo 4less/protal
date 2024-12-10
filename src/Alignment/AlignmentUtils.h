@@ -4,7 +4,8 @@
 
 #pragma once
 
-//#include "AlignmentOutputHandler.h"
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include <iostream>
 #include "assert.h"
 #include "SamHandler.h"

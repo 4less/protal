@@ -364,9 +364,14 @@ namespace protal {
     }
 
     static size_t GetValidBases(CoverageVecs const& covs, uint32_t min_cov) {
-        return ranges::count_if(covs, [min_cov](auto const& cv) {
-            return ranges::count_if(cv, [min_cov](auto c){ return c >= min_cov; });
+
+        return std::count_if(covs.begin(), covs.end(), [min_cov](auto const& cv) {
+            return std::count_if(cv.begin(), cv.end(), [min_cov](auto c){ return c >= min_cov; });
         });
+//
+//        return ranges::count_if(covs, [min_cov](auto const& cv) {
+//            return ranges::count_if(cv, [min_cov](auto c){ return c >= min_cov; });
+//        });
     }
 
     static std::vector<bool> HasVariantVector(MSASequenceItems const& items, std::string const& reference) {
