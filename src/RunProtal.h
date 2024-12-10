@@ -17,7 +17,6 @@
 
 #include "Profiler/ReadFilter.h"
 
-#include <unistd.h>
 #include <algorithm>
 #include <string_view>
 

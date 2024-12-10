@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include <cstdint>
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include <cstddef>
 #include <xxhash64.h>
 #include <iostream>
