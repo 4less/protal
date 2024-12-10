@@ -4,8 +4,7 @@
 
 #pragma once
 
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
+
 #include "WFA2Wrapper.h"
 #include <string>
 #include <vector>
