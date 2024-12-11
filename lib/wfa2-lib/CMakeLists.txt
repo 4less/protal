@@ -1,9 +1,9 @@
 project(wfa_lib)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 
-set(CMAKE_EXE_LINKER_FLAGS "-lz")
-set(CMAKE_CXX_FLAGS_DEBUG "-pthread -ggdb -g -std=c++2a -fopenmp -Wall")
-set(CMAKE_CXX_FLAGS_RELEASE "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -march=native -mavx2")
+set(CMAKE_EXE_LINKER_FLAGS " -lrt -lz")
+set(CMAKE_CXX_FLAGS_DEBUG "-pthread -ggdb -g -std=c++17 -fopenmp -Wall")
+set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -march=native -mavx2")
 
 
 file (GLOB wfa_sources
@@ -26,13 +26,8 @@ message("${wfa_sources}")
 
 # This creates the target and must be specified before using target_include etc
 add_library(wfa_lib
+        SHARED # This makes library shared!!!! default would be static
         ${wfa_sources}
-#        alignment/
-#        wavefront/
-#        system/
-#        scripts/
-#        bindings/
-#        utils/
         )
 
 

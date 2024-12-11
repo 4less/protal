@@ -6,7 +6,8 @@ set(CMAKE_EXE_LINKER_FLAGS " -lwfa -lCPMML -flto")
 set(CMAKE_CXX_FLAGS_DEBUG " -pthread -ggdb -g -std=c++2a -fopenmp -Wall -mavx2 -mavx -march=native")
 set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
 
-set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
+#set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".so")
 
 message(${CMAKE_CXX_FLAGS_DEBUG})
 message("CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
@@ -183,7 +184,7 @@ target_include_directories(protal_lib
 
 message("${CMAKE_SYSTEM_PREFIX_PATH}")
 
-set(ZLIB_USE_STATIC_LIBS "ON")
+#set(ZLIB_USE_STATIC_LIBS "ON")
 find_package(ZLIB REQUIRED)
 
 
@@ -209,7 +210,7 @@ target_include_directories(protal_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../lib/
 
 # Add-Subdirectory with ${CMAKE_CURRENT_SOURCE_DIR}/
 add_subdirectory(../lib/wfa2-lib/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa)
-add_subdirectory(../lib/wfa2-lib-2.3.4/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa2)
+#add_subdirectory(../lib/wfa2-lib-2.3.4/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa2)
 add_subdirectory(../lib/gzstream/ ${CMAKE_CURRENT_SOURCE_DIR}/gzstream)
 
 #set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries")  # Set to OFF for static build
@@ -223,7 +224,7 @@ target_link_libraries(protal_lib
         cPMML
         stdc++fs
         wfa_lib
-        wfa2lib
+#        wfa2lib
         gzstream_lib
         ZLIB::ZLIB
         #-static # WITHOUT THIS IT WILL NOT COMPILE INTO A STATIC LIBRARY
