@@ -212,7 +212,7 @@ add_subdirectory(../lib/wfa2-lib/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa)
 add_subdirectory(../lib/wfa2-lib-2.3.4/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa2)
 add_subdirectory(../lib/gzstream/ ${CMAKE_CURRENT_SOURCE_DIR}/gzstream)
 
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries")  # Set to OFF for static build
+#set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries")  # Set to OFF for static build
 
 add_subdirectory(../lib/cPMML/ ${CMAKE_CURRENT_SOURCE_DIR}/cPMML)
 #add_subdirectory(../lib/range-v3/ ${CMAKE_CURRENT_SOURCE_DIR}/range-v3) # weird
@@ -226,7 +226,7 @@ target_link_libraries(protal_lib
         wfa2lib
         gzstream_lib
         ZLIB::ZLIB
-        -static # WITHOUT THIS IT WILL NOT COMPILE INTO A STATIC LIBRARY
+        #-static # WITHOUT THIS IT WILL NOT COMPILE INTO A STATIC LIBRARY
         )
 
 message("CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")

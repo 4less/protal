@@ -45,8 +45,6 @@ namespace Profiler {
             return id == SIZE_MAX;
         }
     };
-
-
 }
 
 
