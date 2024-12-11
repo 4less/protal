@@ -188,10 +188,15 @@ message("Build dir: ${CMAKE_BINARY_DIR}/src/cPMML/")
 message("CPMML: ${cPMML}")
 
 
+# Add this before target_link_libraries
+find_library(RT_LIBRARY rt)
+
+message("RT LIB: ${RT_LIBRARY}")
+
 # Necessary to link to stdc++fs (filesystem experimental support)
 target_link_libraries(protal_lib
         LINK_PUBLIC
-#        ${CPMML_LIBRARY}
+        ${RT_LIBRARY}
         cPMML
         stdc++fs
         wfa_lib
