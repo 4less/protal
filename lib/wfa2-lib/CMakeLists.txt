@@ -26,7 +26,8 @@ message("${wfa_sources}")
 
 # This creates the target and must be specified before using target_include etc
 add_library(wfa_lib
-        SHARED # This makes library shared!!!! default would be static
+#        SHARED # This makes library shared!!!! default would be static
+        STATIC
         ${wfa_sources}
         )
 

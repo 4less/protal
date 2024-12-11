@@ -183,6 +183,8 @@ install(
 # BENCHMARK
 add_subdirectory(benchmark)
 
+message("Lib dir? ${CMAKE_INSTALL_LIBDIR}")
+
 ## TEST
 #enable_testing()
 #add_subdirectory(test)

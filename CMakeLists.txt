@@ -5,6 +5,8 @@ message("CONDA_PREFIX: $ENV{CONDA_PREFIX}")
 message("PATH: $ENV{PATH}")
 message("HOST: $ENV{HOST}")
 message("PREFIX: $ENV{PREFIX}")
+message("PROJECT_SOURCE: ${PROJECT_SOURCE_DIR}")
+
 
 # god-awful hack because it seems to not run correct tests to determine this:
 set(__CHAR_UNSIGNED___EXITCODE 1)
@@ -21,6 +23,7 @@ message("CONDA_PREFIX: $ENV{CONDA_PREFIX}")
 message("PATH: $ENV{PATH}")
 message("HOST: $ENV{HOST}")
 message("PREFIX: $ENV{PREFIX}")
+message("ProjectSource: ${PROJECT_SOURCE_DIR}/src/protal_config.h")
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -44,6 +47,7 @@ add_executable(protal_avx2
         protal_config.h.in)
 #target_compile_options(protal_avx2 PRIVATE -std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx)
 set_target_properties(protal_avx2 PROPERTIES COMPILE_FLAGS "-std=c++17 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx")
+
 
 
 # Link to cmake file in src

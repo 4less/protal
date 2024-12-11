@@ -2,12 +2,12 @@ project(protal_lib)
 set(CMAKE_CXX_STANDARD 17)
 
 
-set(CMAKE_EXE_LINKER_FLAGS " -lwfa -lCPMML -flto")
+set(CMAKE_EXE_LINKER_FLAGS " -lcPMML -lwfa -flto")
 set(CMAKE_CXX_FLAGS_DEBUG " -pthread -ggdb -g -std=c++2a -fopenmp -Wall -mavx2 -mavx -march=native")
 set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
 
-#set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
-set(CMAKE_FIND_LIBRARY_SUFFIXES ".so")
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
+#set(CMAKE_FIND_LIBRARY_SUFFIXES ".so")
 
 message(${CMAKE_CXX_FLAGS_DEBUG})
 message("CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
@@ -16,68 +16,68 @@ message("CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 
 # This creates the target and must be specified before using target_include etc
 add_library(protal_lib
-        RunProtal.h
-        Options.h
-        Build.h
-        Classify.h
-        Utils/Benchmark.h
-        Utils/Utils.h
-        Utils/ProgressBar.h
-        Utils/xxhash64.h
-        Utils/BinaryClassifierEvaluator.h
-        Utils/LineSplitter.h
-        SequenceUtils/SeqReader.h
-        SequenceUtils/KmerIterator.h
-        SequenceUtils/KmerUtils.h
-        SequenceUtils/Minimizer.h
-        Hash/compact_map.h
-        Hash/compact_map.cpp
-        Hash/compact_map_utils.h
-        Hash/Seedmap.h
-        Hash/SeedmapFlex.h
-        Hash/KmerPutter.h
-        Hash/KmerLookup.h
-        Profiling/Profiler.h
-        Profiling/ProfilerOptions.h
-        SequenceUtils/GenomeLoader.h
-        IO/AlignmentOutputHandler.h
-        Alignment/WFA2Wrapper.h
-        Alignment/FastAlignment.h
-        Alignment/InternalReadAlignment.h
-        Alignment/ScoreAlignments.h
-        Alignment/AlignmentUtils.h
-        Core/CoreBenchmark.h
-        IO/FastxReader.h
-        IO/FastxReader.cpp
-        IO/SamHandler.h
-        IO/SamHandler.h
-        IO/BufferedOutput.h
-        IO/BufferedOutput.cpp
-        Core/SeedingStrategy.h
-        Core/ChainingStrategy.h
-        Core/AnchorFinder.h
-        Core/ChainAnchorFinder.h
-        Core/AlignmentStrategy.h
-        VarkitInterface/VarkitInterface.h
-        Taxonomy/Taxonomy.h
-        Taxonomy/Taxonomy.cpp
-        Statistics.h
-        Constants.h
-        SNPs/SNP.h
-        SNPs/SNPUtils.h
-        Test.h
-        SequenceUtils/SequenceRange.h
-        SequenceUtils/SequenceRange.cpp
-        SequenceUtils/SequenceRangeHandler.h
-        SequenceUtils/SequenceRangeHandler.cpp
-        Profiling/Strain.h
-        SequenceUtils/Variant.h
-        SequenceUtils/VariantHandler.h
-        Strains/Distances.h
-        IO/TaxonStatisticsOutput.h
-        Utils/Matrix.h
-        Strains/MSA.h
-        Profiling/TreeFilter.h
+        ../RunProtal.h
+        ../Options.h
+        ../Build.h
+        ../Classify.h
+        ../Utils/Benchmark.h
+        ../Utils/Utils.h
+        ../Utils/ProgressBar.h
+        ../Utils/xxhash64.h
+        ../Utils/BinaryClassifierEvaluator.h
+        ../Utils/LineSplitter.h
+        ../SequenceUtils/SeqReader.h
+        ../SequenceUtils/KmerIterator.h
+        ../SequenceUtils/KmerUtils.h
+        ../SequenceUtils/Minimizer.h
+        ../Hash/compact_map.h
+        ../Hash/compact_map.cpp
+        ../Hash/compact_map_utils.h
+        ../Hash/Seedmap.h
+        ../Hash/SeedmapFlex.h
+        ../Hash/KmerPutter.h
+        ../Hash/KmerLookup.h
+        ../Profiling/Profiler.h
+        ../Profiling/ProfilerOptions.h
+        ../SequenceUtils/GenomeLoader.h
+        ../IO/AlignmentOutputHandler.h
+        ../Alignment/WFA2Wrapper.h
+        ../Alignment/FastAlignment.h
+        ../Alignment/InternalReadAlignment.h
+        ../Alignment/ScoreAlignments.h
+        ../Alignment/AlignmentUtils.h
+        ../Core/CoreBenchmark.h
+        ../IO/FastxReader.h
+        ../IO/FastxReader.cpp
+        ../IO/SamHandler.h
+        ../IO/SamHandler.h
+        ../IO/BufferedOutput.h
+        ../IO/BufferedOutput.cpp
+        ../Core/SeedingStrategy.h
+        ../Core/ChainingStrategy.h
+        ../Core/AnchorFinder.h
+        ../Core/ChainAnchorFinder.h
+        ../Core/AlignmentStrategy.h
+        ../VarkitInterface/VarkitInterface.h
+        ../Taxonomy/Taxonomy.h
+        ../Taxonomy/Taxonomy.cpp
+        ../Statistics.h
+        ../Constants.h
+        ../SNPs/SNP.h
+        ../SNPs/SNPUtils.h
+        ../Test.h
+        ../SequenceUtils/SequenceRange.h
+        ../SequenceUtils/SequenceRange.cpp
+        ../SequenceUtils/SequenceRangeHandler.h
+        ../SequenceUtils/SequenceRangeHandler.cpp
+        ../Profiling/Strain.h
+        ../SequenceUtils/Variant.h
+        ../SequenceUtils/VariantHandler.h
+        ../Strains/Distances.h
+        ../IO/TaxonStatisticsOutput.h
+        ../Utils/Matrix.h
+        ../Strains/MSA.h
+        ../Profiling/TreeFilter.h
 #        Profiling/ProfilerNew.cpp
 #        Profiling/ProfilerNew.h
 #        Profiling/MSA.cpp
@@ -98,16 +98,16 @@ add_library(protal_lib
 #        Profiler/Profiler.h
 #        Profiler/Taxon.cpp
 #        Profiler/Taxon.h
-        Profiler/ReadFilter.h
-        Alignment/WFA2Wrapper2.h
-        Profiler/ProfilerDefinitions.h)
+        ../Profiler/ReadFilter.h
+        ../Alignment/WFA2Wrapper2.h
+        ../Profiler/ProfilerDefinitions.h)
 
 
 set_target_properties(protal_lib PROPERTIES LINKER_LANGUAGE CXX)
 
 function(get_all_targets var)
     set(targets)
-    get_all_targets_recursive(targets ${CMAKE_CURRENT_SOURCE_DIR})
+    get_all_targets_recursive(targets ..)
     set(${var} ${targets} PARENT_SCOPE)
 endfunction()
 
@@ -132,38 +132,38 @@ message("All targets: ${all_targets}")
 # link_directories makes files in these directories includable without explicitly stating the dir
 # include "test/kmer_iterator_test.h" -> include "kmer_iterator_test.h"
 
-message(${PROJECT_SOURCE_DIR})
+message(../..)
 
 target_link_directories(protal_lib
         PUBLIC
-        ../lib/
-        IO/
-        Hash/
-        Core/
-        VarkitInterface/
-        Alignment/
-        Utils/
-        Profiling/
-        Profiler/
-        SequenceUtils/
-        Taxonomy/
-        SNPs/
-        cPMML/
+        ../../lib
+        ../IO
+        ../Hash
+        ../Core
+        ../VarkitInterface
+        ../Alignment
+        ../Utils
+        ../Profiling
+        ../Profiler
+        ../SequenceUtils
+        ../Taxonomy
+        ../SNPs
+        ../cPMML
 )
 
 target_include_directories(protal_lib
         PUBLIC
-        ../lib/
-        IO/
-        Hash/
-        Core/
-        VarkitInterface/
-        Alignment/
-        Utils/
-        Profiling/
-        SequenceUtils/
-        Taxonomy/
-        SNPs/)
+        ../../lib
+        ../IO
+        ../Hash
+        ../Core
+        ../VarkitInterface
+        ../Alignment
+        ../Utils
+        ../Profiling
+        ../SequenceUtils
+        ../Taxonomy
+        ../SNPs)
 
 
 
@@ -205,29 +205,28 @@ find_package(ZLIB REQUIRED)
 #target_include_directories(varkit_lib PUBLIC ${BHM_INCLUDE_DIR})
 #target_link_libraries(varkit_lib LINK_PUBLIC ${BHM_LIBRARY})
 
-target_include_directories(protal_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../lib/robin)
-target_include_directories(protal_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../lib/tsl)
+target_include_directories(protal_lib PUBLIC ../../lib/robin)
+target_include_directories(protal_lib PUBLIC ../../lib/tsl)
 
 # Add-Subdirectory with ${CMAKE_CURRENT_SOURCE_DIR}/
-add_subdirectory(../lib/wfa2-lib/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa)
+add_subdirectory(../../lib/wfa2-lib ../wfa)
 #add_subdirectory(../lib/wfa2-lib-2.3.4/ ${CMAKE_CURRENT_SOURCE_DIR}/wfa2)
-add_subdirectory(../lib/gzstream/ ${CMAKE_CURRENT_SOURCE_DIR}/gzstream)
+add_subdirectory(../../lib/gzstream ../gzstream)
 
 #set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries")  # Set to OFF for static build
 
-add_subdirectory(../lib/cPMML/ ${CMAKE_CURRENT_SOURCE_DIR}/cPMML)
+add_subdirectory(../../lib/cPMML ../cPMML)
 #add_subdirectory(../lib/range-v3/ ${CMAKE_CURRENT_SOURCE_DIR}/range-v3) # weird
 
 # Necessary to link to stdc++fs (filesystem experimental support)
 target_link_libraries(protal_lib
         LINK_PUBLIC
-        cPMML
+        ../cPMML
         stdc++fs
         wfa_lib
-#        wfa2lib
         gzstream_lib
         ZLIB::ZLIB
-        #-static # WITHOUT THIS IT WILL NOT COMPILE INTO A STATIC LIBRARY
+#        -static # WITHOUT THIS IT WILL NOT COMPILE INTO A STATIC LIBRARY
         )
 
 message("CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")

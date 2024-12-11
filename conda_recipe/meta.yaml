@@ -9,8 +9,9 @@ requirements:
   host:
     - python
   build:
+    - {{ compiler('cxx') }}
+    - {{ compiler('ccc') }}
     - cmake
-    - ninja
     - make
-    - gxx
+
 
