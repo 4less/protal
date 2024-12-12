@@ -1,0 +1,26 @@
+package:
+  name: protal
+  version: "0.1.0"  # Update version accordingly
+
+source:
+  git_url: https://github.com/4less/protal.git
+  git_rev: alpha
+
+requirements:
+  build:
+    - cmake
+    - make
+    - gcc_linux-64 >=14.2.0
+    - gxx_linux-64 >=14.2.0
+    - libgomp >=14.2.0
+    - zlib
+
+about:
+  home: https://github.com/4less/protal
+  license: MIT  # Update as per your project
+  summary: A short description of the project.
+
+channels:
+  - conda-forge    # High priority channel
+  - defaults
+  - bioconda

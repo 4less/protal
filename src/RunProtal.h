@@ -1322,7 +1322,7 @@ namespace protal {
         bm_total.Stop();
         bm_total.PrintResults();
 
-        std::cout << "Find the results under:" << std::endl;
-        std::cout << options.GetOutputDir() << std::endl;
+//        std::cout << "Find the results under:" << std::endl;
+//        std::cout << options.GetOutputDir() << std::endl;
     }
 }
