@@ -39,18 +39,20 @@ git clone git@github.com:4less/protal.git
 Compiles protal from the source files with instructions supplied in conda-recipe/meta.yml and conda-recipe/build.sh.
 ```{r bash}
 cd protal
-mkdir conda_build
-conda build conda_recipe -c conda-forge --output-folder conda_build
+mkdir conda-build
+conda build conda-recipe -c conda-forge --output-folder conda-build
 
 # If everything is successful, the local conda package is here
-conda_build/linux-64/protal-<CURRENT_VERSION>.tar.bz2
+conda-build/linux-64/protal-<CURRENT_VERSION>.tar.bz2
 ```
 
 ## 4. Install in conda 
 
 ```{r bash}
 # Current directory is your local clone of this repository
-conda create -n protal_env conda_build/linux-64/protal-<CURRENT_VERSION>.tar.bz2
+conda create -n protal_env conda-build/linux-64/protal-<CURRENT_VERSION>.tar.bz2
+#or
+micromamba create -n protal_env conda-build/linux-64/protal-<CURRENT_VERSION>.tar.bz2
 ```
 
 ## Test the installation
