@@ -15,7 +15,7 @@ requirements:
     - libgomp >=14.2.0
     - zlib
   run:
-    - python=>=3
+    - python>=3
 
 about:
   home: https://github.com/4less/protal
