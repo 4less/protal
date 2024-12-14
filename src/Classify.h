@@ -533,6 +533,8 @@ namespace protal::classify {
             benchmark_global.WriteRowStatsToFile(options.GetPrefix(options.GetCurrentIndex()) + "_benchmark.tsv");
         }
 
+
+
         if (options.Verbose()) {
             std::cout << "---------------Speed benchmarks---------------------" << std::endl;
             bm_omp_block.PrintResults();
@@ -570,7 +572,8 @@ namespace protal::classify {
                       << std::endl;
         }
 
-        std::ofstream time_os(options.GetPrefix(options.GetCurrentIndex()) + "_runtime.tsv", std::ios::out);
+        auto runtime_output = options.GetPrefix(options.GetCurrentIndex()) + "_runtime.tsv";
+        std::ofstream time_os(runtime_output, std::ios::out);
         time_os << anchor_finder_global.m_bm_seeding.GetName() << '\t' << anchor_finder_global.m_bm_seeding.GetDuration(Time::seconds) << '\n';
         time_os << anchor_finder_global.m_bm_processing.GetName() << '\t' << anchor_finder_global.m_bm_processing.GetDuration(Time::seconds) << '\n';
         time_os << anchor_finder_global.m_bm_pairing.GetName() << '\t' << anchor_finder_global.m_bm_pairing.GetDuration(Time::seconds) << '\n';

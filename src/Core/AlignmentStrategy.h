@@ -394,7 +394,7 @@ namespace protal {
                 info.UpdateScore();
                 alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward, anchor.unique, anchor.unique_best_two);
 
-                bool valid = IsAlignmentValid(info, read, gene.Sequence());
+                bool valid = IsAlignmentValid(info, read, gene.Sequence(), true);
 
                 if (!valid) {
                     std::cerr << "Invalid no alignment\t" << record.header <<  std::endl;
@@ -516,13 +516,14 @@ namespace protal {
                 alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward, anchor.unique, anchor.unique_best_two);
 
                 //TODO: remove or figure out whats going on
-                bool valid = IsAlignmentValid(info, read, gene.Sequence());
+                bool valid = IsAlignmentValid(info, read, gene.Sequence(), true);
                 if (!valid) {
                     std::cerr << "Invalid after alignment\t" << reference_str << " " << info.ToString() << std::endl;
                     return false;
                 }
 
                 if (info.Valid(read.length())) {
+                    std::cerr << "Crash in AlignmentStrategy.h 526" << std::endl;
                     exit(90);
                 }
             }

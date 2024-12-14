@@ -1,10 +1,10 @@
 project(protal_lib)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 # -lcPMML
 set(CMAKE_EXE_LINKER_FLAGS " -lwfa -flto")
 set(CMAKE_CXX_FLAGS_DEBUG " -pthread -ggdb -g -std=c++2a -fopenmp -Wall -mavx2 -mavx -march=native")
-set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
+set(CMAKE_CXX_FLAGS_RELEASE "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
 
 # Solves error that says
 SET(CMAKE_AR  "$ENV{GCC}-ar")

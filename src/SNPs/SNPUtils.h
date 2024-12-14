@@ -43,7 +43,7 @@ namespace protal {
             if (op == 'M') {
                 for (auto i = 0; i < count; i++) {
                     if (sam.m_seq[qpos + i] != 'N' && reference[rpos+i] != 'N' && sam.m_seq[qpos + i] != reference[rpos+i]) {
-                        std::cerr << sam.m_seq[qpos + i] << "-" << reference[rpos+i] << std::endl;
+//                        std::cerr << sam.m_seq[qpos + i] << "-" << reference[rpos+i] << std::endl;
                         faulty = true;
                     }
                 }

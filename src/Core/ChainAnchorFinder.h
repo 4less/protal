@@ -687,7 +687,9 @@ namespace protal {
                     } else if (IdenticalIgnoreAmbig(seed_q_rev, seed_r)) {
                         anchor.forward = false;
                     } else {
-                        std::cout << "Skip" << std::endl;
+                        //TODO: Check out whats happening. Likely some seeds in an anchor are incorrect
+
+//                        std::cout << "Skip" << std::endl;
                         continue;
                     }
 
