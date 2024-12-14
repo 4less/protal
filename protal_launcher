@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+import sys
+import os
+import subprocess
+
+cmd = sys.argv
+
+try_tools = ["protal_avx2", "protal_plain"]
+
+def Try(program):
+    try:
+        result = subprocess.run([program], text=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        return False
+    return result.returncode == 0
+
+for tool in try_tools:
+    if Try(tool):
+        cmd[0] = tool
+        break
+
+os.system(' '.join(cmd))
