@@ -162,7 +162,7 @@ namespace protal::build {
 
                         thread_statistics.kmers_total += kmer_handler.TotalKmers();
                         thread_statistics.kmers_accepted += kmers.size();
-                        thread_statistics.WriteStats(std::cout);
+//                        thread_statistics.WriteStats(std::cout);
                     }
 
 #pragma omp critical(statistics)
