@@ -584,40 +584,42 @@ namespace protal {
                     return;
                 }
 
-//                if (!IdenticalIgnoreAmbig(seed_q, seed_r) && IdenticalIgnoreAmbig(KmerUtils::ReverseComplement(seed_q), seed_r)) {
-//
-//                    std::cout << "Is forward? " << anchor.forward << std::endl;
-//                    std::cout << anchor.ToString() << std::endl;
-//                    std::cout << "Query: " << query << std::endl;
-//
-//                    m_error_in_read = true;
-//                    anchor.forward = !anchor.forward;
-//                    changed_once = true;
-//                }
-//
-//                if (m_error_in_read) {
-//                    std::cerr << seed.ToString() << std::endl;
-//                    std::cerr << seed_q << std::endl;
-//                    std::cerr << seed_r << std::endl;
-//                }
+                ////////////////////////////////////////////////////////
+                if (!IdenticalIgnoreAmbig(seed_q, seed_r) && IdenticalIgnoreAmbig(KmerUtils::ReverseComplement(seed_q), seed_r)) {
 
-//                if (i > 0) {
-//                    auto offa1 = (seed.genepos - seed.readpos);
-//                    auto offa2 = (anchor.chain[i-1].genepos - anchor.chain[i-1].readpos);
-//                    int indel = abs(int(offa1) - int(offa2));
-//                    if (indel > 6 || !validseed) {
-//                        std::cout << "Index: " << i << std::endl;
-//                        std::cout << anchor.ToString() << std::endl;
-//                        std::cout << anchor.ToVisualString2() << std::endl;
-//                        std::cout << "Offa1: " << offa1 << " Offa2: " << offa2 << ", Valid seed? " << validseed << std::endl;
-//                        std::cout << "Indels: " << indel << std::endl;
-//                        std::cout << "Previous: " << anchor.chain[i-1].ToString() << std::endl;
-//                        std::cout << "Current:  " << seed.ToString() << std::endl;
-//
-//                        std::cout << seed_q << std::endl;
-//                        std::cout << seed_r << std::endl;
-//                    }
-//                }
+                    std::cout << "Is forward? " << anchor.forward << std::endl;
+                    std::cout << anchor.ToString() << std::endl;
+                    std::cout << "Query: " << query << std::endl;
+
+                    m_error_in_read = true;
+                    anchor.forward = !anchor.forward;
+                    changed_once = true;
+                }
+
+                if (m_error_in_read) {
+                    std::cerr << seed.ToString() << std::endl;
+                    std::cerr << seed_q << std::endl;
+                    std::cerr << seed_r << std::endl;
+                }
+
+                if (i > 0) {
+                    auto offa1 = (seed.genepos - seed.readpos);
+                    auto offa2 = (anchor.chain[i-1].genepos - anchor.chain[i-1].readpos);
+                    int indel = abs(int(offa1) - int(offa2));
+                    if (indel > 6 || !validseed) {
+                        std::cout << "Index: " << i << std::endl;
+                        std::cout << anchor.ToString() << std::endl;
+                        std::cout << anchor.ToVisualString2() << std::endl;
+                        std::cout << "Offa1: " << offa1 << " Offa2: " << offa2 << ", Valid seed? " << validseed << std::endl;
+                        std::cout << "Indels: " << indel << std::endl;
+                        std::cout << "Previous: " << anchor.chain[i-1].ToString() << std::endl;
+                        std::cout << "Current:  " << seed.ToString() << std::endl;
+
+                        std::cout << seed_q << std::endl;
+                        std::cout << seed_r << std::endl;
+                    }
+                }
+                //////////////////////////////////
 
 
 
@@ -639,6 +641,7 @@ namespace protal {
 
             anchor.UpdateLength();
         }
+
 
         void operator () (KmerList& kmer_list, SeedList& seeds, ChainAnchorList& anchors, std::string& query) {
             m_error_in_read = false;

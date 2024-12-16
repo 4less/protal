@@ -264,6 +264,7 @@ namespace protal::classify {
         Benchmark bm_reader_global{"Sequence reader"};
         Benchmark bm_omp_before_loop_global{ "OMP before loop" };
 
+        std::cout << "Start parallel execution" << std::endl;
         bm_omp_block.Start();
 #pragma omp parallel default(none) shared(std::cout, bm_reader_global, bm_omp_before_loop_global, bm_alignment_join_sort_global, bm_anchor_recovery_global, bm_anchor_finder_global, /*adoh_global,*/ genome_loader, seed_sizes_global, anchor_sizes_global, bm_alignment_global, bm_output_global, benchmark_global, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
         {
@@ -339,27 +340,23 @@ namespace protal::classify {
                 bm_kmer_extracter.Stop();
 
 
-//                if constexpr(KmerStatisticsConcept<KmerHandler>) {
-//                    thread_statistics.kmers_total += kmer_handler.TotalKmers();
-//                }
-//                if constexpr(KmerStatisticsConcept<KmerHandler>) {
-//                    thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
-//                }
-                thread_statistics.kmers_total += kmer_handler.TotalKmers();
-                thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
-                thread_statistics.kmers_total += kmer_handler.TotalKmers();
-                thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
+                if constexpr(KmerStatisticsConcept<KmerHandler>) {
+                    thread_statistics.kmers_total += kmer_handler.TotalKmers();
+                }
+                if constexpr(KmerStatisticsConcept<KmerHandler>) {
+                    thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
+                }
 
                 bm_kmer_extracter.Start();
                 kmer_handler(std::string_view(record2.sequence), kmers2);
                 bm_kmer_extracter.Stop();
 
-//                if constexpr(KmerStatisticsConcept<KmerHandler>) {
-//                    thread_statistics.kmers_total += kmer_handler.TotalKmers();
-//                }
-//                if constexpr(KmerStatisticsConcept<KmerHandler>) {
-//                    thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
-//                }
+                if constexpr(KmerStatisticsConcept<KmerHandler>) {
+                    thread_statistics.kmers_total += kmer_handler.TotalKmers();
+                }
+                if constexpr(KmerStatisticsConcept<KmerHandler>) {
+                    thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
+                }
 
                 // Calculate Anchors
 
@@ -368,6 +365,7 @@ namespace protal::classify {
                 anchor_finder1(kmers1, seeds1, anchors1, record1.sequence);
                 anchor_finder2(kmers2, seeds2, anchors2, record2.sequence);
                 bm_anchor_finder.Stop();
+
 
                 thread_statistics.successful_lookups += anchor_finder1.m_successful_lookups;
                 thread_statistics.at_least_one_lookup += (anchor_finder1.m_successful_lookups > 0);
@@ -381,32 +379,10 @@ namespace protal::classify {
                 }
 
 
-                //                std::cout << "Anchors1" << std::endl;
-                //                for (auto& a : anchors1) {
-                //                    std::cout << a.ToString() << std::endl;
-                //                }
-                //                std::cout << "Anchors2" << std::endl;
-                //                for (auto& a : anchors2) {
-                //                    std::cout << a.ToString() << std::endl;
-                //                }
-
                 bm_anchor_recovery.Start();
                 auto recover1 = anchor_finder1.RecoverAnchors(anchors1, anchor_finder2.BestAnchors(), options.GetAlignTop());
                 auto recover2 = anchor_finder2.RecoverAnchors(anchors2, anchor_finder1.BestAnchors(), options.GetAlignTop());
                 bm_anchor_recovery.Stop();
-
-                //                std::cout << "Anchors1 after" << std::endl;
-                //                for (auto& a : anchors1) {
-                //                    std::cout << a.ToString() << std::endl;
-                //                }
-                //                std::cout << "Anchors2 after" << std::endl;
-                //                for (auto& a : anchors2) {
-                //                    std::cout << a.ToString() << std::endl;
-                //                }
-                //
-                //                if (recover1 || recover2) {
-                //                    Utils::Input();
-                //                }
 
                 seed_sizes.AddObservation(seeds1.size());
                 seed_sizes.AddObservation(seeds2.size());

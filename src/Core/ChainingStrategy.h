@@ -171,6 +171,28 @@ namespace protal {
             }
             return str;
         }
+
+        std::pair<std::string, std::string> ToVisualString(std::string const& read, std::string const& reference) {
+            std::string str = "";
+            std::string ref = "";
+            size_t prev_end = 0;
+            uint16_t last_end = 0;
+            uint32_t last_end_ref = 0;
+            for (auto& link : chain) {
+                if (link.readpos > last_end) {
+                    str += std::string(link.readpos - last_end, ' ');
+                    ref += std::string(link.readpos - last_end, ' ');
+                }
+
+                str += read.substr(link.readpos, link.length);
+                ref += reference.substr(link.genepos, link.length);
+//                str += std::string((link.readpos + link.length) - std::max(link.readpos, last_end), '#');
+//                ref += std::string((link.genepos + link.length) - std::max(link.genepos, last_end_ref), '#');
+                last_end = link.readpos + link.length;
+                last_end_ref = link.genepos + link.length;
+            }
+            return {str, ref};
+        }
     };
 
 }

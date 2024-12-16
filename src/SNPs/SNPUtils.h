@@ -133,6 +133,14 @@ namespace protal {
                             faulty = true;
                         }
                     }
+                    if (faulty) {
+                        auto ref_start = info.gene_alignment_start + offset;
+                        auto ref_end = std::min(ref_start + query.size(), reference.length());
+                        std::cout << " ---------- " << std::endl;
+                        std::cout << query << std::endl;
+                        std::cout << reference.substr(ref_start, ref_end - ref_start) << std::endl;
+                        std::cout << " ---------- " << std::endl;
+                    }
                 }
 
                 qpos += (op != 'D') * count;

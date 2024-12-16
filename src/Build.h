@@ -143,26 +143,20 @@ namespace protal::build {
                             putter.FirstPut(pair.first);
                         }
 
-                        //                    if constexpr(KmerStatisticsConcept<KmerHandler>) {
-                        //                        thread_statistics.kmers_total += kmer_handler.TotalKmers();
-                        //                    }
-                        //
-                        //                    if constexpr(KmerStatisticsConcept<KmerHandler>) {
-                        //                        thread_statistics.kmers_accepted += kmers.size();
-                        //                    }
-                        //
-                        //                    if constexpr(debug == DEBUG_VERBOSE) {
-                        //                        thread_statistics.WriteStats(std::cout);
-                        //                    }
-                        //                    if constexpr(debug == DEBUG_EXTRAVERBOSE) {
-                        //
-                        //                    }
+                        if constexpr(KmerStatisticsConcept<KmerHandler>) {
+                            thread_statistics.kmers_total += kmer_handler.TotalKmers();
+                        }
 
+                        if constexpr(KmerStatisticsConcept<KmerHandler>) {
+                            thread_statistics.kmers_accepted += kmers.size();
+                        }
 
+                        if constexpr(debug == DEBUG_VERBOSE) {
+                            thread_statistics.WriteStats(std::cout);
+                        }
+                        if constexpr(debug == DEBUG_EXTRAVERBOSE) {
 
-                        thread_statistics.kmers_total += kmer_handler.TotalKmers();
-                        thread_statistics.kmers_accepted += kmers.size();
-//                        thread_statistics.WriteStats(std::cout);
+                        }
                     }
 
 #pragma omp critical(statistics)
@@ -214,22 +208,19 @@ namespace protal::build {
                 putter.Put(pair.first, taxonomic_id, gene_id, pos);
             }
 
-//            if constexpr(KmerStatisticsConcept<KmerHandler>) {
-//                thread_statistics.kmers_total += kmer_handler.TotalKmers();
-//            }
-//            if constexpr(KmerStatisticsConcept<KmerHandler>) {
-//                thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
-//            }
-//
-//            if constexpr(debug == DEBUG_VERBOSE) {
-//                thread_statistics.WriteStats(std::cout);
-//            }
-//            if constexpr(debug == DEBUG_EXTRAVERBOSE) {
-//
-//            }
-            thread_statistics.kmers_total += kmer_handler.TotalKmers();
-            thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
-//            thread_statistics.WriteStats(std::cout);
+            if constexpr(KmerStatisticsConcept<KmerHandler>) {
+                thread_statistics.kmers_total += kmer_handler.TotalKmers();
+            }
+            if constexpr(KmerStatisticsConcept<KmerHandler>) {
+                thread_statistics.kmers_accepted += kmer_handler.TotalMinimizers();
+            }
+
+            if constexpr(debug == DEBUG_VERBOSE) {
+                thread_statistics.WriteStats(std::cout);
+            }
+            if constexpr(debug == DEBUG_EXTRAVERBOSE) {
+
+            }
         }
 
 

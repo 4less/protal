@@ -378,26 +378,42 @@ namespace protal {
             // Get Resources
             auto& genome = m_genome_loader.GetGenome(anchor.taxid);
             auto& gene = genome.GetGeneOMP(anchor.geneid);
+            std::string const& geneseq = gene.Sequence();
+
+//            std::cerr << "--------------- links: " << anchor.chain.size() << std::endl;
+//            auto [qry, ref] = anchor.ToVisualString(read, geneseq);
+//            std::cerr << qry << std::endl;
+//            std::cerr << ref << std::endl;
+//            auto genestart = anchor.chain.front().genepos;
+//            auto readstart = anchor.chain.front().readpos;
+//            std::cerr << read.substr(readstart, std::min(readstart + read.length(), read.length())) << std::endl;
+//            std::cerr << geneseq.substr(genestart, std::min(genestart + read.length(), geneseq.length())) << std::endl;
+//            std::cerr << "---------------" << std::endl;
+
 
 
             // If complete anchor matches without errors dont even do alignment.
             //TODO: Update this and allow anchor.total_length + #anchors + 1 == read.length()
-            if (anchor.total_length == read.length()) {
-                auto& info = alignment.GetAlignmentInfo();
-                info.cigar = std::string(read.length(), 'M');
-                info.ResetCigarStats();
-                info.alignment_length = read.length();
-                info.compressed_cigar = std::to_string(read.length()) + 'M';
-                info.gene_alignment_start = anchor.Front().genepos;
-                info.alignment_ani = info.GetProxyANI();
-                info.matches = read.length();
-                info.UpdateScore();
-                alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward, anchor.unique, anchor.unique_best_two);
-
-                bool valid = IsAlignmentValid(info, read, gene.Sequence(), true);
-
-                if (!valid) {
-                    std::cerr << "Invalid no alignment\t" << record.header <<  std::endl;
+//            if (anchor.total_length == read.length()) {
+//                auto& info = alignment.GetAlignmentInfo();
+//                info.cigar = std::string(read.length(), 'M');
+//                info.ResetCigarStats();
+//                info.alignment_length = read.length();
+//                info.compressed_cigar = std::to_string(read.length()) + 'M';
+//                info.gene_alignment_start = anchor.Front().genepos;
+//                info.alignment_ani = info.GetProxyANI();
+//                info.matches = read.length();
+//                info.UpdateScore();
+//
+//                alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward, anchor.unique, anchor.unique_best_two);
+//
+//                bool valid = IsAlignmentValid(info, read, gene.Sequence(), true);
+//
+//                if (!valid) {
+//                    std::cerr << "Invalid no alignment\t" << id <<  std::endl;
+//                    std::cerr << "Query Name: '" << id  << "'" << std::endl;
+//                    std::cerr << "Info: " << info.ToString() << std::endl;
+//                    std::cerr << "---------" << std::endl;
 //                    std::cerr << read << std::endl;
 ////                    std::cerr << gene. << std::endl;
 //                    std::cerr << anchor.ToString() << std::endl;
@@ -407,12 +423,12 @@ namespace protal {
 //                    m_alignment_orientation.Update(abs_pos, read.length(), gene.Sequence().length(), 0);
 //                    std::string reference_str = gene.Sequence().substr(m_alignment_orientation.reference_start, m_alignment_orientation.reference_len);
 //                    std::cerr << reference_str << std::endl;
-
-                    return false;
-                }
-
-                return true;
-            }
+//
+//                    return false;
+//                }
+//
+//                return true;
+//            }
 
             // Is indel between anchor seeds?
             int anchor_indels = SeedIndel(anchor);
@@ -516,9 +532,19 @@ namespace protal {
                 alignment.Set(anchor.taxid, anchor.geneid, info.gene_alignment_start, anchor.forward, anchor.unique, anchor.unique_best_two);
 
                 //TODO: remove or figure out whats going on
-                bool valid = IsAlignmentValid(info, read, gene.Sequence(), true);
+                bool valid = IsAlignmentValid(info, read, gene.Sequence(), 0, true);
                 if (!valid) {
-                    std::cerr << "Invalid after alignment\t" << reference_str << " " << info.ToString() << std::endl;
+                    std::cerr << "Info:" << info.ToString() << std::endl;
+                    std::cerr << "Record: " << id << std::endl;
+                    std::cerr << "Anchor: " << anchor.ToString() << std::endl;
+
+                    auto readstart = info.read_start_offset;
+                    auto genestart = info.gene_alignment_start;
+                    std::cerr << read.substr(readstart, std::min(readstart + read.length(), read.length())) << std::endl;
+                    std::cerr << geneseq.substr(genestart, std::min(genestart + read.length(), geneseq.length())) << std::endl;
+
+
+                    std::cerr << "-----Invalid after alignment\t" << reference_str << " " << info.ToString() << std::endl;
                     return false;
                 }
 
@@ -554,6 +580,7 @@ namespace protal {
                 auto& read = anchor.forward ? fwd : rev;
 
                 m_alignment_result.GetAlignmentInfo().Reset();
+
                 auto success = AlignAnchor(anchor, m_alignment_result, fwd, rev, false, header);
 
                 if (success && m_alignment_result.GetAlignmentInfo().GetProxyANI() >= m_max_score_ani) {
