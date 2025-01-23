@@ -480,12 +480,14 @@ namespace protal {
 
             double GetLongUniqueGeneRate(const size_t threshold=0) const {
                 auto lu_genes = GenesWithLongUniques(threshold);
-                return lu_genes == 0 ? 0 : lu_genes/static_cast<double>(m_genome.GenesWithLongUniques(threshold));
+                auto lu_genes_ref = m_genome.GenesWithLongUniques(threshold);
+                return lu_genes == 0 || lu_genes_ref == 0 ? 0 : lu_genes/static_cast<double>(lu_genes_ref);
             }
 
             double GetLongSuperUniqueGeneRate(const size_t threshold=0) const {
                 auto lsu_genes = GenesWithLongSuperUniques(threshold);
-                return lsu_genes == 0 ? 0 : lsu_genes/static_cast<double>(m_genome.GenesWithLongSuperUniques(threshold));
+                auto lsu_genes_ref = m_genome.GenesWithLongSuperUniques(threshold);
+                return lsu_genes == 0 || lsu_genes_ref == 0 ? 0 : lsu_genes/static_cast<double>(lsu_genes_ref);
             }
 
             size_t PresentGenes() const {
@@ -1059,7 +1061,7 @@ namespace protal {
                     os << su_ref << '\t';
                     os << lu_ref << '\t';
                     os << lsu_ref << '\t';
-                    os << all_ref << '\t';
+                    os << all_ref << '\t'; // 33
 
                     os << (su_ref == 0 ? 0 : lu_ref/static_cast<double>(all_ref)) << '\t';
                     os << (lu_ref == 0 ? 0 : lu_ref/static_cast<double>(all_ref)) << '\t';
@@ -1068,12 +1070,12 @@ namespace protal {
                     os << taxon.GetLongUniqueGeneRate() << '\t';
                     os << taxon.GetLongSuperUniqueGeneRate() << '\t';
                     os << taxon.GetLongUniqueGeneRate(1) << '\t';
-                    os << taxon.GetLongSuperUniqueGeneRate(1) << '\t';
-                    os << taxon.GetLongUniqueGeneRate(5) << '\t';
-                    os << taxon.GetLongSuperUniqueGeneRate(5) << '\t';
+                    os << taxon.GetLongSuperUniqueGeneRate(1) << '\t'; // 40
+                    os << taxon.GetLongUniqueGeneRate(5) << '\t'; // 41
+                    os << taxon.GetLongSuperUniqueGeneRate(5) << '\t'; // 42
 
                     // LSU per reads
-                    os << (taxon.LongSuperUniques() == 0 ? 0 : taxon.LongSuperUniques()/static_cast<double>(taxon.TotalHits())) << '\t';
+                    os << (taxon.LongSuperUniques() == 0 ? 0 : taxon.LongSuperUniques()/static_cast<double>(taxon.TotalHits())) << '\t'; // 43
                     // LU per reads
                     os << (taxon.LongUniques() == 0 ? 0 : taxon.LongUniques()/static_cast<double>(taxon.TotalHits()));
                     os << std::endl;
