@@ -15,7 +15,7 @@
 #include "TaxonStatisticsOutput.h"
 #include "ProgressBar.h"
 
-#include "Profiler/ReadFilter.h"
+// #include "Profiler/ReadFilter.h"
 
 #include <algorithm>
 #include <string_view>
@@ -361,7 +361,7 @@ namespace protal {
 
 
 
-        #pragma omp parallel for default(none) firstprivate(filter) shared(options, cout, taxonomy, profiles, genomes, std::cerr)//, bm_read_alignments, bm_profile)
+        #pragma omp parallel for shared(options, filter, cout, taxonomy, profiles, genomes, std::cerr)//, bm_read_alignments, bm_profile)
         for (auto i : options.GetRange()) {
 #pragma omp critical(print)
             std::cerr << omp_get_thread_num() << " File " << i << " of " << options.GetRange().size() << ":\n\t" << options.SamFile(i) << std::endl;
@@ -419,6 +419,7 @@ namespace protal {
             auto profile = profiler.Profile(sample_name, std::optional<std::reference_wrapper<std::ostream>>{erro});
             erro.close();
             bm_profile.Stop();
+            
 #pragma omp critical(print)
             std::cout << "Thread " << omp_get_thread_num() << " ";
             bm_profile.PrintResults();
@@ -434,13 +435,27 @@ namespace protal {
                 profiler.TestSNPUtils(pairs);
                 profiler.OutputErrorData(pairs);
             } else if (truth.has_value()) {
-                std::cout << "Has Truth Available" << std::endl;
+                std::cout << "Has Truth Available " << std::accumulate(truth.value().begin(), truth.value().end(), std::string{}, [](string acc, uint32_t x) { return acc + " " + std::to_string(x); }) << std::endl;
                 profiler.OutputErrorData(unique_pairs, pairs, &truth.value());
             }
 
             if (truth.has_value()) {
                 std::string truth_output = options.ProfileFile(i) + ".truth_annotated";
                 profile.AnnotateWithTruth(truth.value(), filter, truth_output);
+                std::cout << "Write truth to: " << truth_output << std::endl;
+
+                auto filtered = profile.GetTaxa() | views::filter([&filter](auto a) { return filter.Pass(a.second); });
+                // std::filter(profile.GetTaxa().begin(), profile.GetTaxa().end(), )
+                auto tp = std::count_if(
+                    filtered.begin(),
+                    filtered.end(),
+                    [&truth] (auto x) { return truth.value().contains(x.first); }
+                );
+                auto fp = std::ranges::distance(filtered) - tp;
+                auto fn = truth.value().size() - tp;
+
+                std::cout << "TP: " << tp << " FP: " << fp << " FN: " << fn << std::endl;
+
             }
 
             std::cout << "Write profile to: \n" << options.ProfileFile(i) << std::endl;
@@ -456,11 +471,14 @@ namespace protal {
             std::ofstream os(options.ProfileFile(i), std::ios::out);
             std::ofstream os_total(options.ProfileFile(i) + ".log", std::ios::out);
             std::ofstream os_dismissed(options.ProfileFile(i) + ".gene.log", std::ios::out);
+            std::ofstream os_genes(options.ProfileFile(i) + ".genes.log", std::ios::out);
 
             profile.WriteSparseProfile(taxonomy, filter, os, &os_total, &os_dismissed);
+            profile.WriteGeneProfile(taxonomy, filter, &os_genes);
             os.close();
             os_total.close();
             os_dismissed.close();
+            os_genes.close();
 
             profile.SetName(options.GetSampleId(i));
 

@@ -264,7 +264,7 @@ namespace protal::classify {
         Benchmark bm_reader_global{"Sequence reader"};
         Benchmark bm_omp_before_loop_global{ "OMP before loop" };
 
-        std::cout << "Start parallel execution" << std::endl;
+        std::cout << "Start parallel execution with " << options.GetThreads() << " threads" << std::endl;
         bm_omp_block.Start();
 #pragma omp parallel default(none) shared(std::cout, bm_reader_global, bm_omp_before_loop_global, bm_alignment_join_sort_global, bm_anchor_recovery_global, bm_anchor_finder_global, /*adoh_global,*/ genome_loader, seed_sizes_global, anchor_sizes_global, bm_alignment_global, bm_output_global, benchmark_global, reader_global, options, dummy, kmer_handler_global, statistics, anchor_finder_global, alignment_handler_global, output_handler_global)
         {
@@ -431,13 +431,13 @@ namespace protal::classify {
                     //#pragma omp critical(write)
                     //                    thread_core_benchmark.ErrorOutput(seeds1, seeds2, anchors1, anchors2, alignment_results1, alignment_results2, paired_alignment_results, record1, record2);
                 }
-
-                if constexpr(debug == DEBUG_VERBOSE) {
-#pragma omp critical(write)
-                    {
-                        thread_statistics.WriteStats(std::cout);
-                    }
-                }
+                // Check if this is the omp pragma that slows everything down TODO:
+//                if constexpr(debug == DEBUG_VERBOSE) {
+//#pragma omp critical(write)
+//                    {
+//                        thread_statistics.WriteStats(std::cout);
+//                    }
+//                }
                 if constexpr(debug == DEBUG_EXTRAVERBOSE) {
 
                 }
