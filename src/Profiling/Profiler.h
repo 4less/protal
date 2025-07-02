@@ -10,20 +10,21 @@
 #include <sparse_map.h>
 #include <numeric>
 #include <unordered_set>
-#include <Profiler/ProfilerDefinitions.h>
+#include <ProfilerDefinitions.h>
 
 #include "LineSplitter.h"
 #include "Taxonomy.h"
 #include "InternalReadAlignment.h"
 #include "Constants.h"
 #include "SNPUtils.h"
-#include "ProfilerOptions.h"
 #include "ScoreAlignments.h"
 #include "gzstream/gzstream.h"
 #include "cPMML.h"
 #include "sparse_map.h"
 #include "Benchmark.h"
 #include <string>
+
+#include <ranges>
 
 namespace protal {
     bool IsDigit(std::string &test) {
@@ -88,6 +89,7 @@ namespace protal {
         }
         return truths;
     }
+
 
     namespace profiler {
         // Forward declaration
@@ -1012,6 +1014,7 @@ namespace protal {
                 for (auto& [key, taxon] : m_taxa) {
                     bool positive = set.contains(key);
                     bool prediction = filter.Pass(taxon);
+                    // std::cout << positive << "\t" << key << "\t" << taxon.GetName() << std::endl;
 
 //                    if (!positive && !prediction) continue;
                     std::vector<size_t> alleles = taxon.GetAlleles();
@@ -1089,6 +1092,72 @@ namespace protal {
                 os.close();
             }
 
+            void WriteGeneProfile(taxonomy::IntTaxonomy& taxonomy, TaxonFilterObj const& filter, std::ostream* os) {
+                *os << "Truth\tPredicted\tTaxID\tLineage\tTaxVCOV\tTaxaxAbundance\tGeneID\tGeneRefLength\t"
+                    << "TotalReads\tTotalMappedLength\tMAPQ\tUniqueMers\tUniqueTwoMers\tUniqueTwoMersReads\tUniqueTwoMerReads\tANI\t"
+                    << "VCov\tVCovExp\tHCovExp\tHCovObs\tHCovObsRel\tConsistency\n";
+
+                auto vcov_range = m_taxa
+                    | std::views::values
+                    | std::views::filter([&](auto& taxon) {
+                        return filter.Pass(taxon);
+                    })
+                    | std::views::transform([&](auto& taxon) {
+                        return taxon.VerticalCoverage();
+                    });
+
+                auto total_vcov = std::accumulate(vcov_range.begin(), vcov_range.end(), 0.0);
+
+
+
+                for (auto& [tax_id, _] : m_taxa) {
+                    // this is necessary as taxon cannot be constant
+                    auto& taxon = m_taxa.at(tax_id);
+                    bool prediction = filter.Pass(taxon);
+
+                    auto predicted_vcov = taxon.VerticalCoverage();
+                    auto predicted_abundance = predicted_vcov / total_vcov;
+
+                    for (auto& [gene_id, _] : taxon.GetGenes()) {
+                        auto& gene = taxon.GetGenes().at(gene_id);
+                        auto vcov = gene.VerticalCoverage();
+                        auto expected_vcov = static_cast<double>(gene.m_mapped_length) / static_cast<double>(gene.m_gene_length);
+                        auto expected_hcov = 1 - exp(-expected_vcov);
+                        auto hcov_obs = gene.GetStrainLevel().GetSequenceRangeHandler().CoveredPortion();
+                        auto hcov_obs_rel = static_cast<double>(hcov_obs) / static_cast<double>(gene.m_gene_length);
+                        auto coverage_consistency_ratio = expected_hcov / hcov_obs_rel;
+
+
+
+                        auto name = taxonomy.Get(tax_id).scientific_name;
+                        *os 
+                            << prediction << '\t'
+                            << tax_id << '\t'
+                            << taxonomy.LineageStr(tax_id) << '\t'
+                            << predicted_vcov << '\t'
+                            << predicted_abundance << '\t'
+                            << gene_id << '\t'
+                            << gene.m_gene_length << '\t'
+                            << gene.m_mapped_reads << '\t'
+                            << gene.m_mapped_length << '\t'
+                            << gene.m_mapq_sum << '\t'
+                            << gene.m_unique_mers << '\t'
+                            << gene.m_unique_two_mers << '\t'
+                            << gene.m_unique_two_mers_reads << '\t'
+                            << gene.m_unique_two_mer_reads << '\t'
+                            << gene.m_ani_sum << '\t'
+                            << vcov << '\t'
+                            << expected_vcov << '\t'
+                            << expected_hcov << '\t'
+                            << hcov_obs << '\t'
+                            << hcov_obs_rel << '\t'
+                            << coverage_consistency_ratio
+                            << '\n';
+                    }
+                }
+                
+            }
+
             void WriteSparseProfile(taxonomy::IntTaxonomy& taxonomy, TaxonFilterObj const& filter, std::ostream &os_filtered=std::cout, std::ostream* os_total=nullptr, std::ostream* os_genes=nullptr) {
                 bool one_pass = false;
 
@@ -1096,6 +1165,7 @@ namespace protal {
                 std::string gene_cov_ratios_str = "";
                 std::vector<size_t> gene_covs(120, 0);
                 std::vector<double> gene_cov_ratios(120, 0.0);
+
 
 
                 double total_vcov = 0;

@@ -205,7 +205,7 @@ namespace protal {
         sam.m_qual = tokens[10];
 
         if (tokens.size() < 13) {
-            std::cerr << omp_get_thread_num() << " Sam file lacks unique information"<< std::endl;
+            // std::cerr << omp_get_thread_num() << " Sam file lacks unique information" << std::endl;
             sam.m_uniques = 0;
             sam.m_uniques_two = 0;
             return;

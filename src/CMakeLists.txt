@@ -2,13 +2,23 @@ project(protal_lib)
 set(CMAKE_CXX_STANDARD 20)
 
 # -lcPMML
-set(CMAKE_EXE_LINKER_FLAGS " -lwfa -flto")
-set(CMAKE_CXX_FLAGS_DEBUG " -pthread -ggdb -g -std=c++2a -fopenmp -Wall -mavx2 -mavx -march=native")
+# set(CMAKE_EXE_LINKER_FLAGS " -lwfa -flto") #these flags are not needed because set somewhere else
+# set(CMAKE_CXX_FLAGS_DEBUG " -pthread -ggdb -g -std=c++2a -fopenmp -Wall -mavx2 -mavx -march=native")
 set(CMAKE_CXX_FLAGS_RELEASE "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
+set(CMAKE_CXX_FLAGS_DEBUG "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
 
-# Solves error that says
-SET(CMAKE_AR  "$ENV{GCC}-ar")
-SET(CMAKE_RANLIB  "$ENV{GCC}-ranlib")
+
+# CHECK DEBUG
+if(DEFINED ENV{GCC} AND NOT "$ENV{GCC}" STREQUAL "")
+    message(STATUS "Using GCC-prefixed binutils from Conda: $ENV{GCC}")
+    set(CMAKE_AR "$ENV{GCC}-ar" CACHE FILEPATH "" FORCE)
+    set(CMAKE_RANLIB "$ENV{GCC}-ranlib" CACHE FILEPATH "" FORCE)
+else()
+    message(STATUS "Using system default ar/ranlib")
+    set(CMAKE_AR "ar" CACHE FILEPATH "" FORCE)
+    set(CMAKE_RANLIB "ranlib" CACHE FILEPATH "" FORCE)
+endif()
+
 SET(CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> qcs <TARGET> <LINK_FLAGS> <OBJECTS>")
 SET(CMAKE_C_ARCHIVE_FINISH   true)
 
@@ -18,6 +28,7 @@ set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
 
 message(${CMAKE_CXX_FLAGS_DEBUG})
 message("CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+
 
 
 #set(CMAKE_PREFIX_PATH "/usr/users/QIB_fr017/fritsche/miniconda3/envs/gcconda/" ${CMAKE_PREFIX_PATH})
@@ -46,7 +57,11 @@ add_library(protal_lib
         Hash/KmerPutter.h
         Hash/KmerLookup.h
         Profiling/Profiler.h
-        Profiling/ProfilerOptions.h
+        Profiling/Strain.h
+        Profiling/Coverage.h
+        Profiling/Coverage.cpp
+        Profiling/Coverage.h
+        Profiling/ProfilerDefinitions.h
         SequenceUtils/GenomeLoader.h
         IO/AlignmentOutputHandler.h
         Alignment/WFA2Wrapper.h
@@ -57,7 +72,6 @@ add_library(protal_lib
         Core/CoreBenchmark.h
         IO/FastxReader.h
         IO/FastxReader.cpp
-        IO/SamHandler.h
         IO/SamHandler.h
         IO/BufferedOutput.h
         IO/BufferedOutput.cpp
@@ -78,7 +92,6 @@ add_library(protal_lib
         SequenceUtils/SequenceRange.cpp
         SequenceUtils/SequenceRangeHandler.h
         SequenceUtils/SequenceRangeHandler.cpp
-        Profiling/Strain.h
         SequenceUtils/Variant.h
         SequenceUtils/VariantHandler.h
         Strains/Distances.h
@@ -86,9 +99,8 @@ add_library(protal_lib
         Utils/Matrix.h
         Strains/MSA.h
         Profiling/TreeFilter.h
-        Profiler/ReadFilter.h
         Alignment/WFA2Wrapper2.h
-        Profiler/ProfilerDefinitions.h)
+        )
 
 target_include_directories(protal_lib
         PUBLIC
@@ -117,26 +129,26 @@ target_link_directories(protal_lib
         ../Alignment
         ../Utils
         ../Profiling
-        ../Profiler
+        # ../Profiler
         ../SequenceUtils
         ../Taxonomy
         ../SNPs
         ../cPMML
 )
 
-target_include_directories(protal_lib
-        PUBLIC
-        ../../lib
-        ../IO
-        ../Hash
-        ../Core
-        ../VarkitInterface
-        ../Alignment
-        ../Utils
-        ../Profiling
-        ../SequenceUtils
-        ../Taxonomy
-        ../SNPs)
+# target_include_directories(protal_lib
+#         PUBLIC
+#         ../../lib
+#         ../IO
+#         ../Hash
+#         ../Core
+#         ../VarkitInterface
+#         ../Alignment
+#         ../Utils
+#         ../Profiling
+#         ../SequenceUtils
+#         ../Taxonomy
+#         ../SNPs)
 
 
 #set(ZLIB_USE_STATIC_LIBS "ON")

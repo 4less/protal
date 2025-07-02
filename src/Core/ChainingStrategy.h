@@ -73,6 +73,7 @@ namespace protal {
         uint16_t total_length = 0;
         uint16_t unique = 0;
         uint16_t unique_best_two = 0;
+        uint16_t total_seeds = 1;
         bool forward = true;
         ChainList chain;
 
@@ -81,6 +82,7 @@ namespace protal {
                 geneid(geneid),
                 forward(forward),
                 unique(unique),
+                total_seeds(1),
                 unique_best_two(unique_best_two) {};
 
         ChainLink& Back() noexcept {
@@ -121,6 +123,7 @@ namespace protal {
                 chain.emplace_back(ChainLink(seed.genepos, seed.readpos, length));
                 total_length += length;
             }
+            total_seeds += 1;
         }
         size_t UpdateLength() {
             total_length = std::accumulate(chain.begin(), chain.end(), 0, [](size_t acc, ChainLink const& link) {
