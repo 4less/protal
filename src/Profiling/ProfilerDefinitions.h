@@ -4,7 +4,7 @@
 
 #pragma once
 
-
+#include <cstdint>
 #include "Constants.h"
 #include <vector>
 #include <string>
@@ -29,6 +29,7 @@ namespace Profiler {
     using AlignmentPairVector = std::vector<AlignmentPair>;
     using AlignmentIDVector = std::vector<AlignmentID>;
     using AlignmentSpanVector = std::vector<AlignmentSpan>;
+
 
 
 

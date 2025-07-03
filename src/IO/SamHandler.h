@@ -6,12 +6,14 @@
 #define PROTAL_SAMHANDLER_H
 
 
+#include <cstdint>
 #include <string>
 #include "LineSplitter.h"
 #include <iostream>
 #include <omp.h>
 
 namespace protal {
+
     using QNAME_t = std::string;
     using FLAG_t = uint16_t;
     using RNAME_t = std::string;
