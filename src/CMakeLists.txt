@@ -7,17 +7,19 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_FLAGS_RELEASE "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
 set(CMAKE_CXX_FLAGS_DEBUG "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
 
-
 # CHECK DEBUG
 if(DEFINED ENV{GCC} AND NOT "$ENV{GCC}" STREQUAL "")
     message(STATUS "Using GCC-prefixed binutils from Conda: $ENV{GCC}")
-    set(CMAKE_AR "$ENV{GCC}-ar" CACHE FILEPATH "" FORCE)
-    set(CMAKE_RANLIB "$ENV{GCC}-ranlib" CACHE FILEPATH "" FORCE)
+    message(STATUS "Using GCC Prefix: ${GCC_PREFIX}")
+    message(STATUS "PREFIX PATH: ${PREFIX}")
+    SET(CMAKE_AR  "$ENV{GCC}-ar")
+    SET(CMAKE_RANLIB  "$ENV{GCC}-ranlib")
 else()
     message(STATUS "Using system default ar/ranlib")
-    set(CMAKE_AR "ar" CACHE FILEPATH "" FORCE)
-    set(CMAKE_RANLIB "ranlib" CACHE FILEPATH "" FORCE)
+    set(CMAKE_AR "ar")
+    set(CMAKE_RANLIB "ranlib")
 endif()
+
 
 SET(CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> qcs <TARGET> <LINK_FLAGS> <OBJECTS>")
 SET(CMAKE_C_ARCHIVE_FINISH   true)
