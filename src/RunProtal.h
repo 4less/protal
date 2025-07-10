@@ -43,6 +43,7 @@ namespace protal {
         // os << "\nOption --output_names has recently been changed to --prefix."<< std::endl;
     }
 
+
     class ProtalDB {
         GenomeLoader m_genomes;
         std::optional<taxonomy::IntTaxonomy> m_taxonomy;
@@ -1234,6 +1235,7 @@ namespace protal {
                 protal_VERSION_PATCH << std::endl;
             exit(0);
         }
+    
 
         PrintLogo();
         PrintProtalInformation();
@@ -1248,6 +1250,11 @@ namespace protal {
 
         if (options.Help()) {
             options.PrintHelp();
+            exit(0);
+        }
+
+        if (options.ShowMapHelp()) {
+            options.PrintMapHelp();
             exit(0);
         }
 

@@ -50,8 +50,8 @@ namespace protal {
                 ("8,profile_truth", "Provide truth file and annotate profile taxa with TP/FP. Format is list of integers (internal ids)", cxxopts::value<std::string>()->default_value(""))
                 ("9,benchmark_alignment_output", "Benchmark alignment output. Output is appended to the file.", cxxopts::value<std::string>())
                 ("h,help", "Print help.")
-                ("z,force", "Force redo alignment even if sam files exists.")
-                ("f,fastalign", "Speed up alignment by allowing approximate alignment between seeds with no indication for indels.")
+                ("force", "Force redo alignment even if sam files exists.")
+                //("f,fastalign", "Speed up alignment by allowing approximate alignment between seeds with no indication for indels.")
                 ("n,no_strains", "Stray on species level. Do not output SNPs")
                 ("0,benchmark_alignment", "Benchmark alignment part of protal based on true taxonomic id and gene id supplied in the read header. Header must fulfill the formatting >taxid_geneid... with the regex: >[0-9]+_[0-9]+([^0-9]+.*)*")
 
@@ -66,9 +66,9 @@ namespace protal {
                 ("g,preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
                 ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
                 ("p,profile", "Perform taxonomic profiling.")
-                ("i,full_reference", "", cxxopts::value<std::string>()->default_value(""))
-                ("q,profile_only", "Provide profile filename (.sam) and only perform profiling based on sam file.", cxxopts::value<std::string>()->default_value(""))
-                ("reference", "", cxxopts::value<std::string>()->default_value(""));
+                ("full_reference", "All marker genomes (not only representative ones) to check unique k-mers during build process", cxxopts::value<std::string>()->default_value(""))
+                ("profile_only", "Provide profile filename (.sam) and only perform profiling based on sam file.", cxxopts::value<std::string>()->default_value(""))
+                ("reference", "Set of reference sequences to build the internal alignment database from", cxxopts::value<std::string>()->default_value(""));
 
         return options;
     }
@@ -79,8 +79,11 @@ namespace protal {
         bool m_profile = false;
         bool m_preload_genomes = false;
         bool m_benchmark_alignment = false;
+
         bool m_show_help = false;
+        bool m_show_map_help = false;
         bool m_show_version = false;
+
         bool m_no_strains = false;
         bool m_fastalign = false;
         bool m_profile_only = false;
@@ -153,13 +156,13 @@ namespace protal {
 
         const size_t MAP_SAMPLE_ID_COL = 0;
 
-        Options(bool show_help, bool show_version) : m_show_help(show_help), m_show_version(show_version) {}
+        Options(bool show_help, bool show_map_help, bool show_version) : m_show_help(show_help), m_show_map_help(show_map_help), m_show_version(show_version) {}
 
         Options(bool build, bool profile, bool profile_only, bool no_strains, bool preload_genomes, bool benchmark_alignment,
-                std::string benchmark_alignment_output, bool show_help, bool show_version, bool mapq_debug_output,
+                std::string benchmark_alignment_output, bool show_help, bool show_map_help, bool show_version, bool mapq_debug_output,
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
-                std::string database_path, std::vector<std::string>& output_prefix_list, std::string full_sequence_file,
-                std::string sequence_file, std::string map_file, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
+                std::string database_path, std::vector<std::string>& output_prefix_list, std::string sequence_file,
+                std::string full_sequence_file, std::string map_file, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
                 double msa_min_vcov, size_t x_drop, size_t max_key_ubiquity, size_t min_successful_lookups, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
                 std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
                 bool force, bool verbose, std::vector<size_t> range) :
@@ -169,6 +172,7 @@ namespace protal {
                 m_no_strains(no_strains),
                 m_preload_genomes(preload_genomes),
                 m_show_help(show_help),
+                m_show_map_help(show_map_help),
                 m_show_version(show_version),
                 m_first_list(std::move(first_list)),
                 m_second_list(std::move(second_list)),
@@ -178,8 +182,8 @@ namespace protal {
                 m_sam_list(sam_file_list),
                 m_profile_list(profile_file_list),
                 m_profile_truth_list(profile_truth_list),
-                m_sequence_file(std::move(full_sequence_file)),
-                m_full_sequence_file(std::move(sequence_file)),
+                m_sequence_file(std::move(sequence_file)),
+                m_full_sequence_file(std::move(full_sequence_file)),
                 m_map_file(std::move(map_file)),
                 m_threads(threads),
                 m_align_top(align_top),
@@ -303,6 +307,10 @@ namespace protal {
 
         bool Help() const {
             return m_show_help;
+        }
+
+        bool ShowMapHelp() const {
+            return m_show_map_help;
         }
 
         bool ShowVersion() const {
@@ -570,6 +578,28 @@ namespace protal {
             auto cxx_options = CxxOptions();
             std::cout << cxx_options.help() << std::endl;
         }
+
+
+        void PrintMapHelp(std::ostream& os = std::cout) {
+            os << R"(
+The map file helps you organise input files spanning different folders without having to use complicated wildcard terms.
+Header lines are indicated with a # and you can define individual output-base folders for strain output, regular output, sam output,
+and profile output. You could leave them empty and always specify the full path in the sample rows (not starting with a hashtag),
+but this can get complicated quite quickly. We disabled .gz output in sams as it is faster to use linux command pigz instead
+of writing out compressed internally.
+
+#STRAIN_OUTPUT_DIR	/path-to-your-results-dir/strains					
+#OUTPUT_DIR	/path-to-your-results-dir/misc					
+#SAM_OUTPUT_DIR	/path-to-your-results-dir/alignments					
+#PROFILE_OUTPUT_DIR	/path-to-your-results-dir/profiles
+#INPUT_DIR	/path-to-input-dir/					
+#SAMPLEID	FIRST	SECOND	SAM	PREFIX	PROFILE
+SAMPLE1	sample1/reads_1.fq	sample1/reads_2.fq	1.sam	AIR1	1.profile
+SAMPLE2	sample2/reads_1.fq	sample2/reads_2.fq	1.sam	AIR2	1.profile
+SAMPLE3	sample3/reads_1.fq	sample3/reads_2.fq	1.sam	AIR3	1.profile
+SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::endl;
+        }
+
 
 
         static bool LoadFromMap(std::string map_path, std::string& strain_output_dir, std::vector<std::string>& prefix_list,
@@ -963,24 +993,25 @@ namespace protal {
 
 
             if (argc <= 1) {
-                return { true, false };
+                return { true, false, false };
             }
 
             cxx_options.parse_positional({ "reference" });
             auto result = cxx_options.parse(argc, argv);
 
             bool show_help = result.count("help");
+            bool show_map_help = result.count("map_help");
             bool show_version = result.count("version");
 
-            if (show_help || show_version) {
-                return { show_help, show_version };
+            if (show_help || show_version || show_map_help) {
+                return { show_help, show_map_help, show_version };
             }
 
             bool no_strains = result.count("no_strains");
             bool build = result.count("build");
             bool preload_genomes_off = result.count("preload_genomes_off");
             bool benchmark_alignment = result.count("benchmark_alignment");
-            bool fastalign = result.count("fastalign");
+            bool fastalign = false;//result.count("fastalign");
             bool profile = result.count("profile");
             bool verbose = result.count("verbose");
 
@@ -1124,6 +1155,7 @@ namespace protal {
                     benchmark_alignment,
                     benchmark_alignment_output_file,
                     show_help,
+                    show_map_help,
                     show_version,
                     mapq_debug_output,
                     first_list,
