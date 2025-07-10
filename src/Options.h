@@ -35,7 +35,8 @@ namespace protal {
         options.positional_help("Help")
                 .add_options()
                 ("b,build", "Build index from reference file with header format ()")
-                ("v,verbose", "Have verbose program output")
+                ("v,version", "Output version information")
+                ("verbose", "Have verbose program output")
                 ("t,threads", "Specify number of threads to use.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_THREADS)))
                 ("d,db", "Path to protal database folder.", cxxopts::value<std::string>())
                 ("o,outdir", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names.", cxxopts::value<std::string>())
@@ -79,6 +80,7 @@ namespace protal {
         bool m_preload_genomes = false;
         bool m_benchmark_alignment = false;
         bool m_show_help = false;
+        bool m_show_version = false;
         bool m_no_strains = false;
         bool m_fastalign = false;
         bool m_profile_only = false;
@@ -151,10 +153,10 @@ namespace protal {
 
         const size_t MAP_SAMPLE_ID_COL = 0;
 
-        Options() : m_show_help(true) {}
+        Options(bool show_help, bool show_version) : m_show_help(show_help), m_show_version(show_version) {}
 
         Options(bool build, bool profile, bool profile_only, bool no_strains, bool preload_genomes, bool benchmark_alignment,
-                std::string benchmark_alignment_output, bool show_help, bool mapq_debug_output,
+                std::string benchmark_alignment_output, bool show_help, bool show_version, bool mapq_debug_output,
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
                 std::string database_path, std::vector<std::string>& output_prefix_list, std::string full_sequence_file,
                 std::string sequence_file, std::string map_file, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
@@ -167,6 +169,7 @@ namespace protal {
                 m_no_strains(no_strains),
                 m_preload_genomes(preload_genomes),
                 m_show_help(show_help),
+                m_show_version(show_version),
                 m_first_list(std::move(first_list)),
                 m_second_list(std::move(second_list)),
                 m_database_path(std::move(database_path)),
@@ -300,6 +303,10 @@ namespace protal {
 
         bool Help() const {
             return m_show_help;
+        }
+
+        bool ShowVersion() const {
+            return m_show_version;
         }
 
         bool NoStrains() const {
@@ -956,16 +963,17 @@ namespace protal {
 
 
             if (argc <= 1) {
-                return {};
+                return { true, false };
             }
 
             cxx_options.parse_positional({ "reference" });
             auto result = cxx_options.parse(argc, argv);
 
-            bool help = result.count("help");
+            bool show_help = result.count("help");
+            bool show_version = result.count("version");
 
-            if (help) {
-                return {};
+            if (show_help || show_version) {
+                return { show_help, show_version };
             }
 
             bool no_strains = result.count("no_strains");
@@ -1115,7 +1123,8 @@ namespace protal {
                     !preload_genomes_off,
                     benchmark_alignment,
                     benchmark_alignment_output_file,
-                    help,
+                    show_help,
+                    show_version,
                     mapq_debug_output,
                     first_list,
                     second_list,

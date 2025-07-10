@@ -14,6 +14,7 @@
 #include "AlignmentStrategy.h"
 #include "TaxonStatisticsOutput.h"
 #include "ProgressBar.h"
+#include "protal_config.h"
 
 // #include "Profiler/ReadFilter.h"
 
@@ -39,7 +40,7 @@ namespace protal {
     }
 
     static void PrintProtalInformation(std::ostream& os = std::cout) {
-        os << "\nOption --output_names has recently been changed to --prefix."<< std::endl;
+        // os << "\nOption --output_names has recently been changed to --prefix."<< std::endl;
     }
 
     class ProtalDB {
@@ -339,20 +340,18 @@ namespace protal {
         std::vector<profiler::MicrobialProfile> profiles;
 
 
+        // These values do not matter anymore when a RandomForest is applied
         double min_ani = 0.95;
         double min_gene_presence = 0.50; //previously 0.5
         size_t min_total_hits = 60; //previously 70
         size_t min_mean_mapq = 10;
-
-
-
-
-//        using TaxonFilterObj = profiler::TaxonFilterForest;
+        
+        
         using TaxonFilterObj = profiler::TaxonFilterObj;
 //        TaxonFilterObj filter(min_ani, min_gene_presence, min_total_hits, min_mean_mapq);
-        std::string model = options.GetIndexFolder() + "/random_forest.xml";
-        std::cout << "Model: " << model << std::endl;
-        TaxonFilterObj filter(model);
+
+        std::string model_path = options.GetIndexFolder() + "/random_forest.xml";
+        TaxonFilterObj filter(model_path);
 
         // ProgressBar prog;
         // prog.Reset(options.GetFileCount());
@@ -363,8 +362,11 @@ namespace protal {
 
         #pragma omp parallel for shared(options, filter, cout, taxonomy, profiles, genomes, std::cerr)//, bm_read_alignments, bm_profile)
         for (auto i : options.GetRange()) {
-#pragma omp critical(print)
-            std::cerr << omp_get_thread_num() << " File " << i << " of " << options.GetRange().size() << ":\n\t" << options.SamFile(i) << std::endl;
+
+            if (options.Verbose()) {
+                #pragma omp critical(print)
+                std::cerr << omp_get_thread_num() << " File " << i << " of " << options.GetRange().size() << ":\n\t" << options.SamFile(i) << std::endl;
+            }
 
             auto sam = options.SamFile(i);
             auto sample_name = options.GetSampleId(i);
@@ -379,8 +381,8 @@ namespace protal {
             Benchmark bm_read_alignments{ "Load read alignments" };
             Benchmark bm_profile{ "Profile sample" };
 
-// #pragma omp critical(progress)
-//             prog.UpdateAdd(1);
+            // #pragma omp critical(progress)
+            // prog.UpdateAdd(1);
 
             profiler::Profiler profiler(genomes);
             profiler.SetNoStrain(options.NoStrains());
@@ -390,18 +392,21 @@ namespace protal {
             std::vector<std::vector<AlignmentPair>> pairs;
 
 
-#pragma omp critical(print)
-            std::cout << "Thread " << omp_get_thread_num() << " read sam file " << sam << std::endl;
-            if (!Utils::exists(sam)) {
-                std::cerr << "File does not exist" << sam << std::endl;
-                exit(90);
+            if (options.Verbose()) {
+                #pragma omp critical(print)
+                {
+                    std::cout << "Thread " << omp_get_thread_num() << " read sam file " << sam << std::endl;
+                }
+                if (!Utils::exists(sam)) {
+                    std::cerr << "File does not exist" << sam << std::endl;
+                    exit(90);
+                }
             }
-            std::cout << "Thread " << omp_get_thread_num() << " read now" << std::endl;
 
 #pragma omp critical(load_sam)
             profiler.FromSam(sam);
 
-            std::cout << "Thread " << omp_get_thread_num() << " after Load" << std::endl;
+            // std::cout << "Thread " << omp_get_thread_num() << " after Load" << std::endl;
 
             if (!profiler.HasReads()) {
                 std::cerr << "Empty sam file" << std::endl;
@@ -414,17 +419,28 @@ namespace protal {
 
             profiler.PrintStats();
             bm_profile.Start();
-#pragma omp critical(print)
-            std::cout << "Thread " << omp_get_thread_num() << " run profile" << std::endl;
+
+
+            if (options.Verbose()) {
+                #pragma omp critical(print)
+                std::cout << "Thread " << omp_get_thread_num() << " run profile" << std::endl;
+            }
+
             auto profile = profiler.Profile(sample_name, std::optional<std::reference_wrapper<std::ostream>>{erro});
             erro.close();
             bm_profile.Stop();
             
-#pragma omp critical(print)
-            std::cout << "Thread " << omp_get_thread_num() << " ";
-            bm_profile.PrintResults();
 
-            profile.bm_add_sam.PrintResults();
+            if (options.Verbose()) {
+                #pragma omp critical(print)
+                {
+                    std::cout << "Thread " << omp_get_thread_num() << " ";
+                    bm_profile.PrintResults();
+                }
+            }
+
+
+            // profile.bm_add_sam.PrintResults();
 
 
             std::optional<TruthSet> truth = options.HasProfileTruths() ?
@@ -439,6 +455,7 @@ namespace protal {
                 profiler.OutputErrorData(unique_pairs, pairs, &truth.value());
             }
 
+
             if (truth.has_value()) {
                 std::string truth_output = options.ProfileFile(i) + ".truth_annotated";
                 profile.AnnotateWithTruth(truth.value(), filter, truth_output);
@@ -446,6 +463,7 @@ namespace protal {
 
                 auto filtered = profile.GetTaxa() | views::filter([&filter](auto a) { return filter.Pass(a.second); });
                 // std::filter(profile.GetTaxa().begin(), profile.GetTaxa().end(), )
+
                 auto tp = std::count_if(
                     filtered.begin(),
                     filtered.end(),
@@ -1208,16 +1226,25 @@ namespace protal {
     }
 
     static void Run(int argc, char *argv[]) {
+        auto options = protal::Options::OptionsFromArguments(argc, argv);
+        if (options.ShowVersion()) {
+            std::cout << "protal v" << 
+                protal_VERSION_MAJOR << "." <<
+                protal_VERSION_MINOR << "." <<
+                protal_VERSION_PATCH << std::endl;
+            exit(0);
+        }
+
         PrintLogo();
         PrintProtalInformation();
-        std::cout << "Total available memory is " << GetTotalSystemMemory() / (1024 * 1024 * 1024) << "GB" << std::endl;;
+        std::cout << "Total available memory is " << GetTotalSystemMemory() / (1024 * 1024 * 1024) << "GB" << std::endl;
+        std::cout << std::endl;
 
         Benchmark bm_total("Run protal");
         bm_total.Start();
 
         using AlignmentBenchmark = CoreBenchmark;
 
-        auto options = protal::Options::OptionsFromArguments(argc, argv);
 
         if (options.Help()) {
             options.PrintHelp();
@@ -1298,7 +1325,8 @@ namespace protal {
 //            profiler::TaxonFilter filter(min_ani, min_gene_presence, min_total_hits, min_mean_mapq);
 
             std::string model = options.GetIndexFolder() + "/random_forest.xml";
-            std::cout << "Model: " << model << std::endl;
+            // std::cout << "Model: " << model << std::endl;
+
             profiler::TaxonFilterObj filter(model);
 
             // If there is more than one profile, get per taxon output
