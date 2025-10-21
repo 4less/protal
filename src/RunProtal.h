@@ -15,6 +15,7 @@
 #include "TaxonStatisticsOutput.h"
 #include "ProgressBar.h"
 #include "protal_config.h"
+#include "Compressor.h"
 
 // #include "Profiler/ReadFilter.h"
 
@@ -162,13 +163,14 @@ namespace protal {
                     // TODO implement logger in protal
                     auto sam = options.SamFile(index);
                     auto dir = std::filesystem::path(sam).parent_path();
+                    
                     if (!std::filesystem::create_directories(dir.string()) && !std::filesystem::exists(dir)) {
                         std::cout << "Cannot create directories for this path " << sam << std::endl;
-                        exit(2);
+                        exit(32);
                     };
 
 
-                    std::cout << index << " Process sample " << options.GetSampleId(index) << (std::filesystem::exists(sam) ? " (sam exists)" : " (sam does not exist)") << std::endl;
+                    // std::cout << index << " Process sample " << options.GetSampleId(index) << (std::filesystem::exists(sam) ? " (sam exists)" : " (sam does not exist)") << std::endl;
 
                     // Avoid aligning files that already exist.
                     if (!options.Force() && std::filesystem::exists(sam)) {
@@ -185,34 +187,12 @@ namespace protal {
 
                     options.SetCurrentIndex(index);
                     std::ofstream sam_output(sam, std::ios::out);
-//                    ogzstream sam_output(sam.c_str());
-
                     genomes.WriteSamHeader(sam_output);
-                    // {
-                    //     Benchmark count_lines_bm{"Count lines for fastq"};
-                    //     count_lines_bm.Start();
-                    //     igzstream is1 { options.GetFirstFile(index).c_str() };
-                    //     igzstream is2 { options.GetSecondFile(index).c_str() };
-                    //     auto is1_lines = Utils::CountLines(is1);
-                    //     auto is2_lines = Utils::CountLines(is2);
-                    //     count_lines_bm.Stop();
-                    //     count_lines_bm.PrintResults();
-                    //     std::cout << is1_lines << " " << is2_lines << std::endl;
-                    //     if (is1_lines != is2_lines) {
-                    //         bm_classify_sample.Stop();
-                    //         bm_classify.PrintResults();
-                    //         std::cerr << "Error: Paired end files have different line counts" << std::endl;
-                    //         std::cerr << options.GetFirstFile(index).c_str() << std::endl;
-                    //         std::cerr << options.GetSecondFile(index).c_str() << std::endl;
-                    //         continue;
-                    //     }
-                    // }
 
                     igzstream is1 { options.GetFirstFile(index).c_str() };
                     igzstream is2 { options.GetSecondFile(index).c_str() };
                     SeqReaderPE reader{is1, is2};
 
-                    std::cout << "Process: " << options.GetFirstFile(index) << std::endl;
 
                     // Main Run Call. This is where the reads are read and alignment happens
                     if (options.GetMAPQDebugOut()) {
@@ -252,6 +232,15 @@ namespace protal {
                     is1.close();
                     is2.close();
                     sam_output.close();
+
+                    if (options.GzipSam()) {
+                        try {
+                            Compressor::compressInPlace(sam, options.GetThreads());
+                            options.SetSamFileGzip(index, true);
+                        } catch (const std::exception& e) {
+                            std::cerr << "[WARNING] " << e.what() << std::endl;
+                        }
+                    }
 
                     // CleanUp
                     if (!reader.Success()) {
@@ -361,7 +350,7 @@ namespace protal {
 
 
 
-        #pragma omp parallel for shared(options, filter, cout, taxonomy, profiles, genomes, std::cerr)//, bm_read_alignments, bm_profile)
+        #pragma omp parallel for firstprivate(filter) shared(options, cout, taxonomy, profiles, genomes, std::cerr)//, bm_read_alignments, bm_profile)
         for (auto i : options.GetRange()) {
 
             if (options.Verbose()) {
@@ -371,7 +360,7 @@ namespace protal {
 
             auto sam = options.SamFile(i);
             auto sample_name = options.GetSampleId(i);
-
+            
             if (!Utils::exists(sam)) {
                 std::cerr << "Sam file does not exist for sample " << options.GetSampleId(i) << " (" << i << ")" << std::endl;
                 profiles.emplace_back(profiler::MicrobialProfile{genomes});
@@ -418,7 +407,7 @@ namespace protal {
 
             std::ofstream erro(sam + ".err", std::ios::out);
 
-            profiler.PrintStats();
+            // profiler.PrintStats();
             bm_profile.Start();
 
 
@@ -452,7 +441,6 @@ namespace protal {
                 profiler.TestSNPUtils(pairs);
                 profiler.OutputErrorData(pairs);
             } else if (truth.has_value()) {
-                std::cout << "Has Truth Available " << std::accumulate(truth.value().begin(), truth.value().end(), std::string{}, [](string acc, uint32_t x) { return acc + " " + std::to_string(x); }) << std::endl;
                 profiler.OutputErrorData(unique_pairs, pairs, &truth.value());
             }
 
@@ -463,6 +451,7 @@ namespace protal {
                 std::cout << "Write truth to: " << truth_output << std::endl;
 
                 auto filtered = profile.GetTaxa() | views::filter([&filter](auto a) { return filter.Pass(a.second); });
+            
                 // std::filter(profile.GetTaxa().begin(), profile.GetTaxa().end(), )
 
                 auto tp = std::count_if(
@@ -476,10 +465,12 @@ namespace protal {
                 std::cout << "TP: " << tp << " FP: " << fp << " FN: " << fn << std::endl;
 
             }
-
-            std::cout << "Write profile to: \n" << options.ProfileFile(i) << std::endl;
+            if (options.Verbose()) {
+                std::cout << "Write profile to: \n" << options.ProfileFile(i) << std::endl;
+            }
             auto dir = std::filesystem::path(options.ProfileFile(i)).parent_path();
             if (!std::filesystem::exists(dir)) {
+                std::cout << options.ProfileFile(i) << std::endl;
                 std::cout << "Dir does not exist: " << dir << std::endl;
                 if (!std::filesystem::create_directories(dir.string())) {
                     std::cout << "Cannot create directories for this path " << options.ProfileFile(i) << std::endl;
@@ -815,7 +806,8 @@ namespace protal {
 
             if (row.empty()) continue;
             os << ">" << names[i] << std::endl;
-            os << std::string_view(&row[0], std::distance(row.begin(), row.end())) << std::endl;
+            // os << std::string_view(&row[0], std::distance(row.begin(), row.end())) << std::endl;
+            os << std::string(&row[0], std::distance(row.begin(), row.end())) << std::endl;
 //            os << std::string_view(row.begin(), row.end()) << std::endl;
         }
     }
@@ -834,7 +826,7 @@ namespace protal {
             if (filter.has_value() && !filter.value().Pass(taxon)) {
                 continue;
             }
-            std::cout << taxid << " Passes " << std::endl;
+            // std::cout << taxid << " Passes " << std::endl;
 
             indices.emplace_back(i);
         }
@@ -868,7 +860,7 @@ namespace protal {
             std::vector<int>(*max_gene_id + 1, -1) );
 
         for (auto si = 0; si < selected_profiles.size(); si++) {
-            std::cout << " _______________Sample: " << si << std::endl;
+            // std::cout << " _______________Sample: " << si << std::endl;
             auto sample_index = selected_profiles[si];
             auto& taxon = profiles[sample_index].GetTaxa().at(taxid);
             auto& multiallelic_vec = per_sample_gene_multiallelic_snps[si];
@@ -902,7 +894,7 @@ namespace protal {
         }
 
         std::ofstream os(options.GetOutputDir() + '/' + name + ".multiallelic.tsv", std::ios::out);
-        std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".multiallelic.tsv") << std::endl;
+        // std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".multiallelic.tsv") << std::endl;
         for (auto si = 0; si < selected_profiles.size(); si++) {
             auto sample_index = selected_profiles[si];
             os << options.GetSampleId(sample_index);
@@ -919,7 +911,7 @@ namespace protal {
         os.close();
 
         std::ofstream os2(options.GetOutputDir() + '/' + name + ".total.tsv", std::ios::out);
-        std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".total.tsv") << std::endl;
+        // std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".total.tsv") << std::endl;
         for (auto si = 0; si < selected_profiles.size(); si++) {
             auto sample_index = selected_profiles[si];
             os2 << options.GetSampleId(sample_index);
@@ -936,7 +928,7 @@ namespace protal {
         os2.close();
 
         std::ofstream os3(options.GetOutputDir() + '/' + name + ".cov.tsv", std::ios::out);
-        std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".cov.tsv") << std::endl;
+        // std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".cov.tsv") << std::endl;
         for (auto si = 0; si < selected_profiles.size(); si++) {
             auto sample_index = selected_profiles[si];
             os3 << options.GetSampleId(sample_index);
@@ -1101,9 +1093,8 @@ namespace protal {
             if (!IsRowGood(row, min_hcov)) continue;
             os << ">" << names[i] << std::endl;
 
-            os << std::string_view(&row[0], std::distance(row.begin(), row.end())) << std::endl;
-//
-//            os << std::string_view(row.begin(), row.end()) << std::endl;
+            // os << std::string_view(&row[0], std::distance(row.begin(), row.end())) << std::endl;
+            os << std::string(&row[0], std::distance(row.begin(), row.end())) << std::endl;
         }
         os.close();
         std::cout << " Saved MSA to " << options.GetMSAOutput(taxon_name);
@@ -1196,7 +1187,7 @@ namespace protal {
 
 
         for (auto& taxid : taxids) {
-            std::cout << "Target taxid: " << taxid << " >> " << taxonomy.Get(taxid).scientific_name << std::endl;
+            std::cout << taxonomy.Get(taxid).scientific_name << std::endl;
 
             std::string name = taxonomy.Get(taxid).scientific_name;
             std::replace(name.begin(), name.end(), ' ', '_');
@@ -1207,11 +1198,9 @@ namespace protal {
                 WriteDistanceMatrix(taxid, similarities, options, name);
             }
 
-            std::cout << "GetMSAForTaxon " << taxonomy.Get(taxid).ToString() << std::endl;
             std::ofstream os_meta(options.GetSpeciesMetaOutput(name));
             GetMSAForTaxon(taxid, name, loader, options, profiles, &os_meta);
             os_meta.close();
-            std::cout << "Check " << taxid << " " << name << std::endl;
 //            Utils::Input();
         }
         bm_strain.Stop();
@@ -1286,8 +1275,6 @@ namespace protal {
             goto Profile;
         }
 
-
-
         /*
          *  READ ALIGNMENT SECTION
          */
@@ -1308,16 +1295,14 @@ namespace protal {
         /*
          * PROFILER
          */
-        std::cout << "Profile? " << options.Profile() << std::endl;
-        if (options.Profile()) {
+        if (!options.NoProfile()) {
             Profile:
 
             db.LoadTaxonomy(options.GetInternalTaxonomyFile());
 
             Benchmark bm_profiling("Profiling");
             bm_profiling.Start();
-            // ProfileWrapper2(options, db);
-            // exit(9);
+            
             auto profiles = ProfileWrapper(options, db);
             bm_profiling.Stop();
             bm_profiling.PrintResults();
@@ -1367,7 +1352,6 @@ namespace protal {
              * STRAIN PART -  RESOLVE MSAs BETWEEN SAMPLES
              */
             if (!options.NoStrains()) {
-                std::cout << "Start StrainWrapper" << std::endl;
                 StrainWrapper2(options, profiles, db.GetGenomes(), db.GetTaxonomy(), filter);
             }
         }

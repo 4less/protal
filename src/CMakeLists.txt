@@ -47,6 +47,7 @@ add_library(protal_lib
         Utilities/xxhash64.h
         Utilities/BinaryClassifierEvaluator.h
         Utilities/LineSplitter.h
+        Utilities/Compressor.h
         SequenceUtils/SeqReader.h
         SequenceUtils/KmerIterator.h
         SequenceUtils/KmerUtils.h

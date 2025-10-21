@@ -34,26 +34,19 @@ namespace protal {
 
         options.positional_help("Help")
                 .add_options()
-                ("b,build", "Build index from reference file with header format ()")
-                ("v,version", "Output version information")
-                ("verbose", "Have verbose program output")
-                ("t,threads", "Specify number of threads to use.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_THREADS)))
-                ("d,db", "Path to protal database folder.", cxxopts::value<std::string>())
-                ("o,outdir", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names.", cxxopts::value<std::string>())
-                ("1,first", "Comma separated list of reads. If paired-end, also specify second end.", cxxopts::value<std::string>()->default_value(""))
-                ("2,second", "Comma separated list of reads. must have <-1/--first> specified.", cxxopts::value<std::string>()->default_value(""))
-                ("3,prefix", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names.", cxxopts::value<std::string>()->default_value(""))
-                ("4,map", "For larger datasets you can define parameters -1, -2, -3 and -o in a file.", cxxopts::value<std::string>()->default_value(""))
-                ("5,map_help", "Get help how to format the map file.")
-                ("6,map_range", "If you specified a map file with -4 or --map you can also pass a range to protal to run protal only on a subset. The first entry is 1, the end is inclusive. e.g.: 1-10. If the end open or larger than the number of entries in the map file, the last entry in the map file is selected as end.", cxxopts::value<std::string>()->default_value("1-"))
-                ("7,mapq_debug_output", "Output mapq debug info to stderr")
-                ("8,profile_truth", "Provide truth file and annotate profile taxa with TP/FP. Format is list of integers (internal ids)", cxxopts::value<std::string>()->default_value(""))
-                ("9,benchmark_alignment_output", "Benchmark alignment output. Output is appended to the file.", cxxopts::value<std::string>())
-                ("h,help", "Print help.")
+                ("db", "Path to protal database folder.", cxxopts::value<std::string>())
+                ("1,first", "Comma separated list of reads. If paired-end, also specify second read via -2/--second.", cxxopts::value<std::string>()->default_value(""))
+                ("2,second", "Comma separated list of reads. must have <-1/--first> specified. Currently this must be specified -- single-end reads are not yet supported.", cxxopts::value<std::string>()->default_value(""))
+                ("3,prefix", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names by taking their longest common prefix. Only works when both pairs of the read file are in the same folder.", cxxopts::value<std::string>()->default_value(""))
+                ("map", "For larger datasets you can define parameters -1, -2, -3 and -o in a tsv-file.", cxxopts::value<std::string>()->default_value(""))
+                ("o,outdir", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names. If not otherwise specified by using --map, sam files, profiles, msas, and other miscellaneous files will be stored in the subfolders to this directory 'sam', 'profiles', 'strains', and 'misc'.", cxxopts::value<std::string>())
+                ("t,threads", "Specify number of threads to use. Will be passed on to pigz for compression of sam files.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_THREADS)))
+                
                 ("force", "Force redo alignment even if sam files exists.")
-                //("f,fastalign", "Speed up alignment by allowing approximate alignment between seeds with no indication for indels.")
-                ("n,no_strains", "Stray on species level. Do not output SNPs")
-                ("0,benchmark_alignment", "Benchmark alignment part of protal based on true taxonomic id and gene id supplied in the read header. Header must fulfill the formatting >taxid_geneid... with the regex: >[0-9]+_[0-9]+([^0-9]+.*)*")
+                ("no_strains", "Stay on species level. Do not output SNPs or MSAs")
+                ("preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
+                ("no_profile", "Do NOT perform taxonomic profiling, only output alignments.")
+                ("profile_only", "Provide profile filename (.sam) and only perform profiling based on sam file.", cxxopts::value<std::string>()->default_value(""))
 
                 ("c,align_top", "After seeding, anchor are sorted by quality passed to alignment. <take_top> specifies how many anchors should be aligned starting with the most promising anchor.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_ALIGN_TOP)))
                 ("m,max_out", "Maximum alignments that should be outputted", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_OUT)))
@@ -63,12 +56,23 @@ namespace protal {
                 ("a,max_score_ani", "A max score makes an alignment stop if the alignment diverges too much. This parameter estimates the score for a given ani and is a tradeoff between speed/accuracy. [ Default: " + std::to_string(DEFAULT_MAX_SCORE_ANI) + "]", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MAX_SCORE_ANI)))
                 ("x,x_drop", "Value determines when to cut of branches in the aligment process that are unpromising. [ Default: " + std::to_string(DEFAULT_X_DROP) + "]", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_X_DROP)))
                 ("e,output_top", "After alignment, alignments are sorted by score. <output_top> specifies how many alignments should be reported starting with the highest scoring alignment.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_OUTPUT_TOP)))
-                ("g,preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
                 ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
-                ("p,profile", "Perform taxonomic profiling.")
+
+                ("map_range", "If you specified a map file with --map you can also pass a range to protal to run protal only on a subset. The first entry is 1, the end is inclusive. e.g.: 1-10. If the end open or larger than the number of entries in the map file, the last entry in the map file is selected as end.", cxxopts::value<std::string>()->default_value("1-"))
+                ("mapq_debug_output", "Output mapq debug info to stderr")
+
+                ("build", "Build index from reference file with header format ()")
                 ("full_reference", "All marker genomes (not only representative ones) to check unique k-mers during build process", cxxopts::value<std::string>()->default_value(""))
-                ("profile_only", "Provide profile filename (.sam) and only perform profiling based on sam file.", cxxopts::value<std::string>()->default_value(""))
-                ("reference", "Set of reference sequences to build the internal alignment database from", cxxopts::value<std::string>()->default_value(""));
+                ("reference", "Set of reference sequences to build the internal alignment database from", cxxopts::value<std::string>()->default_value(""))
+
+                ("profile_truth", "Provide truth file and annotate profile taxa with TP/FP. Format is list of integers (internal ids)", cxxopts::value<std::string>()->default_value(""))
+                ("benchmark_alignment", "Benchmark alignment part of protal based on true taxonomic id and gene id supplied in the read header. Header must fulfill the formatting >taxid_geneid... with the regex: >[0-9]+_[0-9]+([^0-9]+.*)*")
+                ("benchmark_alignment_output", "Benchmark alignment output. Output is appended to the file.", cxxopts::value<std::string>())
+
+                ("v,version", "Output version information")
+                ("verbose", "Have verbose program output")
+                ("h,help", "Print help.")
+                ("map_help", "Get help how to format the map file.");
 
         return options;
     }
@@ -76,7 +80,7 @@ namespace protal {
     class Options {
     private:
         bool m_build = false;
-        bool m_profile = false;
+        bool m_no_profile = false;
         bool m_preload_genomes = false;
         bool m_benchmark_alignment = false;
 
@@ -158,7 +162,7 @@ namespace protal {
 
         Options(bool show_help, bool show_map_help, bool show_version) : m_show_help(show_help), m_show_map_help(show_map_help), m_show_version(show_version) {}
 
-        Options(bool build, bool profile, bool profile_only, bool no_strains, bool preload_genomes, bool benchmark_alignment,
+        Options(bool build, bool no_profile, bool profile_only, bool no_strains, bool preload_genomes, bool benchmark_alignment,
                 std::string benchmark_alignment_output, bool show_help, bool show_map_help, bool show_version, bool mapq_debug_output,
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
                 std::string database_path, std::vector<std::string>& output_prefix_list, std::string sequence_file,
@@ -167,7 +171,7 @@ namespace protal {
                 std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
                 bool force, bool verbose, std::vector<size_t> range) :
                 m_build(build),
-                m_profile(profile),
+                m_no_profile(no_profile),
                 m_profile_only(profile_only),
                 m_no_strains(no_strains),
                 m_preload_genomes(preload_genomes),
@@ -232,7 +236,6 @@ namespace protal {
         };
 
         std::string ToString() const {
-            std::string result_str = "";
 
             std::string first_list_str = m_first_list.empty() ? "" : m_first_list.front();
             for (auto i = 1; i < m_first_list.size(); i++) first_list_str += ", " + m_first_list[i];
@@ -245,44 +248,44 @@ namespace protal {
             std::string profile_list_str = m_profile_list.empty() ? "" : m_profile_list.front();
             for (auto i = 1; i < m_profile_list.size(); i++) profile_list_str += ", " + m_profile_list[i];
 
-//            for (auto& file : m_profile_list) std::cout << file << std::endl;
-
-            result_str += "------ General ------" + std::string(30, '-') + '\n';
-            result_str += "build:               " + std::to_string(m_build) + '\n';
-            result_str += "no strains:          " + std::to_string(m_no_strains) + '\n';
-            result_str += "threads:             " + std::to_string(m_threads) + '\n';
-            result_str += "-------- I/O --------" + std::string(30, '-') + '\n';
-            result_str += "first:               " + (first_list_str.length() > 50 ? std::to_string(m_first_list.size()) + " files" : first_list_str) + '\n';
-            result_str += "second:              " + (second_list_str.length() > 50 ? std::to_string(m_second_list.size()) + " files" : second_list_str) + '\n';
-            result_str += "db path:             " + m_database_path + '\n';
-            result_str += "sequence file:       " + m_sequence_file + '\n';
-            result_str += "sam file:            " + (sam_list_str.length() > 50 ? std::to_string(m_sam_list.size()) + " files" : sam_list_str) + '\n';
-            result_str += "profile file:        " + (profile_list_str.length() > 50 ? std::to_string(m_profile_list.size()) + " files" : profile_list_str) + '\n';
-            result_str += "output prefix:       " + (sam_list_str.length() > 50 ? std::to_string(m_sam_list.size()) + " files" : sam_list_str) + '\n';
-            result_str += "Output dir:          " + m_output_dir + '\n';
-            result_str += "preload genomes:     " + std::to_string(m_preload_genomes) + '\n';
-            result_str += "----- Alignment -----" + std::string(30, '-') + '\n';
-            result_str += "align top:           " + std::to_string(m_align_top) + '\n';
-            result_str += "max key ubiquity:    " + std::to_string(m_max_key_ubiquity) + '\n';
-            result_str += "max seed size:       " + std::to_string(m_max_seed_size) + '\n';
-            result_str += "max score ani:       " + std::to_string(m_max_score_ani) + '\n';
-            result_str += "x-drop:              " + std::to_string(m_x_drop) + '\n';
-            result_str += "fastalign:           " + std::to_string(m_fastalign) + '\n';
-            result_str += "max out:             " + std::to_string(m_max_out) + '\n';
-            result_str += "---- Dev Options ----" + std::string(30, '-') + '\n';
-            result_str += "benchmark alignment: " + std::to_string(m_benchmark_alignment) + '\n';
-            result_str += "profile truth:       " + std::to_string(HasProfileTruths()) + '\n';
-            result_str += "^ output:            " + m_benchmark_alignment_output + '\n';
-            result_str += "---------------------" + std::string(30, '-') + '\n';
-            return result_str;
+            std::ostringstream result_str;
+            result_str << "------ General ------" << std::string(30, '-') << '\n';
+            result_str << "build:               " << std::to_string(m_build) << '\n';
+            result_str << "no strains:          " << std::to_string(m_no_strains) << '\n';
+            result_str << "threads:             " << std::to_string(m_threads) << '\n';
+            result_str << "-------- I/O --------" << std::string(30, '-') << '\n';
+            result_str << "first:               " << (first_list_str.length() > 50 ? std::to_string(m_first_list.size()) + " files" : first_list_str) << '\n';
+            result_str << "second:              " << (second_list_str.length() > 50 ? std::to_string(m_second_list.size()) + " files" : second_list_str) << '\n';
+            result_str << "db path:             " << m_database_path << '\n';
+            result_str << "sequence file:       " << m_sequence_file << '\n';
+            result_str << "sam file:            " << (sam_list_str.length() > 50 ? std::to_string(m_sam_list.size()) + " files" : sam_list_str) << '\n';
+            result_str << "profile file:        " << (profile_list_str.length() > 50 ? std::to_string(m_profile_list.size()) + " files" : profile_list_str) << '\n';
+            result_str << "output prefix:       " << (prefix_list_str.length() > 50 ? std::to_string(m_prefix_list.size()) + " files" : prefix_list_str) << '\n';
+            result_str << "Output dir:          " << m_output_dir << '\n';
+            result_str << "preload genomes:     " << (m_preload_genomes ? "yes" : "no") << '\n';
+            result_str << "----- Alignment -----" << std::string(30, '-') << '\n';
+            result_str << "align top:           " << std::to_string(m_align_top) << '\n';
+            result_str << "max key ubiquity:    " << std::to_string(m_max_key_ubiquity) << '\n';
+            result_str << "max seed size:       " << std::to_string(m_max_seed_size) << '\n';
+            result_str << "max score ani:       " << std::to_string(m_max_score_ani) << '\n';
+            result_str << "x-drop:              " << std::to_string(m_x_drop) << '\n';
+            result_str << "fastalign:           " << std::to_string(m_fastalign) << '\n';
+            result_str << "max out:             " << std::to_string(m_max_out) << '\n';
+            result_str << "---- Dev Options ----" << std::string(30, '-') << '\n';
+            result_str << "verbose:             " << (m_verbose ? "yes" : "no") << '\n';
+            result_str << "benchmark alignment: " << (m_benchmark_alignment ? "yes" : "no") << '\n';
+            result_str << "profile truth:       " << (HasProfileTruths() ? "yes" : "no") << '\n';
+            result_str << "^ output:            " << m_benchmark_alignment_output << '\n';
+            result_str << "---------------------" << std::string(30, '-') << '\n';
+            return result_str.str();
         }
 
         bool BuildMode() const {
             return m_build;
         }
 
-        bool Profile() const {
-            return m_profile;
+        bool NoProfile() const {
+            return m_no_profile;
         }
 
         bool ProfileOnly() const {
@@ -442,24 +445,36 @@ namespace protal {
             return m_second_list[index];
         }
 
-        std::string SamFile(int index) const {
+        std::string SamFile(int index, bool gzipped = false) const {
             if (index >= m_sam_list.size()) {
                 std::cerr << "Cannot access index " << index << " of sam files (Length: " << m_sam_list.size() << ")" << std::endl;
                 exit(33);
             }
-            return m_sam_list[index];
+            return m_sam_list[index] + (gzipped ? ".gz" : "");
+        }
+
+        void SetSamFileGzip(int index, bool gzip) {
+            auto sam = SamFile(index, false);
+
+            if (gzip && sam.substr(sam.size() - 3) == ".gz") {
+                std::cerr << "SAM file " << sam << " is already gzipped." << std::endl;
+                return;
+            }
+
+
+            m_sam_list[index] = m_sam_list[index] + (gzip ? ".gz" : "");
         }
 
         std::vector<std::string> SamFiles() {
             return m_sam_list;
         }
 
-        std::string ProfileFile(int index) const {
+        std::string ProfileFile(int index, bool gzipped = false) const {
             if (index >= m_profile_list.size()) {
                 std::cerr << "Cannot access index " << index << " of profile files (Length: " << m_profile_list.size() << ")" << std::endl;
                 exit(33);
             }
-            return m_profile_list[index];
+            return m_profile_list[index] + (gzipped ? ".gz" : "");
         }
 
         std::string ProfileTruthFile(int index) const {
@@ -484,6 +499,10 @@ namespace protal {
                 exit(33);
             }
             return m_sampleid_list[index];
+        }
+
+        bool GzipSam() const {
+            return m_gzip_sam;
         }
 
         std::string GetOutputDir() const {
@@ -639,7 +658,6 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                 auto& tokens = splitter.Tokens();
                 // Header
 
-
                 if (line.size() >= 1 && line.compare(0, 1, "#") == 0) {
                 //if (line.starts_with('#')) {
                     // Check if header is expected
@@ -769,17 +787,21 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     second_list.emplace_back(second_path);
 
                     // optional
-                    if (sam_column != -1) {
+                    if (sam_column != -1 && sam_column < tokens.size()) {
                         auto sam_path = path(sam_output_dir).append(tokens[sam_column]);
                         sam_list.emplace_back(sam_path);
                     }
-                    if (profile_column != -1) {
+                    if (profile_column != -1 && profile_column < tokens.size()) {
 //                        std::cout << "Profile paths" << std::endl;
 //                        std::cout << profile_output_dir << " " << tokens[profile_column] << std::endl;
                         auto profile_path = path(profile_output_dir).append(tokens[profile_column]);
                         profile_list.emplace_back(profile_path);
                     }
-                    if (profile_truth_column != -1) {
+                    if (profile_truth_column != -1 && profile_truth_column < tokens.size()) {
+
+                        for (int i = 0; i < tokens.size(); i++) {
+                            std::cout << i << " After splitter " << tokens[i] << std::endl;
+                        }
                         auto profile_truth_path = tokens[profile_truth_column];
                         profile_truth_list.emplace_back(profile_truth_path);
                     }
@@ -1012,7 +1034,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             bool preload_genomes_off = result.count("preload_genomes_off");
             bool benchmark_alignment = result.count("benchmark_alignment");
             bool fastalign = false;//result.count("fastalign");
-            bool profile = result.count("profile");
+            bool no_profile = result.count("no_profile");
             bool verbose = result.count("verbose");
 
             size_t threads = result["threads"].as<size_t>();
@@ -1048,6 +1070,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             std::vector<std::string> samplenames_list;
             std::vector<std::string> profile_truth_list;
 
+            
             if (!map_file.empty()) {
                 output_dir = "";
                 LoadFromMap(map_file, output_dir, prefix_list, first_list, second_list, sam_list, profile_list, samplenames_list, profile_truth_list);
@@ -1068,6 +1091,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             bool mapq_debug_output = result.count("mapq_debug_output");
             bool force = result.count("force");
             bool gzip_sam = !result.count("gzip_sam");
+
 
             if (profile_only) {
                 if (!first_list.empty()) {
@@ -1097,32 +1121,52 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                             std::cerr << sam_file << " does not end with .sam" << std::endl;
                             exit(35);
                         }
+                    }
+                }
+            } else {
+                if (prefix_list.empty()) {
+                    for (int i = 0; i < first_list.size(); i++) {
+                        auto first = std::filesystem::path(first_list[i]);
+                        auto second = std::filesystem::path(second_list[i]);
 
-//                        if (sam_file.ends_with(".sam")) {
-//                            prefix_list[i] = sam_file.substr(0, sam_file.length() - 4);
-//                        } else if (sam_file.ends_with(".sam.gz")) {
-//                            prefix_list[i] = sam_file.substr(0, sam_file.length() - 7);
-//                        } else {
-//                            std::cerr << sam_file << " does not end on .sam" << std::endl;
-//                            exit(35);
-//                        }
+                        if (first.parent_path() != second.parent_path()) {
+                            std::cerr << "Cannot infer output prefix from reads files as they are in different folders:" << std::endl;
+                            std::cerr << "  " << first << std::endl;
+                            std::cerr << "  " << second << std::endl;
+                            std::cerr << "Please provide output prefixes via -3" << std::endl;
+                            exit(32);
+                        }
+                        prefix_list.emplace_back(Utils::LongestCommonPrefixTrimmed(first.filename(), second.filename()));
                     }
                 }
 
-
-            } else {
                 if (sam_list.empty()) {
                     for (auto i = 0; i < prefix_list.size(); i++) {
-                        sam_list.emplace_back(prefix_list[i] + (gzip_sam ? ".sam.gz" : ".sam"));
+                        std::filesystem::path sam { prefix_list[i] + ".sam" };
+
+                        // If absolute, just push it directly
+                        if (sam.is_absolute()) {
+                            sam_list.emplace_back(sam);
+                        } else {
+                            // Join output_dir and the relative filename safely
+                            sam_list.emplace_back(std::filesystem::path(output_dir) / sam);
+                        }
                     }
                 }
             }
 
-            if (profile && profile_list.empty()) {
+            // Generate profile names if not provided through prefix or read-infered prefix
+            if (!no_profile && profile_list.empty()) {
                 for (auto i = 0; i < prefix_list.size(); i++) {
+                    std::filesystem::path profile_file { prefix_list[i] + ".profile"};
 
-                    profile_list.emplace_back(prefix_list[i] + ".profile");
-                    // std::cout << profile_list[i] << std::endl;
+                    // If absolute, just push it directly
+                    if (profile_file.is_absolute()) {
+                        profile_list.emplace_back(profile_file);
+                    } else {
+                        // Join output_dir and the relative filename safely
+                        profile_list.emplace_back(std::filesystem::path(output_dir) / profile_file);
+                    }
                 }
             }
 
@@ -1148,7 +1192,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
             auto options = Options(
                     build,
-                    profile,
+                    no_profile,
                     profile_only,
                     no_strains,
                     !preload_genomes_off,

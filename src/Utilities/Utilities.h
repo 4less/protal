@@ -376,6 +376,27 @@ namespace Utils {
 
 
 
+    static std::string LongestCommonPrefixTrimmed(const std::string& a, const std::string& b) {
+        size_t minLen = std::min(a.size(), b.size());
+        size_t i = 0;
+
+        // Find longest common prefix
+        while (i < minLen && a[i] == b[i]) {
+            ++i;
+        }
+
+        // Extract prefix
+        std::string prefix = a.substr(0, i);
+
+        // Remove trailing underscores
+        while (!prefix.empty() && prefix.back() == '_') {
+            prefix.pop_back();
+        }
+
+        return prefix;
+    }
+
+
 //// reference implementation
 //    int FastHammondRef(const char *s, const char *t, int length)
 //    {
