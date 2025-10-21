@@ -10,7 +10,7 @@
 #include "LineSplitter.h"
 #include <fstream>
 #include <regex>
-#include "Utils.h"
+#include "Utilities.h"
 
 
 namespace protal {

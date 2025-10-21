@@ -12,7 +12,7 @@
 #include <iostream>
 #include <tuple>
 #include <fstream>
-#include "Utils.h"
+#include "Utilities.h"
 
 namespace protal {
     template<uint64_t taxid_bits, uint64_t geneid_bits, uint64_t genepos_bits>

@@ -14,7 +14,7 @@
 
 #include <sparse_set.h>
 
-#include "Utils.h"
+#include "Utilities.h"
 #include <sysexits.h>
 
 #include "Benchmark.h"

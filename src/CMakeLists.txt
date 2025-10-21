@@ -21,7 +21,7 @@ else()
 endif()
 
 
-SET(CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> qcs <TARGET> <LINK_FLAGS> <OBJECTS>")
+SET(CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> rcs <TARGET> <LINK_FLAGS> <OBJECTS>")
 SET(CMAKE_C_ARCHIVE_FINISH   true)
 
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
@@ -41,12 +41,12 @@ add_library(protal_lib
         Options.h
         Build.h
         Classify.h
-        Utils/Benchmark.h
-        Utils/Utils.h
-        Utils/ProgressBar.h
-        Utils/xxhash64.h
-        Utils/BinaryClassifierEvaluator.h
-        Utils/LineSplitter.h
+        Utilities/Benchmark.h
+        Utilities/Utilities.h
+        Utilities/ProgressBar.h
+        Utilities/xxhash64.h
+        Utilities/BinaryClassifierEvaluator.h
+        Utilities/LineSplitter.h
         SequenceUtils/SeqReader.h
         SequenceUtils/KmerIterator.h
         SequenceUtils/KmerUtils.h
@@ -98,7 +98,7 @@ add_library(protal_lib
         SequenceUtils/VariantHandler.h
         Strains/Distances.h
         IO/TaxonStatisticsOutput.h
-        Utils/Matrix.h
+        Utilities/Matrix.h
         Strains/MSA.h
         Profiling/TreeFilter.h
         Alignment/WFA2Wrapper2.h
@@ -112,7 +112,7 @@ target_include_directories(protal_lib
         Core
         VarkitInterface
         Alignment
-        Utils
+        Utilities
         Profiling
         SequenceUtils
         Taxonomy
@@ -129,7 +129,7 @@ target_link_directories(protal_lib
         ../Core
         ../VarkitInterface
         ../Alignment
-        ../Utils
+        ../Utilities
         ../Profiling
         # ../Profiler
         ../SequenceUtils
@@ -203,14 +203,13 @@ message("CPMML: ${cPMML}")
 
 
 # Add this before target_link_libraries
-find_library(RT_LIBRARY rt)
-
-message("RT LIB: ${RT_LIBRARY}")
+#find_library(RT_LIBRARY rt)
+#message("RT LIB: ${RT_LIBRARY}")
 
 # Necessary to link to stdc++fs (filesystem experimental support)
 target_link_libraries(protal_lib
         LINK_PUBLIC
-        ${RT_LIBRARY}
+        #${RT_LIBRARY}
         cPMML
         stdc++fs
         wfa_lib

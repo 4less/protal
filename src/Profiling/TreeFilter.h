@@ -12,7 +12,7 @@
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
-#include "Utils.h"
+#include "Utilities.h"
 
 namespace protal {
     using ClosestNeighborMatrix = std::vector<std::vector<uint32_t>>;

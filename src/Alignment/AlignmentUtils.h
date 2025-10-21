@@ -8,7 +8,7 @@
 #include <iostream>
 #include "assert.h"
 #include "SamHandler.h"
-#include "Utils.h"
+#include "Utilities.h"
 #include "Constants.h"
 #include <tuple>
 

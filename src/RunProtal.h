@@ -2,7 +2,7 @@
 
 #include "Profiler.h"
 #include <iostream>
-#include "Utils/Benchmark.h"
+#include "Benchmark.h"
 #include "Options.h"
 #include "Build.h"
 #include "Alignment/WFA2Wrapper.h"
