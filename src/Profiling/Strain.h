@@ -349,7 +349,10 @@ namespace protal {
 
             if (optional_item.has_value()) {
                 auto  valid = optional_item.value().second.get().AreRangesValid(reference.length());
-                std::cerr << "Ranges valid? " << valid << std::endl;
+
+                if (!valid) {
+                    std::cerr << "Coverage ranges are invalid for item " << i << std::endl;
+                }
             }
 
             covs.emplace_back(optional_item.has_value() ?
@@ -429,8 +432,6 @@ namespace protal {
                 auto& cov = covs[i];
                 if (cov.size() > reference.size()) {
                     std::cerr << "Coverage values are faulty: " << cov.size() << " > " << reference.size() << std::endl;
-                    std::cerr << "abort." << std::endl;
-                    exit(4);
                 }
 
                 outs[i] += std::to_string(i) + '\t' + std::to_string(rpos < cov.size() ? cov[rpos] : -1) + '\t';

@@ -789,7 +789,9 @@ namespace protal {
         MSAVector processed_msa(sample_len, std::vector<char>{});
 
         auto sample_size_threshold = msa_vector.size() * position_coverage;
-        std::cout << "Sample size threshold: " << sample_size_threshold << std::endl;
+
+        // std::cout << "Sample size threshold: " << sample_size_threshold << std::endl;
+        
         for (auto pos = 0; pos < info_vector.size(); pos++) {
             if (info_vector[pos] > sample_size_threshold) {
                 for (auto s = 0; s < sample_len; s++) {
@@ -1082,7 +1084,7 @@ namespace protal {
             return IsRowGood(row, 5000);
         });
         if (!any_good) {
-            std::cout << "No any good" << std::endl;
+            std::cout << "No good consensus sequences found for species" << std::endl;
             return;
         }
 
@@ -1097,7 +1099,7 @@ namespace protal {
             os << std::string(&row[0], std::distance(row.begin(), row.end())) << std::endl;
         }
         os.close();
-        std::cout << " Saved MSA to " << options.GetMSAOutput(taxon_name);
+        // std::cout << " Saved MSA to " << options.GetMSAOutput(taxon_name);
 
         partitions.back() += std::to_string(msa.front().size());
 
@@ -1107,13 +1109,16 @@ namespace protal {
         }
         os_part.close();
 
-        std::cout << " Saved Partitions " << std::endl;
+        // std::cout << " Saved Partitions " << std::endl;
 
         auto processed_msa = protal::ProcessMSA(msa, options.GetMSAMinVCOV());
-        std::cout << "Trimmed size: " << processed_msa.front().size() << " with minvcov: " << options.GetMSAMinVCOV() << std::endl;
+
+        // std::cout << "Trimmed size: " << processed_msa.front().size() << " with minvcov: " << options.GetMSAMinVCOV() << std::endl;
 
         os = std::ofstream(options.GetMSAProcessedOutput(taxon_name), std::ios::out);
-        std::cout << "Processed output: " << options.GetMSAProcessedOutput(taxon_name) << std::endl;
+
+        // std::cout << "Processed output: " << options.GetMSAProcessedOutput(taxon_name) << std::endl;
+
         OutputMSA(processed_msa, names, os);
         os.close();
     }
