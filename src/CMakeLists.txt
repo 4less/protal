@@ -103,6 +103,9 @@ add_library(protal_lib
         Strains/MSA.h
         Profiling/TreeFilter.h
         Alignment/WFA2Wrapper2.h
+        RandomForest/simulator.h
+        RandomForest/random_forest.h
+        RandomForest/random_forest.cpp
         )
 
 target_include_directories(protal_lib
@@ -116,6 +119,7 @@ target_include_directories(protal_lib
         Utilities
         Profiling
         SequenceUtils
+        RandomForest
         Taxonomy
         SNPs)
 
