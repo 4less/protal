@@ -234,6 +234,11 @@ namespace protal {
                     sam_output.close();
 
                     if (options.GzipSam()) {
+                        if (options.IsSamFileGzipped(index)) {
+                            std::cerr << "[WARNING] SAM file " << sam << " is already gzipped according to internal record. Skipping compression." << std::endl;
+                            continue;
+                        }
+
                         try {
                             Compressor::compressInPlace(sam, options.GetThreads());
                             options.SetSamFileGzip(index, true);

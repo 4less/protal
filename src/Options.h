@@ -445,16 +445,28 @@ namespace protal {
             return m_second_list[index];
         }
 
-        std::string SamFile(int index, bool gzipped = false) const {
+        std::string SamFile(int index, bool strip_gzip = true) const {
             if (index >= m_sam_list.size()) {
                 std::cerr << "Cannot access index " << index << " of sam files (Length: " << m_sam_list.size() << ")" << std::endl;
                 exit(33);
             }
-            return m_sam_list[index] + (gzipped ? ".gz" : "");
+            auto sam = m_sam_list[index];
+
+            if (strip_gzip && sam.length() > 3 && sam.substr(sam.size() - 3) == ".gz") {
+                return sam.substr(0, sam.size() - 3);
+            }
+            return sam;
+        }
+
+
+        bool IsSamFileGzipped(int index) {
+            auto sam = SamFile(index);
+
+            return sam.length() > 3 && sam.substr(sam.size() - 3) == ".gz";
         }
 
         void SetSamFileGzip(int index, bool gzip) {
-            auto sam = SamFile(index, false);
+            auto sam = SamFile(index);
 
             if (gzip && sam.substr(sam.size() - 3) == ".gz") {
                 std::cerr << "SAM file " << sam << " is already gzipped." << std::endl;
