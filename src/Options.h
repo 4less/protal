@@ -93,8 +93,7 @@ namespace protal {
         bool m_profile_only = false;
         bool m_force = false;
         bool m_verbose = false;
-        bool m_gzip_sam = true;
-
+        
         bool m_mapq_debug_out = false;
 
         size_t m_current_index = 0;
@@ -445,35 +444,30 @@ namespace protal {
             return m_second_list[index];
         }
 
-        std::string SamFile(int index, bool strip_gzip = true) const {
+        std::pair<std::string, bool> SamFile(int index) const {
             if (index >= m_sam_list.size()) {
                 std::cerr << "Cannot access index " << index << " of sam files (Length: " << m_sam_list.size() << ")" << std::endl;
                 exit(33);
             }
             auto sam = m_sam_list[index];
 
-            if (strip_gzip && sam.length() > 3 && sam.substr(sam.size() - 3) == ".gz") {
-                return sam.substr(0, sam.size() - 3);
-            }
-            return sam;
+            return {sam, sam.substr(sam.size() - 3) == ".gz"};
         }
 
 
         bool IsSamFileGzipped(int index) {
-            auto sam = SamFile(index);
+            auto [sam, gzipped] = SamFile(index);
 
-            return sam.length() > 3 && sam.substr(sam.size() - 3) == ".gz";
+            return gzipped;
         }
 
         void SetSamFileGzip(int index, bool gzip) {
-            auto sam = SamFile(index);
+            auto [sam, gzipped] = SamFile(index);
 
-            if (gzip && sam.substr(sam.size() - 3) == ".gz") {
+            if (gzip && gzipped) {
                 std::cerr << "SAM file " << sam << " is already gzipped." << std::endl;
                 return;
             }
-
-
             m_sam_list[index] = m_sam_list[index] + (gzip ? ".gz" : "");
         }
 
@@ -511,10 +505,6 @@ namespace protal {
                 exit(33);
             }
             return m_sampleid_list[index];
-        }
-
-        bool GzipSam() const {
-            return m_gzip_sam;
         }
 
         std::string GetOutputDir() const {
@@ -922,7 +912,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                 error_log.emplace_back(error);
             }
 
-            if (m_first_list.size() != m_second_list.size() || m_first_list.size() != m_sam_list.size()) {
+            if ((m_first_list.size() != m_second_list.size() && !m_second_list.empty()) || m_first_list.size() != m_sam_list.size()) {
                 std::cerr << "First:  " << m_first_list.size() << std::endl;
                 std::cerr << "Second: " << m_second_list.size() << std::endl;
                 std::cerr << "Sam:    " << m_sam_list.size() << std::endl;
@@ -1084,6 +1074,11 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
             
             if (!map_file.empty()) {
+                if (!std::filesystem::exists(map_file)) {
+                    std::cerr << "Map file " << map_file << " does not exist." << std::endl;
+                    exit(9);
+                }
+
                 output_dir = "";
                 LoadFromMap(map_file, output_dir, prefix_list, first_list, second_list, sam_list, profile_list, samplenames_list, profile_truth_list);
 
@@ -1102,7 +1097,6 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             bool profile_only = result.count("profile_only");
             bool mapq_debug_output = result.count("mapq_debug_output");
             bool force = result.count("force");
-            bool gzip_sam = !result.count("gzip_sam");
 
 
             if (profile_only) {

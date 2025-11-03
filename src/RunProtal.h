@@ -17,10 +17,12 @@
 #include "protal_config.h"
 #include "Compressor.h"
 
+#include <ranges>
+
 // #include "Profiler/ReadFilter.h"
 
 #include <algorithm>
-#include <string_view>
+#include <iterator>
 
 namespace protal {
 
@@ -161,7 +163,7 @@ namespace protal {
                     bm_classify_sample.Start();
 
                     // TODO implement logger in protal
-                    auto sam = options.SamFile(index);
+                    auto [sam, gzipped] = options.SamFile(index);
                     auto dir = std::filesystem::path(sam).parent_path();
                     
                     if (!std::filesystem::create_directories(dir.string()) && !std::filesystem::exists(dir)) {
@@ -233,17 +235,15 @@ namespace protal {
                     is2.close();
                     sam_output.close();
 
-                    if (options.GzipSam()) {
-                        if (options.IsSamFileGzipped(index)) {
-                            std::cerr << "[WARNING] SAM file " << sam << " is already gzipped according to internal record. Skipping compression." << std::endl;
-                            continue;
-                        }
-
+                    if (options.IsSamFileGzipped(index)) {
+                        std::cerr << "[WARNING] SAM file " << sam << " is already gzipped according to internal record. Skipping compression." << std::endl;
+                        continue;
+                    } else {
                         try {
                             Compressor::compressInPlace(sam, options.GetThreads());
                             options.SetSamFileGzip(index, true);
                         } catch (const std::exception& e) {
-                            std::cerr << "[WARNING] " << e.what() << std::endl;
+                        std::cerr << "[WARNING] " << e.what() << std::endl;
                         }
                     }
 
@@ -263,29 +263,63 @@ namespace protal {
                 // AlignmentHandler approach
                 SimpleAlignmentHandler alignment_handler(genomes, aligner, kmer_size, options.GetAlignTop(), options.GetMaxScoreAni(), options.FastAlign());
 
+                for (auto index : options.GetRange()) {
+                    auto [sam, gzipped] = options.SamFile(index);
+                    auto dir = std::filesystem::path(sam).parent_path();
+                    
+                    if (!std::filesystem::create_directories(dir.string()) && !std::filesystem::exists(dir)) {
+                        std::cout << "Cannot create directories for this path " << sam << std::endl;
+                        exit(32);
+                    }
 
-                std::ofstream sam_output(options.SamFile(0), std::ios::out);
-                genomes.WriteSamHeader(sam_output);
-                using OutputHandler = ProtalOutputHandler;
-                OutputHandler output_handler(sam_output, 1024*512, 1024*1024*16, genomes, 0.8);
-//                std::ifstream is {options.GetFirstFile(), std::ios::in};
-//                std::ifstream is {options.GetFirstFile(), std::ios::in};
-                igzstream is { options.GetFirstFile(0).c_str() };
-                SeqReader reader{ is };
+                    // Avoid aligning files that already exist.
+                    if (!options.Force() && std::filesystem::exists(sam)) {
+                        std::cout << "Skip " << sam << " continue" << std::endl;
+                        continue;
+                    }
 
-                auto protal_stats = protal::classify::Run<
-                        SimpleKmerHandler<ClosedSyncmer>,
-                        AnchorFinder,
-                        SimpleAlignmentHandler,
-                        OutputHandler,
-                        DEBUG_NONE,
-                        AlignmentBenchmark>(
-                        reader, options, anchor_finder, alignment_handler, output_handler, iterator, benchmark);
+                    std::ofstream sam_output(sam, std::ios::out);
+                    genomes.WriteSamHeader(sam_output);
+                    using OutputHandler = ProtalOutputHandler;
+                    OutputHandler output_handler(sam_output, 1024*512, 1024*1024*16, genomes, 0.8);
+                    igzstream is { options.GetFirstFile(index).c_str() };
+                    SeqReader reader{ is };
 
-                protal_stats.WriteStats();
-                // Close output streams;
-                sam_output.close();
-                is.close();
+                    auto protal_stats = protal::classify::Run<
+                            SimpleKmerHandler<ClosedSyncmer>,
+                            AnchorFinder,
+                            SimpleAlignmentHandler,
+                            OutputHandler,
+                            DEBUG_NONE,
+                            AlignmentBenchmark>(
+                            reader, options, anchor_finder, alignment_handler, output_handler, iterator, benchmark);
+
+                    if (options.Verbose()) {
+                        protal_stats.WriteStats();
+                    }
+                    
+                    // Close output streams
+                    sam_output.close();
+                    is.close();
+
+                    // Handle gzip compression if needed
+                    if (!options.IsSamFileGzipped(index)) {
+                        try {
+                            Compressor::compressInPlace(sam, options.GetThreads());
+                            options.SetSamFileGzip(index, true);
+                        } catch (const std::exception& e) {
+                            std::cerr << "[WARNING] " << e.what() << std::endl;
+                        }
+                    }
+
+                    // Clean up on read error
+                    if (!reader.Success()) {
+                        std::cerr << "There was an error reading the fastq file with sample " << options.GetSampleId(index) << " (" << index << ")" << std::endl;
+                        std::cerr << options.GetFirstFile(index) << std::endl;
+                        std::cerr << "Remove sam file: " << sam << std::endl;
+                        std::filesystem::remove(sam);
+                    }
+                }
             }
             bm_classify.Stop();
             bm_classify.PrintResults();
@@ -359,11 +393,12 @@ namespace protal {
         for (auto i : options.GetRange()) {
 
             if (options.Verbose()) {
+                auto [sam, gzipped] = options.SamFile(i);
                 #pragma omp critical(print)
-                std::cerr << omp_get_thread_num() << " File " << i << " of " << options.GetRange().size() << ":\n\t" << options.SamFile(i) << std::endl;
+                std::cerr << omp_get_thread_num() << " File " << i << " of " << options.GetRange().size() << ":\n\t" << sam << (gzipped ? " (gzipped)" : "") << std::endl;
             }
 
-            auto sam = options.SamFile(i);
+            auto [sam, gzipped] = options.SamFile(i);
             auto sample_name = options.GetSampleId(i);
             
             if (!Utils::exists(sam)) {
@@ -455,7 +490,7 @@ namespace protal {
                 profile.AnnotateWithTruth(truth.value(), filter, truth_output);
                 std::cout << "Write truth to: " << truth_output << std::endl;
 
-                auto filtered = profile.GetTaxa() | views::filter([&filter](auto a) { return filter.Pass(a.second); });
+                auto filtered = profile.GetTaxa() | std::views::filter([&filter](auto a) { return filter.Pass(a.second); });
             
                 // std::filter(profile.GetTaxa().begin(), profile.GetTaxa().end(), )
 
@@ -1280,7 +1315,8 @@ namespace protal {
         bool all_alignments_exist = std::all_of(sam_files.begin(), sam_files.end(), [](std::string const& file){ return Utils::exists(file); });
 
         bool skip_alignment = !options.BuildMode() && all_alignments_exist && !options.Force();
-        if (!options.BuildMode() && !options.SamFile(0).empty() && (options.ProfileOnly() || skip_alignment)) {
+        auto [sam, gzipped] = options.SamFile(0);
+        if (!options.BuildMode() && !sam.empty() && (options.ProfileOnly() || skip_alignment)) {
             std::cout << "All alignments are present." << std::endl;
             goto Profile;
         }

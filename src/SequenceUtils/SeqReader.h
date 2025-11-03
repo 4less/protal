@@ -43,6 +43,10 @@ namespace protal {
             m_valid_fragment = m_reader.NextSequence(record);
             return m_valid_fragment;
         }
+
+        bool Success() {
+            return !m_reader.Error();
+        }
     };
 
     class SeqReaderPE {
