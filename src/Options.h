@@ -103,6 +103,8 @@ namespace protal {
         std::string m_full_sequence_file;
         std::string m_database_path;
         std::string m_output_dir;
+        std::string m_strain_output_dir;
+        std::string m_misc_output_dir;
         std::string m_map_file;
 
         std::vector<std::string> m_first_list;
@@ -156,6 +158,13 @@ namespace protal {
         static inline const std::string MAP_VAR_SAM_OUTPUT_DIR = "#SAM_OUTPUT_DIR";
         static inline const std::string MAP_VAR_PROFILE_OUTPUT_DIR = "#PROFILE_OUTPUT_DIR";
         static inline const std::string MAP_VAR_STRAIN_OUTPUT_DIR = "#STRAIN_OUTPUT_DIR";
+        static inline const std::string MAP_VAR_MISC_OUTPUT_DIR = "#MISC_OUTPUT_DIR";
+
+        static inline const std::string MAP_VAR_DEFAULT_SAM_OUTPUT_DIR = "alignments";
+        static inline const std::string MAP_VAR_DEFAULT_PROFILE_OUTPUT_DIR = "profiles";
+        static inline const std::string MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR = "strains";
+        static inline const std::string MAP_VAR_DEFAULT_MISC_OUTPUT_DIR = "misc";
+
 
         const size_t MAP_SAMPLE_ID_COL = 0;
 
@@ -165,7 +174,7 @@ namespace protal {
                 std::string benchmark_alignment_output, bool show_help, bool show_map_help, bool show_version, bool mapq_debug_output,
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
                 std::string database_path, std::vector<std::string>& output_prefix_list, std::string sequence_file,
-                std::string full_sequence_file, std::string map_file, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
+                std::string full_sequence_file, std::string map_file, std::string strain_output_dir, std::string misc_output_dir, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
                 double msa_min_vcov, size_t x_drop, size_t max_key_ubiquity, size_t min_successful_lookups, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
                 std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
                 bool force, bool verbose, std::vector<size_t> range) :
@@ -181,6 +190,8 @@ namespace protal {
                 m_second_list(std::move(second_list)),
                 m_database_path(std::move(database_path)),
                 m_prefix_list(std::move(output_prefix_list)),
+                m_strain_output_dir(strain_output_dir),
+                m_misc_output_dir(misc_output_dir),
                 m_output_dir(output_dir),
                 m_sam_list(sam_file_list),
                 m_profile_list(profile_file_list),
@@ -511,24 +522,32 @@ namespace protal {
             return m_output_dir;
         }
 
+        std::string GetStrainOutputDir() const {
+            return m_strain_output_dir;
+        }
+
+        std::string GetMiscOutputDir() const {
+            return m_misc_output_dir;
+        }
+
         std::string GetSimilarityMatrixOutput(std::string species_name) const {
             return m_output_dir + '/' + species_name + ".tsv";
         }
 
         std::string GetMSAOutput(std::string species_name) const {
-            return m_output_dir + '/' + species_name + ".msa.fna";
+            return m_strain_output_dir + '/' + species_name + ".msa.fna";
         }
 
         std::string GetSpeciesMetaOutput(std::string species_name) const {
-            return m_output_dir + '/' + species_name + ".meta.tsv";
+            return m_strain_output_dir + '/' + species_name + ".meta.tsv";
         }
 
         std::string GetMSAProcessedOutput(std::string species_name) const {
-            return m_output_dir + '/' + species_name + ".processed.msa.fna";
+            return m_strain_output_dir + '/' + species_name + ".processed.msa.fna";
         }
 
         std::string GetMSAPartitionOutput(std::string species_name) const {
-            return m_output_dir + '/' + species_name + ".partition.txt";
+            return m_strain_output_dir + '/' + species_name + ".partition.txt";
         }
 
         std::string GetBenchmarkAlignmentOutputFile() const {
@@ -622,8 +641,26 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
         }
 
 
+        static bool CreateDir(std::string dir_path) {
+            
+            // Add directory creation with error handling
+            if (!std::filesystem::exists(dir_path)) {
+                std::error_code ec;
+                if (!std::filesystem::create_directories(dir_path, ec)) {
+                    std::string error = "Failed to create SAM output directory: " + dir_path + 
+                                    "\nError: " + ec.message();
+                    std::cerr << error << std::endl;
+                    return false;
+                }
+            } else if (!std::filesystem::is_directory(dir_path)) {
+                std::string error = "SAM output path exists but is not a directory: " + dir_path;
+                std::cerr << error << std::endl;
+                return false;
+            }
+        }
 
-        static bool LoadFromMap(std::string map_path, std::string& strain_output_dir, std::vector<std::string>& prefix_list,
+        static bool LoadFromMap(std::string map_path, std::string& output_dir, std::string& strain_output_dir, std::string& misc_output_dir, 
+                                std::vector<std::string>& prefix_list, 
                                 std::vector<std::string>& first_list, std::vector<std::string>& second_list,
                                 std::vector<std::string>& sam_list, std::vector<std::string>& profile_list,
                                 std::vector<std::string>& samplenames_list, std::vector<std::string>& profile_truth_list) {
@@ -635,10 +672,10 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             }
             std::ifstream is(map_path, std::ios::in);
 
-            std::string prefix_output_dir = "";
+            std::string global_output_dir = "";
             std::string sam_output_dir = "";
             std::string profile_output_dir = "";
-            std::string strain_output_dir2 = "";
+
             std::string input_dir = "";
 
             LineSplitter splitter;
@@ -658,11 +695,10 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                 if (line.empty()) continue;
                 splitter.Split(line);
                 auto& tokens = splitter.Tokens();
+                
+                
                 // Header
-
                 if (line.size() >= 1 && line.compare(0, 1, "#") == 0) {
-                //if (line.starts_with('#')) {
-                    // Check if header is expected
                     if (!header) {
                         std::cerr << "Line " << line_num << ": Did not expect header line but line starts with #" << std::endl;
                         return false;
@@ -670,6 +706,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
                     // Check if variable definition or header
                     if (!tokens.empty() && tokens[0] == MAP_SAMPLEID) {
+                        // Column headers
                         splitter.Split(line);
 
                         for (auto i = 1; i < splitter.Tokens().size(); i++) {
@@ -726,8 +763,38 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                             }
                         }
                         header = false;
+
+                        if (global_output_dir.empty()) {
+                            if (output_dir.empty()) {
+                                std::cerr << "Line " << line_num << ": Output directory not defined. Please define " << MAP_VAR_OUTPUT_DIR << " before the header line or provide an output directory via --outdir." << std::endl;
+                                return false;
+                            }
+                            global_output_dir = output_dir;
+                        } else {
+                            output_dir = global_output_dir;
+                        }
+
+                        sam_output_dir = sam_output_dir.empty() ? path(global_output_dir).append(MAP_VAR_DEFAULT_SAM_OUTPUT_DIR) : path(sam_output_dir);
+                        sam_output_dir = path(sam_output_dir).is_absolute() ? path(sam_output_dir) : path(global_output_dir).append(sam_output_dir);
+                        CreateDir(sam_output_dir);
+
+                        strain_output_dir = strain_output_dir.empty() ? path(global_output_dir).append(MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR) : path(strain_output_dir);
+                        strain_output_dir = path(strain_output_dir).is_absolute() ? path(strain_output_dir) : path(global_output_dir).append(strain_output_dir);
+                        CreateDir(strain_output_dir);
+
+                        profile_output_dir = profile_output_dir.empty() ? path(global_output_dir).append(MAP_VAR_DEFAULT_PROFILE_OUTPUT_DIR) : path(profile_output_dir);
+                        profile_output_dir = path(profile_output_dir).is_absolute() ? path(profile_output_dir) : path(global_output_dir).append(profile_output_dir);
+                        CreateDir(profile_output_dir);
+
+                        misc_output_dir = misc_output_dir.empty() ? path(global_output_dir).append(MAP_VAR_DEFAULT_MISC_OUTPUT_DIR) : path(misc_output_dir);
+                        misc_output_dir = path(misc_output_dir).is_absolute() ? path(misc_output_dir) : path(global_output_dir).append(misc_output_dir);
+                        CreateDir(misc_output_dir);
+
+
+                        continue;
                     }
 
+                    // Header variable definitions
                     if (!tokens.empty() && tokens[0] == MAP_VAR_INPUT_DIR) {
                         if (tokens.size() < 2) {
                             std::cerr << "Line " << line_num << ": Expected value for key " << MAP_VAR_INPUT_DIR << std::endl;
@@ -741,7 +808,6 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                             return false;
                         }
                         strain_output_dir = tokens[1];
-                        strain_output_dir2 = tokens[1];
                     }
                     if (!tokens.empty() && tokens[0] == MAP_VAR_SAM_OUTPUT_DIR) {
                         if (tokens.size() < 2) {
@@ -762,10 +828,20 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                             std::cerr << "Line " << line_num << ": Expected value for key " << MAP_VAR_OUTPUT_DIR << std::endl;
                             return false;
                         }
-                        prefix_output_dir = tokens[1];
+                        global_output_dir = tokens[1];
+                    }
+                    if (!tokens.empty() && tokens[0] == MAP_VAR_MISC_OUTPUT_DIR) {
+                        if (tokens.size() < 2) {
+                            std::cerr << "Line " << line_num << ": Expected value for key " << MAP_VAR_OUTPUT_DIR << std::endl;
+                            return false;
+                        }
+                        misc_output_dir = tokens[1];
                     }
 
+
                 } else {
+
+                    // Mapping file content
                     if (prefix_column == -1 || first_column == -1 || second_column == 1) {
                         std::cerr << "The columns must be specified: " << MAP_PREFIX << ", " << MAP_FIRST_READ << ", " << MAP_SECOND_READ << std::endl;
                         return false;
@@ -778,7 +854,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
                     splitter.Split(line);
                     auto sample_id = tokens[prefix_column];
-                    auto prefix_path = path(prefix_output_dir).append(tokens[prefix_column]);
+                    auto prefix_path = path(global_output_dir).append(tokens[prefix_column]);
                     auto first_path = path(input_dir).append(tokens[first_column]);
                     auto second_path = path(input_dir).append(tokens[second_column]);
 
@@ -1072,15 +1148,15 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             std::vector<std::string> samplenames_list;
             std::vector<std::string> profile_truth_list;
 
+            std::string strain_output_dir = "";
+            std::string misc_output_dir = "";
             
             if (!map_file.empty()) {
                 if (!std::filesystem::exists(map_file)) {
                     std::cerr << "Map file " << map_file << " does not exist." << std::endl;
                     exit(9);
                 }
-
-                output_dir = "";
-                LoadFromMap(map_file, output_dir, prefix_list, first_list, second_list, sam_list, profile_list, samplenames_list, profile_truth_list);
+                LoadFromMap(map_file, output_dir, strain_output_dir, misc_output_dir, prefix_list, first_list, second_list, sam_list, profile_list, samplenames_list, profile_truth_list);
 
                 if (range_arg != "") {
                     range = ProcessRange(range_arg, first_list.size());
@@ -1090,6 +1166,13 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                 LineSplitter::Split(second, ",", second_list);
                 LineSplitter::Split(universal_prefix, ",", prefix_list);
                 LineSplitter::Split(sam_in, ",", sam_list);
+
+                if (strain_output_dir.empty()) {
+                    strain_output_dir = std::filesystem::path(output_dir) / std::filesystem::path(MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR);
+                }
+                if (misc_output_dir.empty()) {
+                    misc_output_dir = std::filesystem::path(output_dir) / std::filesystem::path(MAP_VAR_DEFAULT_MISC_OUTPUT_DIR);
+                }
             }
 
 
@@ -1216,6 +1299,8 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     reference,
                     full_reference,
                     map_file,
+                    strain_output_dir,
+                    misc_output_dir,
                     output_dir,
                     threads,
                     align_top,

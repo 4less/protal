@@ -935,7 +935,7 @@ namespace protal {
             }
         }
 
-        std::ofstream os(options.GetOutputDir() + '/' + name + ".multiallelic.tsv", std::ios::out);
+        std::ofstream os(options.GetMiscOutputDir() + '/' + name + ".multiallelic.tsv", std::ios::out);
         // std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".multiallelic.tsv") << std::endl;
         for (auto si = 0; si < selected_profiles.size(); si++) {
             auto sample_index = selected_profiles[si];
@@ -952,7 +952,7 @@ namespace protal {
         }
         os.close();
 
-        std::ofstream os2(options.GetOutputDir() + '/' + name + ".total.tsv", std::ios::out);
+        std::ofstream os2(options.GetMiscOutputDir() + '/' + name + ".total.tsv", std::ios::out);
         // std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".total.tsv") << std::endl;
         for (auto si = 0; si < selected_profiles.size(); si++) {
             auto sample_index = selected_profiles[si];
@@ -969,7 +969,7 @@ namespace protal {
         }
         os2.close();
 
-        std::ofstream os3(options.GetOutputDir() + '/' + name + ".cov.tsv", std::ios::out);
+        std::ofstream os3(options.GetMiscOutputDir() + '/' + name + ".cov.tsv", std::ios::out);
         // std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".cov.tsv") << std::endl;
         for (auto si = 0; si < selected_profiles.size(); si++) {
             auto sample_index = selected_profiles[si];
@@ -1379,7 +1379,7 @@ namespace protal {
                     std::string name = taxonomy.Get(taxid).scientific_name;
                     std::replace(name.begin(), name.end(), ' ', '_');
 
-                    std::ofstream os(options.GetOutputDir() + '/' + name + ".statistics.tsv");
+                    std::ofstream os(options.GetMiscOutputDir() + '/' + name + ".statistics.tsv");
 
                     stats.PrintHeader(os);
                     for (auto& profile : profiles) {
