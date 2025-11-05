@@ -258,6 +258,8 @@ namespace protal {
                 }
 
             } else {
+                std::cout << "Single-end mode is not working currently. This will be fixed with the next version" << std::endl;
+                exit(8);
                 // AnchorFinder
                 AnchorFinder anchor_finder(kmer_lookup, mmer_size, 4, options.GetMaxSeedSize(), genomes);
                 // AlignmentHandler approach
