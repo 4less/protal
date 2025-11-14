@@ -1022,6 +1022,7 @@ namespace protal {
             }
             os4 << std::endl;
         }
+        
         os4.close();
 
 
@@ -1030,8 +1031,8 @@ namespace protal {
 
     static void GetMSAForTaxon (uint32_t taxid, std::string taxon_name, GenomeLoader& loader, Options& options, Profiles& profiles, std::ostream* os_meta=nullptr, std::optional<profiler::TaxonFilter> filter={}) {
         auto min_hcov = 5000;
-        auto min_cov = 2;
-        auto min_qual_sum = 60;
+        auto min_qual_sum = options.GetSNPMinPhredSum();
+        auto min_cov = options.GetSNPMinCov();
         auto min_samples_with_gene = 3;
 
         std::vector<size_t> profile_indices = GetProfilesWithTaxon(taxid, profiles, options, filter);

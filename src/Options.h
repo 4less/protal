@@ -27,6 +27,9 @@ namespace protal {
     static const bool DEFAULT_NO_STRAIN = false;
     static const std::string PROTAL_DB_ENV_VARIABLE = "PROTAL_DB_PATH";
 
+    static const double DEFAULT_MIN_SNP_COV = 2;
+    static const double DEFAULT_MIN_SNP_PHRED_SUM = 60;
+
     static cxxopts::Options CxxOptions() {
         cxxopts::Options options(
                 "protal",
@@ -37,17 +40,17 @@ namespace protal {
                 ("db", "Path to protal database folder.", cxxopts::value<std::string>())
                 ("1,first", "Comma separated list of reads. If paired-end, also specify second read via -2/--second.", cxxopts::value<std::string>()->default_value(""))
                 ("2,second", "Comma separated list of reads. must have <-1/--first> specified. Currently this must be specified -- single-end reads are not yet supported.", cxxopts::value<std::string>()->default_value(""))
-                ("3,prefix", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names by taking their longest common prefix. Only works when both pairs of the read file are in the same folder.", cxxopts::value<std::string>()->default_value(""))
+                ("prefix", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names by taking their longest common prefix. Only works when both pairs of the read file are in the same folder.", cxxopts::value<std::string>()->default_value(""))
                 ("map", "For larger datasets you can define parameters -1, -2, -3 and -o in a tsv-file.", cxxopts::value<std::string>()->default_value(""))
                 ("o,outdir", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names. If not otherwise specified by using --map, sam files, profiles, msas, and other miscellaneous files will be stored in the subfolders to this directory 'sam', 'profiles', 'strains', and 'misc'.", cxxopts::value<std::string>())
                 ("t,threads", "Specify number of threads to use. Will be passed on to pigz for compression of sam files.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_THREADS)))
                 
                 ("force", "Force redo alignment even if sam files exists.")
-                ("no_strains", "Stay on species level. Do not output SNPs or MSAs")
-                ("preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
+                ("no_strains", "Stay on species level. Do not output SNPs or MSAs. Default is on.")
                 ("no_profile", "Do NOT perform taxonomic profiling, only output alignments.")
                 ("profile_only", "Provide profile filename (.sam) and only perform profiling based on sam file.", cxxopts::value<std::string>()->default_value(""))
-
+                ("preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
+                
                 ("c,align_top", "After seeding, anchor are sorted by quality passed to alignment. <take_top> specifies how many anchors should be aligned starting with the most promising anchor.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_ALIGN_TOP)))
                 ("m,max_out", "Maximum alignments that should be outputted", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_OUT)))
                 ("u,max_key_ubiquity", "Max key ubiquity. Best matching Flexkey count for seed must be lower or equal", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_KEY_UBIQUITY)))
@@ -57,6 +60,9 @@ namespace protal {
                 ("x,x_drop", "Value determines when to cut of branches in the aligment process that are unpromising. [ Default: " + std::to_string(DEFAULT_X_DROP) + "]", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_X_DROP)))
                 ("e,output_top", "After alignment, alignments are sorted by score. <output_top> specifies how many alignments should be reported starting with the highest scoring alignment.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_OUTPUT_TOP)))
                 ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
+
+                ("snp_min_cov", "Minimum coverage for calling a SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_COV)))
+                ("snp_min_phred_sum", "Minimum phred sum across all observations of allele to call SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_PHRED_SUM)))
 
                 ("map_range", "If you specified a map file with --map you can also pass a range to protal to run protal only on a subset. The first entry is 1, the end is inclusive. e.g.: 1-10. If the end open or larger than the number of entries in the map file, the last entry in the map file is selected as end.", cxxopts::value<std::string>()->default_value("1-"))
                 ("mapq_debug_output", "Output mapq debug info to stderr")
@@ -132,6 +138,9 @@ namespace protal {
         size_t m_max_out = DEFAULT_MAX_OUT;
         double m_msa_min_vcov = DEFAULT_MSA_MIN_VCOV;
 
+        double m_snp_min_cov = DEFAULT_MIN_SNP_COV;
+        double m_snp_min_phred_sum = DEFAULT_MIN_SNP_PHRED_SUM;
+
     public:
         static inline const std::string PROTAL_INDEX_FILE = "index.prx";
         static inline const std::string PROTAL_SEQUENCE_FILE = "reference.fna";
@@ -175,7 +184,8 @@ namespace protal {
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
                 std::string database_path, std::vector<std::string>& output_prefix_list, std::string sequence_file,
                 std::string full_sequence_file, std::string map_file, std::string strain_output_dir, std::string misc_output_dir, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
-                double msa_min_vcov, size_t x_drop, size_t max_key_ubiquity, size_t min_successful_lookups, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
+                double msa_min_vcov, double snp_min_phred_sum, double snp_min_cov,
+                size_t x_drop, size_t max_key_ubiquity, size_t min_successful_lookups, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
                 std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
                 bool force, bool verbose, std::vector<size_t> range) :
                 m_build(build),
@@ -204,6 +214,8 @@ namespace protal {
                 m_max_out(max_out),
                 m_max_score_ani(max_score_ani),
                 m_msa_min_vcov(msa_min_vcov),
+                m_snp_min_cov(snp_min_cov),
+                m_snp_min_phred_sum(snp_min_phred_sum),
                 m_x_drop(x_drop),
                 m_max_key_ubiquity(max_key_ubiquity),
                 m_max_seed_size(max_seed_size),
@@ -281,6 +293,9 @@ namespace protal {
             result_str << "x-drop:              " << std::to_string(m_x_drop) << '\n';
             result_str << "fastalign:           " << std::to_string(m_fastalign) << '\n';
             result_str << "max out:             " << std::to_string(m_max_out) << '\n';
+            result_str << "------ Strains ------" << std::string(30, '-') << '\n';
+            result_str << "snp min cov:         " << std::to_string(m_snp_min_cov) << '\n';
+            result_str << "snp min phred sum:   " << std::to_string(m_snp_min_phred_sum) << '\n';
             result_str << "---- Dev Options ----" << std::string(30, '-') << '\n';
             result_str << "verbose:             " << (m_verbose ? "yes" : "no") << '\n';
             result_str << "benchmark alignment: " << (m_benchmark_alignment ? "yes" : "no") << '\n';
@@ -301,14 +316,6 @@ namespace protal {
         bool ProfileOnly() const {
             return m_profile_only;
         }
-
-//        std::string SamFile() const {
-//            return m_sam_file;
-//        }
-//
-//        std::string& SamFile() {
-//            return m_sam_file;
-//        }
 
         std::string& ProfileTruthFile() {
             return m_profile_truth;
@@ -584,6 +591,14 @@ namespace protal {
 
         auto GetMSAMinVCOV() {
             return m_msa_min_vcov;
+        }
+
+        auto GetSNPMinCov() {
+            return m_snp_min_cov;
+        }
+
+        auto GetSNPMinPhredSum() {
+            return m_snp_min_phred_sum;
         }
 
         size_t GetAlignTop() const {
@@ -1125,6 +1140,9 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             double msa_min_vcov = result["msa_min_vcov"].as<double>();
             size_t max_out = result["max_out"].as<size_t>();
 
+            double snp_min_cov = result["snp_min_cov"].as<double>();
+            double snp_min_phred_sum = result["snp_min_phred_sum"].as<double>();
+
 
             auto reference = result["reference"].as<std::string>();
             auto full_reference = result["full_reference"].as<std::string>();
@@ -1307,6 +1325,8 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     max_out,
                     max_score_ani,
                     msa_min_vcov,
+                    snp_min_cov,
+                    snp_min_phred_sum,
                     x_drop,
                     max_key_ubiquity,
                     min_successful_lookups,

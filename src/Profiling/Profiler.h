@@ -812,6 +812,7 @@ namespace protal {
             bool Pass(Taxon const& taxon) const {
                 auto a = taxon.GetAlleles();
                 auto af = taxon.GetAlleles(2, 60);
+
                 auto af_sum = std::accumulate(af.begin(), af.end(), 0);
                 auto a_sum = std::accumulate(a.begin(), a.end(), 0);
 
@@ -885,10 +886,7 @@ namespace protal {
                 m_sample["lsu_per_read"] = std::to_string(taxon.LongSuperUniques() == 0 ? 0 : taxon.LongSuperUniques()/static_cast<double>(taxon.TotalHits()));
                 m_sample["lu_per_read"] = std::to_string(taxon.LongUniques() == 0 ? 0 : taxon.LongUniques()/static_cast<double>(taxon.TotalHits()));
 
-                // for (auto& [key, value] : m_sample) {
-                //     std::cout << key << " -> " << value << std::endl;
-                // }
-
+                
                 auto prediction_str = m_model.predict(m_sample);
                 return prediction_str == "TRUE";
             }
