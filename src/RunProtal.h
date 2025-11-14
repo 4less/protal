@@ -1022,7 +1022,7 @@ namespace protal {
             }
             os4 << std::endl;
         }
-        
+
         os4.close();
 
 
@@ -1317,6 +1317,11 @@ namespace protal {
 
         if (options.Help()) {
             options.PrintHelp();
+            exit(0);
+        }
+
+        if (options.HelpDev()) {
+            options.PrintHelp(true);
             exit(0);
         }
 

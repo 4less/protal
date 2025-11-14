@@ -35,22 +35,25 @@ namespace protal {
                 "protal",
                 "Protal help text");
 
-        options.positional_help("Help")
-                .add_options()
+        options.positional_help("Help");
+
+
+        // I/O related options
+        options.add_options("I/O")
                 ("db", "Path to protal database folder.", cxxopts::value<std::string>())
                 ("1,first", "Comma separated list of reads. If paired-end, also specify second read via -2/--second.", cxxopts::value<std::string>()->default_value(""))
                 ("2,second", "Comma separated list of reads. must have <-1/--first> specified. Currently this must be specified -- single-end reads are not yet supported.", cxxopts::value<std::string>()->default_value(""))
                 ("prefix", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names by taking their longest common prefix. Only works when both pairs of the read file are in the same folder.", cxxopts::value<std::string>()->default_value(""))
-                ("map", "For larger datasets you can define parameters -1, -2, -3 and -o in a tsv-file.", cxxopts::value<std::string>()->default_value(""))
                 ("o,outdir", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names. If not otherwise specified by using --map, sam files, profiles, msas, and other miscellaneous files will be stored in the subfolders to this directory 'sam', 'profiles', 'strains', and 'misc'.", cxxopts::value<std::string>())
-                ("t,threads", "Specify number of threads to use. Will be passed on to pigz for compression of sam files.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_THREADS)))
                 
-                ("force", "Force redo alignment even if sam files exists.")
-                ("no_strains", "Stay on species level. Do not output SNPs or MSAs. Default is on.")
+                ("map", "For larger datasets you can define parameters -1, -2, --prefix and -o in a tsv-file.", cxxopts::value<std::string>()->default_value(""))
+                ("map_range", "If you specified a map file with --map you can also pass a range to protal to run protal only on a subset. The first entry is 1, the end is inclusive. e.g.: 1-10. If the end open or larger than the number of entries in the map file, the last entry in the map file is selected as end.", cxxopts::value<std::string>()->default_value(""))
+
                 ("no_profile", "Do NOT perform taxonomic profiling, only output alignments.")
-                ("profile_only", "Provide profile filename (.sam) and only perform profiling based on sam file.", cxxopts::value<std::string>()->default_value(""))
-                ("preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
-                
+                ("no_strains", "Stay on species level. Do not output SNPs or MSAs. Default is on.");
+
+        // Alignment / algorithm options
+        options.add_options("Alignment")
                 ("c,align_top", "After seeding, anchor are sorted by quality passed to alignment. <take_top> specifies how many anchors should be aligned starting with the most promising anchor.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_ALIGN_TOP)))
                 ("m,max_out", "Maximum alignments that should be outputted", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_OUT)))
                 ("u,max_key_ubiquity", "Max key ubiquity. Best matching Flexkey count for seed must be lower or equal", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_KEY_UBIQUITY)))
@@ -58,27 +61,37 @@ namespace protal {
                 ("w,min_successful_lookups", "If the number of seeds is >=max_seed_size and the number of successful core-mer lookups is >= min_successful_lookups, stop looking for further seeds.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MIN_SUCCESSFUL_LOOKUPS)))
                 ("a,max_score_ani", "A max score makes an alignment stop if the alignment diverges too much. This parameter estimates the score for a given ani and is a tradeoff between speed/accuracy. [ Default: " + std::to_string(DEFAULT_MAX_SCORE_ANI) + "]", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MAX_SCORE_ANI)))
                 ("x,x_drop", "Value determines when to cut of branches in the aligment process that are unpromising. [ Default: " + std::to_string(DEFAULT_X_DROP) + "]", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_X_DROP)))
-                ("e,output_top", "After alignment, alignments are sorted by score. <output_top> specifies how many alignments should be reported starting with the highest scoring alignment.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_OUTPUT_TOP)))
-                ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
+                ("e,output_top", "After alignment, alignments are sorted by score. <output_top> specifies how many alignments should be reported starting with the highest scoring alignment.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_OUTPUT_TOP)));
 
+        // Strain / SNP options
+        options.add_options("Strains")
                 ("snp_min_cov", "Minimum coverage for calling a SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_COV)))
                 ("snp_min_phred_sum", "Minimum phred sum across all observations of allele to call SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_PHRED_SUM)))
-
-                ("map_range", "If you specified a map file with --map you can also pass a range to protal to run protal only on a subset. The first entry is 1, the end is inclusive. e.g.: 1-10. If the end open or larger than the number of entries in the map file, the last entry in the map file is selected as end.", cxxopts::value<std::string>()->default_value("1-"))
+                ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)));
+                
+        
+        // Advanced / benchmarking / build
+        options.add_options("DevOptions")
                 ("mapq_debug_output", "Output mapq debug info to stderr")
-
                 ("build", "Build index from reference file with header format ()")
                 ("full_reference", "All marker genomes (not only representative ones) to check unique k-mers during build process", cxxopts::value<std::string>()->default_value(""))
                 ("reference", "Set of reference sequences to build the internal alignment database from", cxxopts::value<std::string>()->default_value(""))
+                ("preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
 
                 ("profile_truth", "Provide truth file and annotate profile taxa with TP/FP. Format is list of integers (internal ids)", cxxopts::value<std::string>()->default_value(""))
                 ("benchmark_alignment", "Benchmark alignment part of protal based on true taxonomic id and gene id supplied in the read header. Header must fulfill the formatting >taxid_geneid... with the regex: >[0-9]+_[0-9]+([^0-9]+.*)*")
-                ("benchmark_alignment_output", "Benchmark alignment output. Output is appended to the file.", cxxopts::value<std::string>())
+                ("benchmark_alignment_output", "Benchmark alignment output. Output is appended to the file.", cxxopts::value<std::string>());
 
+
+        // General options
+        options.add_options("General")
                 ("v,version", "Output version information")
-                ("verbose", "Have verbose program output")
                 ("h,help", "Print help.")
-                ("map_help", "Get help how to format the map file.");
+                ("full_help", "Get help for developer options.")
+                ("map_help", "Get help how to format the map file.")
+                ("verbose", "Have verbose program output")
+                ("t,threads", "Specify number of threads to use. Will be passed on to pigz for compression of sam files.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_THREADS)))
+                ("force", "Force redo alignment even if sam files exists.");
 
         return options;
     }
@@ -91,6 +104,7 @@ namespace protal {
         bool m_benchmark_alignment = false;
 
         bool m_show_help = false;
+        bool m_show_help_dev = false;
         bool m_show_map_help = false;
         bool m_show_version = false;
 
@@ -177,10 +191,10 @@ namespace protal {
 
         const size_t MAP_SAMPLE_ID_COL = 0;
 
-        Options(bool show_help, bool show_map_help, bool show_version) : m_show_help(show_help), m_show_map_help(show_map_help), m_show_version(show_version) {}
+        Options(bool show_help, bool show_map_help, bool show_version, bool show_help_dev) : m_show_help(show_help), m_show_map_help(show_map_help), m_show_version(show_version), m_show_help_dev(show_help_dev) {}
 
         Options(bool build, bool no_profile, bool profile_only, bool no_strains, bool preload_genomes, bool benchmark_alignment,
-                std::string benchmark_alignment_output, bool show_help, bool show_map_help, bool show_version, bool mapq_debug_output,
+                std::string benchmark_alignment_output, bool show_help, bool show_help_dev, bool show_map_help, bool show_version, bool mapq_debug_output,
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
                 std::string database_path, std::vector<std::string>& output_prefix_list, std::string sequence_file,
                 std::string full_sequence_file, std::string map_file, std::string strain_output_dir, std::string misc_output_dir, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
@@ -194,6 +208,7 @@ namespace protal {
                 m_no_strains(no_strains),
                 m_preload_genomes(preload_genomes),
                 m_show_help(show_help),
+                m_show_help_dev(show_help_dev),
                 m_show_map_help(show_map_help),
                 m_show_version(show_version),
                 m_first_list(std::move(first_list)),
@@ -327,6 +342,10 @@ namespace protal {
 
         bool Help() const {
             return m_show_help;
+        }
+
+        bool HelpDev() const {
+            return m_show_help_dev;
         }
 
         bool ShowMapHelp() const {
@@ -629,11 +648,19 @@ namespace protal {
             return m_max_score_ani;
         }
 
-        void PrintHelp() {
-            auto cxx_options = CxxOptions();
-            std::cout << cxx_options.help() << std::endl;
-        }
+        void PrintHelp(bool show_dev=false) {
+            // print groups in desired order, skip groups that start with '_' (hidden)
+            auto opt = CxxOptions();
+            std::vector<std::string> groups = { "I/O", "Strains", "General" };
 
+            if (show_dev) {
+                groups.push_back("Alignment");
+                groups.push_back("DevOptions");
+            }
+
+            // cxxopts::Options::help can accept a vector of groups to print in that order
+            std::cout << opt.help(groups) << std::endl;
+        }
 
         void PrintMapHelp(std::ostream& os = std::cout) {
             os << R"(
@@ -1108,18 +1135,19 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
 
             if (argc <= 1) {
-                return { true, false, false };
+                return { true, false, false , false };
             }
 
             cxx_options.parse_positional({ "reference" });
             auto result = cxx_options.parse(argc, argv);
 
             bool show_help = result.count("help");
+            bool show_help_dev = result.count("full_help");
             bool show_map_help = result.count("map_help");
             bool show_version = result.count("version");
 
-            if (show_help || show_version || show_map_help) {
-                return { show_help, show_map_help, show_version };
+            if (show_help || show_version || show_map_help || show_help_dev) {
+                return { show_help, show_map_help, show_version, show_help_dev };
             }
 
             bool no_strains = result.count("no_strains");
@@ -1306,6 +1334,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     benchmark_alignment,
                     benchmark_alignment_output_file,
                     show_help,
+                    show_help_dev,
                     show_map_help,
                     show_version,
                     mapq_debug_output,
