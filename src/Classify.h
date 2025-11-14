@@ -562,8 +562,13 @@ namespace protal::classify {
         time_os << bm_output_global.GetName() << '\t' << bm_output_global.GetDuration(Time::seconds) << '\n';
         time_os.close();
 
-        seed_sizes_global.ToTSV(options.GetPrefix(options.GetCurrentIndex()) + "_seedsizes_histogram.tsv");
-        anchor_sizes_global.ToTSV(options.GetPrefix(options.GetCurrentIndex()) + "_anchorsizes_histogram.tsv");
+        
+        auto misc_dir = std::filesystem::path(options.GetMiscOutputDir());
+        auto anchorsizes_histogram_path = (misc_dir / (options.GetSampleId(options.GetCurrentIndex()) + "_anchorsizes_histogram.tsv")).string();
+        auto seedsizes_histogram_path   = (misc_dir / (options.GetSampleId(options.GetCurrentIndex()) + "_seedsizes_histogram.tsv")).string();
+
+        seed_sizes_global.ToTSV(seedsizes_histogram_path);
+        anchor_sizes_global.ToTSV(anchorsizes_histogram_path);
 
         return statistics;
     }
