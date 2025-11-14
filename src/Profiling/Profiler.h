@@ -134,6 +134,14 @@ namespace protal {
             uint32_t All() {
                 return Multi() + mono;
             }
+
+            std::string ToString() {
+                return "Filtered\t" + std::to_string(filtered) + '\n' +
+                       "Mono\t" + std::to_string(mono) + '\n' +
+                       "Bi\t" + std::to_string(bi) + '\n' +
+                       "Tri\t" + std::to_string(tri) + '\n' +
+                       "Tetra\t" + std::to_string(tetra);
+            }
         };
 
         class Gene {
@@ -178,6 +186,8 @@ namespace protal {
                 std::vector<size_t> alleles(5, 0);
                 GetAlleles(alleles, min_cov, min_qual_sum);
                 AlleleCounts counts;
+
+
                 counts.filtered = alleles[0];
                 counts.mono = alleles[1];
                 counts.bi = alleles[2];
@@ -227,6 +237,8 @@ namespace protal {
                 std::string s = "";
 
                 auto alleles = AlleleSNPCounts(0, 0);
+
+
                 auto alleles_filtered = AlleleSNPCounts(2, 60);
 
                 auto cov_vec = m_strain_level.GetSequenceRangeHandler().GetCoverageVector();
@@ -257,7 +269,7 @@ namespace protal {
 
             bool AddSam(SamEntry const& sam, size_t read_id, double ani=0.0, bool store_sam=true, bool no_strain=true) {
                 if (!no_strain) {
-                    auto successful = m_strain_level.AddSam(sam, read_id);
+                    auto successful = m_strain_level.AddSam(sam, read_id, true);
                     if (!successful) {
                         return false;;
                     }

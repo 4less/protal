@@ -128,6 +128,7 @@ namespace protal {
         }
 
         bool AddSam(SamEntry const& sam, size_t read_id, bool read_variants=false) {
+
 //            m_sequence_range_handler.Add(sam.m_pos, sam.m_cigar.length());
             bm_add_read.Start();
             bm_add_sequence_range.Start();

@@ -889,39 +889,42 @@ namespace protal {
 
         std::vector<std::vector<int>> per_sample_gene_multiallelic_snps;
         per_sample_gene_multiallelic_snps.resize(selected_profiles.size(),
-            std::vector<int>(*max_gene_id + 1, -1) );
+            std::vector<int>(*max_gene_id + 1, -2) );
 
         std::vector<std::vector<int>> per_sample_gene_snps;
         per_sample_gene_snps.resize(selected_profiles.size(),
-            std::vector<int>(*max_gene_id + 1, -1) );
+            std::vector<int>(*max_gene_id + 1, -2) );
 
         std::vector<std::vector<int>> per_sample_gene_cov;
         per_sample_gene_cov.resize(selected_profiles.size(),
-            std::vector<int>(*max_gene_id + 1, -1) );
+            std::vector<int>(*max_gene_id + 1, -2) );
 
         std::vector<std::vector<int>> per_sample_gene_noise;
         per_sample_gene_noise.resize(selected_profiles.size(),
-            std::vector<int>(*max_gene_id + 1, -1) );
+            std::vector<int>(*max_gene_id + 1, -2) );
 
         for (auto si = 0; si < selected_profiles.size(); si++) {
-            // std::cout << " _______________Sample: " << si << std::endl;
             auto sample_index = selected_profiles[si];
             auto& taxon = profiles[sample_index].GetTaxa().at(taxid);
             auto& multiallelic_vec = per_sample_gene_multiallelic_snps[si];
 
-            // for (auto& [gid, gene] : taxon.GetGenes()) {
-            //     std::cout << "gid: " << gid << " " << gene.ToString() << std::endl;
-            // }
-            // std::cout << " ------ " << std::endl;
+            // std::cout << taxon.GetName() << " -> hittable genes" << gene_ids.size() << std::endl;
             for (auto& gene_id : gene_ids) {
                 if (gene_id >= per_sample_gene_multiallelic_snps[si].size()) {
                     std::cout << gene_id << " >= " << gene_ids.size() << std::endl;
                     exit(123);
                 }
+
+                per_sample_gene_multiallelic_snps[si][gene_id] = -1;
+                per_sample_gene_snps[si][gene_id] = -1;
+                per_sample_gene_cov[si][gene_id] = -1;
+                per_sample_gene_noise[si][gene_id] = -1;
+                
                 if (!taxon.GetGenes().contains(gene_id)) {
-                    per_sample_gene_multiallelic_snps[si][gene_id] = -1;
-                    per_sample_gene_snps[si][gene_id] = -1;
+                    per_sample_gene_multiallelic_snps[si][gene_id] = 0;
+                    per_sample_gene_snps[si][gene_id] = 0;
                     per_sample_gene_cov[si][gene_id] = 0;
+                    per_sample_gene_noise[si][gene_id] = 0;
                     continue;
                 }
 
@@ -930,6 +933,9 @@ namespace protal {
                 auto allele_counts = gene.AlleleSNPCounts(2, 60);
                 auto allele_counts_nf = gene.AlleleSNPCounts(0, 0);
 
+                // std::cout << "----Filter----\n" << allele_counts.ToString() << std::endl;
+                // std::cout << "----No Filter----\n" << allele_counts_nf.ToString() << std::endl;
+                
                 per_sample_gene_multiallelic_snps[si][gene_id] = allele_counts.Multi();
                 per_sample_gene_snps[si][gene_id] = allele_counts.AllValid();
                 per_sample_gene_cov[si][gene_id] = gene.Coverage();
@@ -937,67 +943,86 @@ namespace protal {
             }
         }
 
-        std::ofstream os(options.GetMiscOutputDir() + '/' + name + ".multiallelic.tsv", std::ios::out);
-        // std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".multiallelic.tsv") << std::endl;
+        std::ofstream os(options.GetMiscOutputDir() + '/' + name + ".snps_multiallelic.tsv", std::ios::out);
         for (auto si = 0; si < selected_profiles.size(); si++) {
             auto sample_index = selected_profiles[si];
             os << options.GetSampleId(sample_index);
 
             if (si >= per_sample_gene_multiallelic_snps.size()) exit(244);
             auto& vec = per_sample_gene_multiallelic_snps[si];
-            double total = 0;
+
+            double total = std::accumulate(vec.begin(), vec.end(), 0.0, [](double acc, int val) {
+                return acc + (val < 0 ? 0 : val);
+            });
+
+            os << '\t' << total;
             for (auto i = 1; i < vec.size(); i++) {
                 os << '\t' << vec[i];
-                total += vec[i] == -1 ? 0 : vec[i];
             }
-            os << '\t' << total << std::endl;
+            os << std::endl;
         }
         os.close();
 
-        std::ofstream os2(options.GetMiscOutputDir() + '/' + name + ".total.tsv", std::ios::out);
-        // std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".total.tsv") << std::endl;
+        std::ofstream os2(options.GetMiscOutputDir() + '/' + name + ".snps_total.tsv", std::ios::out);
         for (auto si = 0; si < selected_profiles.size(); si++) {
             auto sample_index = selected_profiles[si];
             os2 << options.GetSampleId(sample_index);
 
             if (si >= per_sample_gene_snps.size()) exit(244);
             auto& vec = per_sample_gene_snps[si];
-            double total = 0;
+
+            double total = std::accumulate(vec.begin(), vec.end(), 0.0, [](double acc, int val) {
+                return acc + (val < 0 ? 0 : val);
+            });
+
+            os2 << '\t' << total;
             for (auto i = 1; i < vec.size(); i++) {
                 os2 << '\t' << vec[i];
-                total += vec[i] == -1 ? 0 : vec[i];
             }
-            os2 << '\t' << total << std::endl;
+            os2 << std::endl;
         }
         os2.close();
 
-        std::ofstream os3(options.GetMiscOutputDir() + '/' + name + ".cov.tsv", std::ios::out);
-        // std::cout << "OUTPUT: " << (options.GetOutputDir() + '/' + name + ".cov.tsv") << std::endl;
+        std::ofstream os3(options.GetMiscOutputDir() + '/' + name + ".hcov.tsv", std::ios::out);
         for (auto si = 0; si < selected_profiles.size(); si++) {
             auto sample_index = selected_profiles[si];
             os3 << options.GetSampleId(sample_index);
 
             if (si >= per_sample_gene_snps.size()) exit(244);
             auto& vec = per_sample_gene_cov[si];
-            size_t total = 0;
+            
+            double total = std::accumulate(vec.begin(), vec.end(), 0.0, [](double acc, int val) {
+                return acc + (val < 0 ? 0 : val);
+            });
+
+            os3 << '\t' << total;
             for (auto i = 1; i < vec.size(); i++) {
                 os3 << '\t' << vec[i];
-                total += vec[i] == -1 ? 0 : vec[i];
             }
-            os3 << '\t' << total << std::endl;
+            os3 << std::endl;
         }
         os3.close();
 
 
-//        for (auto gi = 0; gi < per_sample_gene_noise.front().size(); gi++) {
-//            std::cout << gi;
-//            for (auto si = 0; si < selected_profiles.size(); si++) {
-//                auto sample_index = selected_profiles[si];
-//                auto sample_name = options.GetSampleId(sample_index);
-//                std::cout << '\t' << (per_sample_gene_noise[si][gi]/static_cast<double>(per_sample_gene_cov[si][gi])) << "(" << per_sample_gene_noise[si][gi] << "/" << per_sample_gene_cov[si][gi] << ")";
-//            }
-//            std::cout << std::endl;
-//        }
+        std::ofstream os4(options.GetMiscOutputDir() + '/' + name + ".snps_filtered.tsv", std::ios::out);
+        for (auto si = 0; si < selected_profiles.size(); si++) {
+            auto sample_index = selected_profiles[si];
+            os4 << options.GetSampleId(sample_index);
+
+            if (si >= per_sample_gene_noise.size()) exit(244);
+            auto& vec = per_sample_gene_noise[si];
+
+            double total = std::accumulate(vec.begin(), vec.end(), 0.0, [](double acc, int val) {
+                return acc + (val < 0 ? 0 : val);
+            });
+
+            os4 << '\t' << total;
+            for (auto i = 1; i < vec.size(); i++) {
+                os4 << '\t' << vec[i];
+            }
+            os4 << std::endl;
+        }
+        os4.close();
 
 
         return gene_ids;
@@ -1045,8 +1070,6 @@ namespace protal {
             size_t samples_with_gene = 0;
 
             for (auto i = 0; i < profile_indices.size(); i++) {
-//                std::cout << "profile: " << i << std::endl;
-
                 auto& profile = profiles[profile_indices[i]];
 
                 auto& taxon_map = profile.GetTaxa();
@@ -1071,15 +1094,22 @@ namespace protal {
                         {
                             auto ac = gene_obs.AlleleSNPCounts(min_cov, min_qual_sum);
 
-                            auto tmp_vec = region.CalculateCoverageVector();
-                            auto length = std::count_if(tmp_vec.begin(), tmp_vec.end(), [](auto val){ return(val >= 2);});
+                            region.CalculateCoverageVector();
+                            auto tmp_vec = region.CalculateCoverageVector2();
+                            auto counts_vcov1 = std::count_if(tmp_vec.begin(), tmp_vec.end(), [](auto val){ return(val >= 1);});
+                            auto counts_vcov2 = std::count_if(tmp_vec.begin(), tmp_vec.end(), [](auto val){ return(val >= 2);});
                             *os_meta << profile.GetName() << '\t';
                             *os_meta << geneid << '\t';
-                            *os_meta << "gene" << geneid << '\t';
-                            *os_meta << geneid << '\t';
-                            *os_meta << (length > 0 ? ac.Multi()/static_cast<double>(length) : 0) << '\t';
-                            *os_meta << (length > 0 ? ac.Filtered()/static_cast<double>(length) : 0) << '\t';
-                            *os_meta << gene_obs.VerticalCoverage() << std::endl;
+                            *os_meta << gene_obs.VerticalCoverage() << '\t';
+                            *os_meta << counts_vcov1 << '\t';
+                            *os_meta << counts_vcov2 << '\t';
+                            *os_meta << ac.Multi() << '\t';
+                            *os_meta << ac.Filtered() << '\t';
+                            *os_meta << (counts_vcov1 > 0 ? ac.Multi()/static_cast<double>(counts_vcov1) : 0) << '\t';
+                            *os_meta << (counts_vcov1 > 0 ? ac.Filtered()/static_cast<double>(counts_vcov1) : 0) << '\t';
+                            *os_meta << (counts_vcov2 > 0 ? ac.Multi()/static_cast<double>(counts_vcov2) : 0) << '\t';
+                            *os_meta << (counts_vcov2 > 0 ? ac.Filtered()/static_cast<double>(counts_vcov2) : 0);
+                            *os_meta << std::endl;
                         }
                     }
                 }
