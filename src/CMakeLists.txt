@@ -104,6 +104,10 @@ add_library(protal_lib
         Profiling/TreeFilter.h
         Alignment/WFA2Wrapper2.h
         RandomForest/MetagenomeSimulator.h
+        RandomForest/MetagenomeSimulator.cpp
+        RandomForest/MetagenomeTypes.h
+        RandomForest/CommunityProfileDesigner.h
+        RandomForest/CommunityProfileDesigner.cpp
         RandomForest/ArtIlluminaWrapper.h
         RandomForest/ArtIlluminaWrapper.cpp
         )

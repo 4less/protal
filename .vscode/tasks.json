@@ -1,84 +1,114 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "CMake Configure Debug",
-      "type": "shell",
-      "command": "cmake",
-      "args": [
-        "-S",
-        ".",
-        "-B",
-        "cmake-build-debug",
-        "-DCMAKE_BUILD_TYPE=Debug"
-      ],
-      "problemMatcher": [],
-      "group": "none"
-    },
-    {
-      "label": "CMake Configure Release",
-      "type": "shell",
-      "command": "cmake",
-      "args": [
-        "-S",
-        ".",
-        "-B",
-        "cmake-build-release",
-        "-DCMAKE_BUILD_TYPE=Release"
-      ],
-      "problemMatcher": [],
-      "group": "none"
-    },
-    {
-      "label": "CMake Build Debug",
-      "type": "shell",
-      "command": "cmake",
-      "args": [
-        "--build",
-        "cmake-build-debug",
-        "--target",
-        "protal",
-        "--",
-        "-j",
-        "6"
-      ],
-      "problemMatcher": [],
-      "group": { "kind": "build", "isDefault": false },
-      "dependsOn": ["CMake Configure Debug"]
-    },
-    {
-      "label": "CMake Build Release",
-      "type": "shell",
-      "command": "cmake",
-      "args": [
-        "--build",
-        "cmake-build-release",
-        "--target",
-        "protal",
-        "--",
-        "-j",
-        "6"
-      ],
-      "problemMatcher": [],
-      "group": { "kind": "build", "isDefault": false },
-      "dependsOn": ["CMake Configure Release"]
-    },
-    {
-      "label": "CMake Build Release AVX2",
-      "type": "shell",
-      "command": "cmake",
-      "args": [
-        "--build",
-        "cmake-build-release",
-        "--target",
-        "protal_avx2",
-        "--",
-        "-j",
-        "6"
-      ],
-      "problemMatcher": [],
-      "group": { "kind": "build", "isDefault": false },
-      "dependsOn": ["CMake Configure Release"]
-    }
-  ]
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "CMake Configure Debug",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-S",
+                ".",
+                "-B",
+                "cmake-build-debug",
+                "-DCMAKE_BUILD_TYPE=Debug"
+            ],
+            "problemMatcher": [],
+            "group": "none"
+        },
+        {
+            "label": "CMake Configure Release",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-S",
+                ".",
+                "-B",
+                "cmake-build-release",
+                "-DCMAKE_BUILD_TYPE=Release"
+            ],
+            "problemMatcher": [],
+            "group": "none"
+        },
+        {
+            "label": "CMake Build Debug",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "cmake-build-debug",
+                "--target",
+                "protal",
+                "--",
+                "-j",
+                "6"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "dependsOn": [
+                "CMake Configure Debug"
+            ]
+        },
+        {
+            "label": "CMake Build Release",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "cmake-build-release",
+                "--target",
+                "protal",
+                "--",
+                "-j",
+                "6"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "dependsOn": [
+                "CMake Configure Release"
+            ]
+        },
+        {
+            "label": "CMake Build Release AVX2",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "cmake-build-release",
+                "--target",
+                "protal_avx2",
+                "--",
+                "-j",
+                "6"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "dependsOn": [
+                "CMake Configure Release"
+            ]
+        },
+        {
+            "label": "Build simulate_metagenomes",
+            "type": "shell",
+            "command": "cmake --build cmake-build-release --target simulate_metagenomes",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        }
+    ]
 }

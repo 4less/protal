@@ -1,0 +1,297 @@
+// SPDX-License-Identifier: MIT
+#include <cstdlib>
+#include <filesystem>
+#include <iostream>
+#include <fstream>
+#include <optional>
+#include <random>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "RandomForest/MetagenomeSimulator.h"
+
+namespace fs = std::filesystem;
+using protal::sim::AbundanceDistribution;
+using protal::sim::ArtIlluminaOptions;
+using protal::sim::MetagenomeSimulator;
+using protal::sim::ProfileDesignOptions;
+
+static std::string derive_prefix_from_r1(const fs::path& r1) {
+    std::string base = r1.filename().string();
+    auto strip_suffix = [&](const std::string& suf) {
+        if (base.size() >= suf.size() && base.compare(base.size() - suf.size(), suf.size(), suf) == 0) {
+            base.erase(base.size() - suf.size());
+        }
+    };
+    strip_suffix(".gz");
+    strip_suffix(".fastq");
+    strip_suffix(".fq");
+    strip_suffix(".fasta");
+    strip_suffix(".fa");
+    strip_suffix(".FASTQ");
+    strip_suffix(".FQ");
+    if (base.size() > 3 && base.compare(base.size() - 3, 3, "_R1") == 0) {
+        base.erase(base.size() - 3);
+    } else if (base.size() > 2 && base.compare(base.size() - 2, 2, "_1") == 0) {
+        base.erase(base.size() - 2);
+    }
+    return base;
+}
+
+static void write_protal_metafile(
+    const std::vector<protal::sim::SampleOutput>& samples,
+    const fs::path& output_dir,
+    const fs::path& reads_dir,
+    const fs::path& metafile_path) {
+    if (samples.empty()) {
+        return;
+    }
+    if (!metafile_path.parent_path().empty()) {
+        fs::create_directories(metafile_path.parent_path());
+    }
+    auto to_abs = [](const fs::path& p) -> fs::path {
+        std::error_code ec;
+        auto c = fs::canonical(p, ec);
+        return ec ? fs::absolute(p) : c;
+    };
+    fs::path out_abs = to_abs(output_dir);
+    fs::path reads_abs = to_abs(reads_dir);
+
+    std::ofstream out(metafile_path);
+    if (!out) {
+        throw std::runtime_error("Unable to write protal metafile: " + metafile_path.string());
+    }
+    out << "#OUTPUT_DIR\t" << out_abs.string() << "\n";
+    out << "#INPUT_DIR\t" << reads_abs.string() << "\n";
+    out << "#SAMPLEID\tFIRST\tSECOND\tSAM\tPREFIX\tPROFILE\n";
+    for (const auto& sample : samples) {
+        auto first = sample.read1_path.filename().string();
+        auto second = sample.read2_path.filename().string();
+        auto prefix = derive_prefix_from_r1(sample.read1_path);
+        out << sample.sample_name << '\t' << first << '\t' << second << '\t' << prefix << ".sam.gz"
+            << '\t' << prefix << '\t' << prefix << ".profile" << '\n';
+    }
+}
+
+struct CliOptions {
+    fs::path genome_table;
+    fs::path output_dir;
+    std::size_t samples{1};
+    std::string sample_prefix{"sample"};
+    std::uint64_t total_read_pairs{100'000};
+    std::size_t genomes_per_sample{10};
+    AbundanceDistribution distribution{AbundanceDistribution::PowerLaw};
+    double alpha{2.0};
+    int nb_r{5};
+    double nb_p{0.5};
+    std::string strains_per_species;
+    ArtIlluminaOptions art;
+    std::optional<std::uint64_t> seed;
+    bool plot_png{false};
+    int threads{1};
+    std::string pigz_path{"pigz"};
+    bool protal_metafile{false};
+};
+
+void print_usage() {
+    std::cout << "simulate_metagenomes --genome-table <file.tsv> --output-dir <dir> [options]\n"
+              << "Required:\n"
+              << "  --genome-table <file.tsv>       TSV with genome name, GTDB taxonomy, FASTA path (.gz ok)\n"
+              << "  --output-dir <dir>              Output directory for FASTQs and manifest\n"
+              << "Options:\n"
+              << "  --samples <int>                 Number of metagenome samples (default: 1)\n"
+              << "  --sample-prefix <str>           Prefix for sample names (default: sample)\n"
+              << "  --total-read-pairs <int>        Read pairs per sample (default: 100000)\n"
+              << "  --genomes-per-sample <int>      Number of genomes per sample (default: 10)\n"
+              << "  --distribution <power_law|negative_binomial>  Abundance model (default: power_law)\n"
+              << "  --alpha <float>                 Power law alpha (default: 2.0)\n"
+              << "  --nb-r <int>                    Negative binomial r (default: 5)\n"
+              << "  --nb-p <float>                  Negative binomial p (default: 0.5)\n"
+              << "  --strains-per-species \"SpeciesA=2,SpeciesB=1\"  Force strains per species\n"
+              << "  --art-path <path>               art_illumina executable (default: art_illumina)\n"
+              << "  --read-length <int>             Read length (default: 150)\n"
+              << "  --fragment-mean <int>           Fragment mean (default: 350)\n"
+              << "  --fragment-stdev <int>          Fragment stdev (default: 50)\n"
+              << "  --sequencer <id>                ART sequencer profile (default: HS25)\n"
+              << "  --extra-art-args \"--qprof1 q1 --qprof2 q2\"    Extra ART arguments\n"
+              << "  --seed <int>                    RNG seed (default: random)\n"
+              << "  --threads <int>                 Threads for ART/pigz (default: 1)\n"
+              << "  --pigz-path <path>              Path to pigz (default: pigz)\n"
+              << "  --protal_metafile               Write a Protal meta file (protal.meta) describing simulated reads\n"
+              << "  --plot-png                      Generate barplot PNG of species abundances\n"
+              << "  --help                          Show this message\n";
+}
+
+bool parse_cli(int argc, char** argv, CliOptions& opts, std::string& err) {
+    auto require_value = [&](int& i) -> std::string {
+        if (i + 1 >= argc) {
+            throw std::runtime_error("Missing value for argument " + std::string(argv[i]));
+        }
+        return std::string(argv[++i]);
+    };
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--help" || arg == "-h") {
+            print_usage();
+            return false;
+        } else if (arg == "--genome-table") {
+            opts.genome_table = require_value(i);
+        } else if (arg == "--output-dir") {
+            opts.output_dir = require_value(i);
+        } else if (arg == "--samples") {
+            opts.samples = static_cast<std::size_t>(std::stoull(require_value(i)));
+        } else if (arg == "--sample-prefix") {
+            opts.sample_prefix = require_value(i);
+        } else if (arg == "--total-read-pairs") {
+            opts.total_read_pairs = std::stoull(require_value(i));
+        } else if (arg == "--genomes-per-sample") {
+            opts.genomes_per_sample = static_cast<std::size_t>(std::stoull(require_value(i)));
+        } else if (arg == "--distribution") {
+            std::string val = require_value(i);
+            if (val == "power_law") {
+                opts.distribution = AbundanceDistribution::PowerLaw;
+            } else if (val == "negative_binomial") {
+                opts.distribution = AbundanceDistribution::NegativeBinomial;
+            } else {
+                throw std::runtime_error("Unknown distribution: " + val);
+            }
+        } else if (arg == "--alpha") {
+            opts.alpha = std::stod(require_value(i));
+        } else if (arg == "--nb-r") {
+            opts.nb_r = std::stoi(require_value(i));
+        } else if (arg == "--nb-p") {
+            opts.nb_p = std::stod(require_value(i));
+        } else if (arg == "--strains-per-species") {
+            opts.strains_per_species = require_value(i);
+        } else if (arg == "--art-path") {
+            opts.art.art_path = require_value(i);
+        } else if (arg == "--read-length") {
+            opts.art.read_length = std::stoi(require_value(i));
+        } else if (arg == "--fragment-mean") {
+            opts.art.fragment_mean = std::stoi(require_value(i));
+        } else if (arg == "--fragment-stdev") {
+            opts.art.fragment_stdev = std::stoi(require_value(i));
+        } else if (arg == "--sequencer") {
+            opts.art.sequencer = require_value(i);
+        } else if (arg == "--extra-art-args") {
+            std::istringstream iss(require_value(i));
+            std::string token;
+            while (iss >> token) {
+                opts.art.extra_args.push_back(token);
+            }
+        } else if (arg == "--seed") {
+            opts.seed = std::stoull(require_value(i));
+        } else if (arg == "--threads") {
+            opts.threads = std::stoi(require_value(i));
+        } else if (arg == "--pigz-path") {
+            opts.pigz_path = require_value(i);
+        } else if (arg == "--protal_metafile") {
+            opts.protal_metafile = true;
+        } else if (arg == "--plot-png") {
+            opts.plot_png = true;
+        } else {
+            err = "Unknown argument: " + arg;
+            return false;
+        }
+    }
+
+    if (opts.genome_table.empty() || opts.output_dir.empty()) {
+        err = "Required: --genome-table and --output-dir";
+        return false;
+    }
+    return true;
+}
+
+int main(int argc, char** argv) {
+    CliOptions cli;
+    std::string error;
+    try {
+        bool parsed = parse_cli(argc, argv, cli, error);
+        if (!parsed) {
+            if (!error.empty()) {
+                std::cerr << error << "\n\n";
+            }
+            return error.empty() ? 0 : 1;
+        }
+    } catch (const std::exception& ex) {
+        std::cerr << "Error parsing arguments: " << ex.what() << '\n';
+        return 1;
+    }
+
+    try {
+        auto genomes = protal::sim::read_genome_table(cli.genome_table);
+        if (cli.seed) {
+            std::cerr << "Using fixed seed: " << *cli.seed << '\n';
+        }
+
+        ProfileDesignOptions profile{};
+        profile.total_read_pairs = cli.total_read_pairs;
+        profile.genomes_per_sample = cli.genomes_per_sample;
+        profile.distribution = cli.distribution;
+        profile.powerlaw_alpha = cli.alpha;
+        profile.negative_binomial_r = cli.nb_r;
+        profile.negative_binomial_p = cli.nb_p;
+        profile.strains_per_species = protal::sim::parse_strains_per_species(cli.strains_per_species);
+        profile.total_read_pairs = cli.total_read_pairs;
+
+        std::uint64_t seed = cli.seed ? *cli.seed : std::random_device{}();
+        cli.art.threads = std::max(1, cli.threads);
+        MetagenomeSimulator simulator(std::move(genomes), cli.art, seed, cli.pigz_path);
+
+        auto samples =
+            simulator.simulate_samples(profile, cli.samples, cli.sample_prefix, cli.output_dir);
+
+        auto combined_manifest_path = cli.output_dir / "manifest.tsv";
+        protal::sim::write_combined_manifest(samples, combined_manifest_path);
+
+        fs::path manifests_dir = cli.output_dir / "manifests";
+        fs::create_directories(manifests_dir);
+        for (const auto& sample : samples) {
+            protal::sim::write_sample_manifest(sample, manifests_dir / (sample.sample_name + ".tsv"));
+        }
+
+        protal::sim::write_abundance_matrix(samples, cli.output_dir / "abundance_matrix.tsv");
+
+        std::cout << "Wrote " << samples.size() << " samples to " << cli.output_dir << '\n';
+
+        if (cli.plot_png) {
+            fs::path plots_dir = cli.output_dir / "plots";
+            fs::create_directories(plots_dir);
+            fs::path script_path = fs::path("scripts/plot_abundances.R");
+            if (!fs::exists(script_path)) {
+                // Try locating relative to the executable (../scripts/plot_abundances.R).
+                fs::path exe_path = fs::canonical(argv[0]);
+                script_path = exe_path.parent_path().parent_path() / "scripts" / "plot_abundances.R";
+            }
+            if (!fs::exists(script_path)) {
+                throw std::runtime_error("plot_abundances.R not found; please run from repo root");
+            }
+            for (const auto& sample : samples) {
+                fs::path manifest_path = manifests_dir / (sample.sample_name + ".tsv");
+                fs::path plot_out = plots_dir / (sample.sample_name + ".png");
+                std::stringstream cmd;
+                cmd << "Rscript \"" << script_path.string() << "\" \"" << manifest_path.string() << "\" \""
+                    << plot_out.string() << "\"";
+                int rc = std::system(cmd.str().c_str());
+                if (rc != 0) {
+                    throw std::runtime_error("Plot generation failed for " + sample.sample_name + " with exit code " +
+                                             std::to_string(rc));
+                }
+                std::cout << "Generated plot: " << plot_out << '\n';
+            }
+        }
+
+        if (cli.protal_metafile) {
+            fs::path reads_dir = cli.output_dir / "reads";
+            write_protal_metafile(samples, cli.output_dir, reads_dir, cli.output_dir / "protal.meta");
+            std::cout << "Wrote Protal metafile: " << (cli.output_dir / "protal.meta") << '\n';
+        }
+    } catch (const std::exception& ex) {
+        std::cerr << "Simulation failed: " << ex.what() << '\n';
+        return 1;
+    }
+    return 0;
+}

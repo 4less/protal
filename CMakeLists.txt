@@ -69,12 +69,15 @@ add_executable(protal_avx2
 #target_compile_options(protal_avx2 PRIVATE -std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx)
 set_target_properties(protal_avx2 PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx")
 
+add_executable(simulate_metagenomes
+        src/simulate_metagenomes_main.cpp)
+set_target_properties(simulate_metagenomes PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas")
 
 
 # Link to cmake file in src
 target_link_libraries(protal PRIVATE protal_lib dl z)
 target_link_libraries(protal_avx2 PRIVATE protal_lib dl z)
+target_link_libraries(simulate_metagenomes PRIVATE protal_lib dl z)
 
 add_subdirectory(src/)
 #add_subdirectory(tests/)
-

@@ -61,3 +61,25 @@ micromamba create -n protal_env conda-build/linux-64/protal-<CURRENT_VERSION>.ta
 conda activate protal_env
 protal
 ```
+
+## Metagenome simulation (C++)
+
+Build the simulator helper binary:
+```bash
+cmake -S . -B cmake-build-release
+cmake --build cmake-build-release --target simulate_metagenomes
+```
+
+Input TSV format (three columns): genome name, GTDB taxonomy string, path to genome FASTA (supports .gz). Example run:
+```bash
+./cmake-build-release/simulate_metagenomes \
+  --genome-table genomes.tsv \
+  --output-dir sims/ \
+  --samples 3 \
+  --sample-prefix sim \
+  --total-read-pairs 100000 \
+  --genomes-per-sample 15 \
+  --distribution power_law \
+  --strains-per-species "Escherichia coli=2,Bacillus subtilis=1"
+```
+Reads are simulated with `art_illumina`, concatenated per sample into `<sample>_R1.fq` and `<sample>_R2.fq`, and a `manifest.tsv` records the composition.
