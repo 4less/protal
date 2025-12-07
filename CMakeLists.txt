@@ -61,7 +61,8 @@ include_directories(src/ lib/)
 add_executable(protal
         src/main.cpp
         protal_config.h.in)
-set_target_properties(protal PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas")
+# Force a baseline, non-AVX build for protal.
+set_target_properties(protal PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -march=x86-64 -mtune=generic -mno-avx -mno-avx2 -fno-tree-vectorize")
 
 add_executable(protal_avx2
         src/main.cpp
@@ -71,7 +72,7 @@ set_target_properties(protal_avx2 PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG 
 
 add_executable(simulate_metagenomes
         src/simulate_metagenomes_main.cpp)
-set_target_properties(simulate_metagenomes PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas")
+set_target_properties(simulate_metagenomes PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -march=x86-64 -mtune=generic -mno-avx -mno-avx2 -fno-tree-vectorize")
 
 
 # Link to cmake file in src

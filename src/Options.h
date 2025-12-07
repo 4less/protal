@@ -684,21 +684,26 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
 
         static bool CreateDir(std::string dir_path) {
-            
-            // Add directory creation with error handling
-            if (!std::filesystem::exists(dir_path)) {
+            // trim whitespace (including CR) from both ends to avoid false negatives on existing dirs
+            auto trim_ws = [](std::string &s) {
+                auto not_space = [](unsigned char c) { return !std::isspace(c); };
+                s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
+                s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
+            };
+            trim_ws(dir_path);
+            std::filesystem::path p(dir_path);
+
+            if (!std::filesystem::exists(p)) {
                 std::error_code ec;
-                if (!std::filesystem::create_directories(dir_path, ec)) {
-                    std::string error = "Failed to create SAM output directory: " + dir_path + 
-                                    "\nError: " + ec.message();
-                    std::cerr << error << std::endl;
+                if (!std::filesystem::create_directories(p, ec)) {
+                    std::cerr << "Failed to create SAM output directory: " << p << "\nError: " << ec.message() << std::endl;
                     return false;
                 }
-            } else if (!std::filesystem::is_directory(dir_path)) {
-                std::string error = "SAM output path exists but is not a directory: " + dir_path;
-                std::cerr << error << std::endl;
+            } else if (!std::filesystem::is_directory(p)) {
+                std::cerr << "SAM output path exists but is not a directory: " << p << std::endl;
                 return false;
             }
+            return true;
         }
 
         static bool LoadFromMap(std::string map_path, std::string& output_dir, std::string& strain_output_dir, std::string& misc_output_dir, 
@@ -918,10 +923,6 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                         profile_list.emplace_back(profile_path);
                     }
                     if (profile_truth_column != -1 && profile_truth_column < tokens.size()) {
-
-                        for (int i = 0; i < tokens.size(); i++) {
-                            std::cout << i << " After splitter " << tokens[i] << std::endl;
-                        }
                         auto profile_truth_path = tokens[profile_truth_column];
                         profile_truth_list.emplace_back(profile_truth_path);
                     }

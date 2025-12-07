@@ -1,6 +1,5 @@
 #include <iostream>
 #include "RunProtal.h"
-#include "Test.h"
 
 int main(int argc, char *argv[]) {
     std::ios::sync_with_stdio(false);

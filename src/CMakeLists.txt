@@ -3,9 +3,9 @@ set(CMAKE_CXX_STANDARD 20)
 
 # -lcPMML
 # set(CMAKE_EXE_LINKER_FLAGS " -lwfa -flto") #these flags are not needed because set somewhere else
-# set(CMAKE_CXX_FLAGS_DEBUG " -pthread -ggdb -g -std=c++2a -fopenmp -Wall -mavx2 -mavx -march=native")
-set(CMAKE_CXX_FLAGS_RELEASE "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
-set(CMAKE_CXX_FLAGS_DEBUG "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx -march=native") #-march=native
+# set(CMAKE_CXX_FLAGS_DEBUG " -pthread -ggdb -g -std=c++2a -fopenmp -Wall")
+set(CMAKE_CXX_FLAGS_RELEASE "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas")
+set(CMAKE_CXX_FLAGS_DEBUG "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas")
 
 # CHECK DEBUG
 if(DEFINED ENV{GCC} AND NOT "$ENV{GCC}" STREQUAL "")
@@ -24,9 +24,8 @@ endif()
 SET(CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> rcs <TARGET> <LINK_FLAGS> <OBJECTS>")
 SET(CMAKE_C_ARCHIVE_FINISH   true)
 
-set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
-#set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-#set(CMAKE_FIND_LIBRARY_SUFFIXES ".so")
+# Prefer shared libraries (avoid forcing static)
+# set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
 
 message(${CMAKE_CXX_FLAGS_DEBUG})
 message("CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
@@ -90,7 +89,7 @@ add_library(protal_lib
         Constants.h
         SNPs/SNP.h
         SNPs/SNPUtils.h
-        Test.h
+        # Test.h
         SequenceUtils/SequenceRange.h
         SequenceUtils/SequenceRange.cpp
         SequenceUtils/SequenceRangeHandler.h
@@ -224,7 +223,6 @@ target_link_libraries(protal_lib
         wfa_lib
         gzstream_lib
         ZLIB::ZLIB
-        -static # WITHOUT THIS IT WILL NOT COMPILE INTO A STATIC LIBRARY
 )
 
 message("CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
