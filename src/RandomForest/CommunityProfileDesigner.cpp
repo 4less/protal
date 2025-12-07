@@ -75,83 +75,113 @@ std::vector<double> CommunityProfileDesigner::draw_weights(
 std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
     const ProfileDesignOptions& options, std::mt19937_64& rng) const {
     auto grouped = group_by_species();
-    std::vector<GenomeRecord> picked;
-    picked.reserve(options.genomes_per_sample);
+    std::vector<std::pair<std::string, std::vector<GenomeRecord>>> selected_species;
+    selected_species.reserve(options.species_per_sample);
 
-    // Honor user-specified strains per species first.
-    for (const auto& [species, requested] : options.strains_per_species) {
-        auto it = grouped.find(species);
-        if (it == grouped.end() || it->second.empty()) {
-            continue;
+    // Shuffle species order to pick initial strain per species.
+    std::vector<std::string> species_order;
+    species_order.reserve(grouped.size());
+    for (const auto& [spec, _] : grouped) species_order.push_back(spec);
+    std::shuffle(species_order.begin(), species_order.end(), rng);
+
+    for (const auto& species : species_order) {
+        if (selected_species.size() >= options.species_per_sample) break;
+        const auto& genomes = grouped.at(species);
+        if (genomes.empty()) continue;
+        std::vector<std::size_t> idx(genomes.size());
+        std::iota(idx.begin(), idx.end(), 0);
+        std::shuffle(idx.begin(), idx.end(), rng);
+
+        // Always pick one strain for the species.
+        std::vector<GenomeRecord> strains;
+        strains.push_back(genomes[idx[0]]);
+
+        // Additional strains decided by probabilities sequence.
+        std::size_t next_idx = 1;
+        for (double p : options.strain_probabilities) {
+            if (next_idx >= idx.size()) break;
+            if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) <= p) {
+                strains.push_back(genomes[idx[next_idx]]);
+                ++next_idx;
+            } else {
+                break;  // stop adding further strains for this species
+            }
         }
-        const auto& genomes = it->second;
-        std::vector<std::size_t> indices(genomes.size());
-        std::iota(indices.begin(), indices.end(), 0);
-        std::shuffle(indices.begin(), indices.end(), rng);
-        const std::size_t to_take = std::min<std::size_t>(requested, genomes.size());
-        for (std::size_t i = 0; i < to_take; ++i) {
-            picked.push_back(genomes[indices[i]]);
-        }
+        selected_species.emplace_back(species, std::move(strains));
     }
 
-    // Fill the remaining slots with random genomes across all species.
-    std::vector<std::size_t> all_indices(genomes_.size());
-    std::iota(all_indices.begin(), all_indices.end(), 0);
-    std::shuffle(all_indices.begin(), all_indices.end(), rng);
-    for (std::size_t idx : all_indices) {
-        if (picked.size() >= options.genomes_per_sample) {
-            break;
-        }
-        const auto& genome = genomes_[idx];
-        // Avoid picking duplicates.
-        if (std::find_if(
-                picked.begin(), picked.end(), [&](const GenomeRecord& g) { return g.name == genome.name; }) ==
-            picked.end()) {
-            picked.push_back(genome);
-        }
-    }
-
-    if (picked.empty()) {
+    if (selected_species.empty()) {
         throw std::runtime_error("No genomes selected for profile design");
     }
 
-    auto weights = draw_weights(picked.size(), options, rng);
+    // Species-level abundance weights
+    auto weights = draw_weights(selected_species.size(), options, rng);
     const double sum_weights = std::accumulate(weights.begin(), weights.end(), 0.0);
-    std::vector<double> rel_abundances;
-    rel_abundances.reserve(picked.size());
+    std::vector<double> species_rel;
+    species_rel.reserve(selected_species.size());
     for (double w : weights) {
-        rel_abundances.push_back(sum_weights > 0.0 ? w / sum_weights : 1.0 / picked.size());
+        species_rel.push_back(sum_weights > 0.0 ? w / sum_weights : 1.0 / selected_species.size());
     }
 
-    // Convert relative abundances to read counts so the total matches total_read_pairs.
-    std::vector<std::uint64_t> counts;
-    counts.reserve(picked.size());
-    for (double rel : rel_abundances) {
+    // Convert species abundances to read counts matching total_read_pairs.
+    std::vector<std::uint64_t> species_counts;
+    species_counts.reserve(selected_species.size());
+    for (double rel : species_rel) {
         auto c = static_cast<std::uint64_t>(std::llround(rel * static_cast<double>(options.total_read_pairs)));
-        counts.push_back(c == 0 ? 1 : c);
+        species_counts.push_back(c == 0 ? 1 : c);
     }
-    // Adjust to match total exactly.
     std::int64_t diff = static_cast<std::int64_t>(options.total_read_pairs) -
-                        static_cast<std::int64_t>(std::accumulate(counts.begin(), counts.end(), std::uint64_t{0}));
-    if (diff != 0 && !counts.empty()) {
-        std::uniform_int_distribution<std::size_t> pick(0, counts.size() - 1);
+                        static_cast<std::int64_t>(std::accumulate(species_counts.begin(), species_counts.end(), std::uint64_t{0}));
+    if (diff != 0 && !species_counts.empty()) {
+        std::uniform_int_distribution<std::size_t> pick(0, species_counts.size() - 1);
         while (diff != 0) {
             std::size_t idx = pick(rng);
             if (diff > 0) {
-                ++counts[idx];
+                ++species_counts[idx];
                 --diff;
-            } else if (counts[idx] > 1) {
-                --counts[idx];
+            } else if (species_counts[idx] > 1) {
+                --species_counts[idx];
                 ++diff;
             }
         }
     }
 
+    // Distribute species counts across strains uniformly at random (Dirichlet via random weights).
     std::vector<GenomeAssignment> assignments;
-    assignments.reserve(picked.size());
-    for (std::size_t i = 0; i < picked.size(); ++i) {
-        assignments.push_back(
-            GenomeAssignment{picked[i], extract_species(picked[i].taxonomy), counts[i], rel_abundances[i]});
+    for (std::size_t i = 0; i < selected_species.size(); ++i) {
+        const auto& species = selected_species[i].first;
+        const auto& strains = selected_species[i].second;
+        const std::size_t n_strains = strains.size();
+        std::vector<double> w(n_strains);
+        std::uniform_real_distribution<double> uni(0.0, 1.0);
+        for (double& v : w) v = uni(rng);
+        double sumw = std::accumulate(w.begin(), w.end(), 0.0);
+        if (sumw == 0.0) sumw = static_cast<double>(n_strains);
+        std::vector<std::uint64_t> strain_counts;
+        strain_counts.reserve(n_strains);
+        for (double v : w) {
+            auto c = static_cast<std::uint64_t>(std::llround(species_counts[i] * (v / sumw)));
+            strain_counts.push_back(c == 0 ? 1 : c);
+        }
+        // Adjust per-species counts to match species_counts[i]
+        std::int64_t diff_strain = static_cast<std::int64_t>(species_counts[i]) -
+                                   static_cast<std::int64_t>(std::accumulate(strain_counts.begin(), strain_counts.end(), std::uint64_t{0}));
+        if (diff_strain != 0) {
+            std::uniform_int_distribution<std::size_t> pick(0, n_strains - 1);
+            while (diff_strain != 0) {
+                std::size_t idx = pick(rng);
+                if (diff_strain > 0) {
+                    ++strain_counts[idx];
+                    --diff_strain;
+                } else if (strain_counts[idx] > 1) {
+                    --strain_counts[idx];
+                    ++diff_strain;
+                }
+            }
+        }
+        for (std::size_t j = 0; j < n_strains; ++j) {
+            assignments.push_back(GenomeAssignment{strains[j], species, strain_counts[j], 0.0, 0});
+        }
     }
     return assignments;
 }

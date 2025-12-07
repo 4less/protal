@@ -45,10 +45,6 @@ namespace protal {
             LineSplitter::Split(line, delim, tokens);
             if (lineage_column == -1) {
                 for (auto i = 0; i < tokens.size(); i++) {
-//                    if (tokens[i].starts_with("d__") || tokens[i].starts_with("s__")) {
-//                        lineage_column = i;
-//                        break;
-//                    }
                     if ((tokens[i].size() >= 3 && tokens[i].compare(0, 3, "d__") == 0) ||
                         (tokens[i].size() >= 3 && tokens[i].compare(0, 3, "s__") == 0)) {
                         lineage_column = i;
@@ -821,25 +817,29 @@ namespace protal {
                 m_sample["unique_hits"] = std::to_string(taxon.UniqueHits());
                 m_sample["stddev"] = std::to_string(taxon.VCovStdDev());
 
+                m_sample["A0"] = std::to_string(a[0]);
                 m_sample["A1"] = std::to_string(a[1]);
                 m_sample["A2"] = std::to_string(a[2]);
                 m_sample["A3"] = std::to_string(a[3]);
                 m_sample["A4"] = std::to_string(a[4]);
 
+                m_sample["AF0"] = std::to_string(af[0]);
                 m_sample["AF1"] = std::to_string(af[1]);
                 m_sample["AF2"] = std::to_string(af[2]);
                 m_sample["AF3"] = std::to_string(af[3]);
                 m_sample["AF4"] = std::to_string(af[4]);
 
+                m_sample["RAF0"] = std::to_string(af[0] == 0 || af_sum == 0 ? 0 : af[0]/static_cast<double>(af_sum));
                 m_sample["RAF1"] = std::to_string(af[1] == 0 || af_sum == 0 ? 0 : af[1]/static_cast<double>(af_sum));
                 m_sample["RAF2"] = std::to_string(af[2] == 0 || af_sum == 0 ? 0 : af[2]/static_cast<double>(af_sum));
                 m_sample["RAF3"] = std::to_string(af[3] == 0 || af_sum == 0 ? 0 : af[3]/static_cast<double>(af_sum));
                 m_sample["RAF4"] = std::to_string(af[4] == 0 || af_sum == 0 ? 0 : af[4]/static_cast<double>(af_sum));
 
-                m_sample["RA1"] = std::to_string(a[1] == 0 || af_sum == 0 ? 0 : a[1]/static_cast<double>(a_sum));
-                m_sample["RA2"] = std::to_string(a[2] == 0 || af_sum == 0 ? 0 : a[2]/static_cast<double>(a_sum));
-                m_sample["RA3"] = std::to_string(a[3] == 0 || af_sum == 0 ? 0 : a[3]/static_cast<double>(a_sum));
-                m_sample["RA4"] = std::to_string(a[4] == 0 || af_sum == 0 ? 0 : a[4]/static_cast<double>(a_sum));
+                m_sample["RA0"] = std::to_string(a[0] == 0 || a_sum == 0 ? 0 : a[0]/static_cast<double>(a_sum));
+                m_sample["RA1"] = std::to_string(a[1] == 0 || a_sum == 0 ? 0 : a[1]/static_cast<double>(a_sum));
+                m_sample["RA2"] = std::to_string(a[2] == 0 || a_sum == 0 ? 0 : a[2]/static_cast<double>(a_sum));
+                m_sample["RA3"] = std::to_string(a[3] == 0 || a_sum == 0 ? 0 : a[3]/static_cast<double>(a_sum));
+                m_sample["RA4"] = std::to_string(a[4] == 0 || a_sum == 0 ? 0 : a[4]/static_cast<double>(a_sum));
 
                 // ----
                 m_sample["present_genes"] = std::to_string(taxon.PresentGenes());
@@ -863,13 +863,16 @@ namespace protal {
 
                 auto [su, lu, lsu, all] = taxon.GetGenome().GetUniqueKmerCounts();
 
+                // Defined in index for each species (genome)
                 m_sample["su_genome"] = std::to_string(su);
                 m_sample["lu_genome"] = std::to_string(lu);
                 m_sample["lsu_genome"] = std::to_string(lsu);
-                m_sample["total_genome"] = std::to_string(all);
+                m_sample["total_genome"] = std::to_string(all); // 33 total genome
 
-                m_sample["lu_rate"] = std::to_string(lu == 0 || taxon.LongUniques() == 0 ? 0 : lu/static_cast<double>(taxon.LongUniques()));
-                m_sample["lsu_rate"] = std::to_string(lsu == 0 || taxon.GenesWithLongSuperUniques() == 0 ? 0 : lsu/static_cast<double>(taxon.GenesWithLongSuperUniques()));
+                // genome wide unique rates 
+                m_sample["su_rate"] = std::to_string(su == 0 ? 0 : lu/static_cast<double>(all));
+                m_sample["lu_rate"] = std::to_string(lu == 0 ? 0 : lu/static_cast<double>(all));
+                m_sample["lsu_rate"] = std::to_string(lsu == 0 ? 0 : lsu/static_cast<double>(all));
 
 
                 m_sample["su_rate_ref"] = std::to_string(su == 0 ? 0 : su/static_cast<double>(all));
@@ -1021,6 +1024,82 @@ namespace protal {
 
 //                std::cout << "Truth: ________________" << std::endl;
 
+// c(
+//     "dataset", "truth", "prediction", "taxon", "present_genes", "total_hits", "unique_hits", "mean_ani",
+//     "expected_gene_presence", "expected_gene_presence_ratio", "uniqueness", "mean_mapq", "variance1", "variance2",
+//     "A0", "A1", "A2", "A3", "A4", "AF0", "AF1", "AF2", "AF3", "AF4", "stddev", "hittable", "lu", "lu_genes",
+//     "lsu", "lsu_genes", "su_genome", "lu_genome", "lsu_genome", "total_genome", "su_rate", "lu_rate", "lsu_rate",
+//     "lu_gene_rate", "lsu_gene_rate", "lu_gene_rate2", "lsu_gene_rate2", "lu_gene_rate3", "lsu_gene_rate3",
+//     "lsu_per_read", "lu_per_read"
+//   )
+
+                // Header
+                os << "truth" << '\t'; 
+                os << "prediction" << '\t';
+                os << "taxon" << '\t';
+                os << "present_genes" << '\t';
+                os << "total_hits" << '\t';
+                os << "unique_hits" << '\t';
+                os << "mean_ani" << '\t';
+                os << "expected_gene_presence" << '\t';
+                os << "expected_gene_presence_ratio" << '\t';
+                os << "uniqueness" << '\t';
+                os << "mean_mapq" << '\t';
+                os << "variance1" << '\t';
+                os << "variance2" << '\t';
+                
+                os << "A0" << '\t';
+                os << "A1" << '\t';
+                os << "A2" << '\t';
+                os << "A3" << '\t';
+                os << "A4" << '\t';
+
+                os << "AF0" << '\t';
+                os << "AF1" << '\t';
+                os << "AF2" << '\t';
+                os << "AF3" << '\t';
+                os << "AF4" << '\t';
+
+                os << "RAF0" << '\t';
+                os << "RAF1" << '\t';
+                os << "RAF2" << '\t';
+                os << "RAF3" << '\t';
+                os << "RAF4" << '\t';
+
+                os << "RA0" << '\t';
+                os << "RA1" << '\t';
+                os << "RA2" << '\t';
+                os << "RA3" << '\t';
+                os << "RA4" << '\t';
+
+
+                os << "stddev" << '\t';
+                os << "hittable" << '\t';
+
+                os << "lu" << '\t';
+                os << "lu_genes" << '\t';
+                os << "lsu" << '\t';
+                os << "lsu_genes" << '\t';
+
+                os << "su_genome" << '\t';
+                os << "lu_genome" << '\t';
+                os << "lsu_genome" << '\t';
+                os << "total_genome" << '\t';
+
+                os << "su_rate" << '\t';
+                os << "lu_rate" << '\t';
+                os << "lsu_rate" << '\t';
+
+                os << "lu_gene_rate" << '\t';
+                os << "lsu_gene_rate" << '\t';
+                os << "lu_gene_rate2" << '\t';
+                os << "lsu_gene_rate2" << '\t';
+                os << "lu_gene_rate3" << '\t';
+                os << "lsu_gene_rate3" << '\t';
+
+                os << "lsu_per_read" << '\t';
+                os << "lu_per_read" << '\n'; //54
+
                 for (auto& [key, taxon] : m_taxa) {
                     bool positive = set.contains(key);
                     bool prediction = filter.Pass(taxon);
@@ -1029,40 +1108,52 @@ namespace protal {
 //                    if (!positive && !prediction) continue;
                     std::vector<size_t> alleles = taxon.GetAlleles();
                     std::vector<size_t> filtered_alleles = taxon.GetAlleles(2, 60);
+                    auto filtered_alleles_sum = std::accumulate(filtered_alleles.begin(), filtered_alleles.end(), 0);
+                    auto alleles_sum = std::accumulate(alleles.begin(), alleles.end(), 0);
+
+
                     alleles.resize(5, 0);
                     filtered_alleles.resize(5, 0);
 
 
-                    os << positive << "\t"; //1
-                    os << prediction << "\t";
-                    os << key << "\t";
-                    os << taxon.PresentGenes() << "\t";
-                    os << taxon.TotalHits() << "\t";
-                    os << taxon.UniqueHits() << "\t";
-                    os << taxon.GetMeanANI() << "\t";
-                    os << TaxonFilter::ExpectedGenePresence(taxon) << '\t';
-                    os << TaxonFilter::ExpectedGenePresenceRatio(taxon) << '\t';
-                    os << taxon.Uniqueness() << '\t'; //10
-                    os << taxon.GetMeanMAPQ() << '\t';
-                    os << taxon.GetGeneVariance(1) << '\t';
-                    os << taxon.GetGeneVariance(5) << '\t';
-                    for (auto i = 0; i < 5; i++) {
-                        os << alleles[i] << '\t';
+                    os << positive << "\t"; // truth
+                    os << prediction << "\t"; // prediction
+                    os << key << "\t"; // taxon
+                    os << taxon.PresentGenes() << "\t"; // present genes
+                    os << taxon.TotalHits() << "\t"; // total_hits
+                    os << taxon.UniqueHits() << "\t"; // unique_hits
+                    os << taxon.GetMeanANI() << "\t"; // mean_ani
+                    os << TaxonFilter::ExpectedGenePresence(taxon) << '\t'; // expected_gene_presence
+                    os << TaxonFilter::ExpectedGenePresenceRatio(taxon) << '\t'; // expected_gene_presence_ratio
+                    os << taxon.Uniqueness() << '\t'; //10 uniqueness
+                    os << taxon.GetMeanMAPQ() << '\t'; // mean_mapq
+                    os << taxon.GetGeneVariance(1) << '\t'; // variance1
+                    os << taxon.GetGeneVariance(5) << '\t'; // variance2
+
+                    
+                    for (auto i = 0; i < 5; i++) { // AF$i
+                        os << alleles[i] << '\t'; 
                     }
-                    for (auto i = 0; i < 5; i++) {
-                        os << filtered_alleles[i] << '\t';
+                    for (auto i = 0; i < 5; i++) { // AF$i
+                        os << filtered_alleles[i] << '\t'; 
+                    }
+                    for (auto i = 0; i < 5; i++) { // RAF$i
+                        os << (filtered_alleles[1] == 0 || filtered_alleles_sum == 0 ? 0 : filtered_alleles[1]/static_cast<double>(filtered_alleles_sum)) << '\t';
+                    }
+                    for (auto i = 0; i < 5; i++) { // RA$i
+                        os << (alleles[1] == 0 || alleles_sum == 0 ? 0 : alleles[1]/static_cast<double>(alleles_sum)) << '\t';
                     }
 
-                    os << taxon.VCovStdDev() << '\t'; // 24
-                    os << taxon.GetGenomeGeneNumber() << '\t';
+                    os << taxon.VCovStdDev() << '\t'; // 24 stddev
+                    os << taxon.GetGenomeGeneNumber() << '\t'; // hittable
 
                     // Unique metrics
-                    auto lu = taxon.LongUniques();
-                    auto lug = taxon.GenesWithLongUniques();
-                    auto lsu = taxon.LongSuperUniques();
-                    auto lsug = taxon.GenesWithLongSuperUniques();
+                    auto lu = taxon.LongUniques(); // lu
+                    auto lug = taxon.GenesWithLongUniques(); // lu_genes
+                    auto lsu = taxon.LongSuperUniques(); // lsu
+                    auto lsug = taxon.GenesWithLongSuperUniques(); // lsu_genes
 
-                    os << lu << '\t'; //26
+                    os << lu << '\t'; //26 
                     os << lug << '\t';
                     os << lsu << '\t';
                     os << lsug << '\t'; // 29
@@ -1071,15 +1162,17 @@ namespace protal {
                     auto [su_ref, lu_ref, lsu_ref, all_ref] = m_genome_loader.GetGenome(key).GetUniqueKmerCounts();
 
                     // Defined in index for each species (genome)
-                    os << su_ref << '\t';
-                    os << lu_ref << '\t';
-                    os << lsu_ref << '\t';
-                    os << all_ref << '\t'; // 33
+                    os << su_ref << '\t'; // su_genome
+                    os << lu_ref << '\t'; // lu_genome
+                    os << lsu_ref << '\t'; // lsu genome
+                    os << all_ref << '\t'; // 33 Total genome total_genome
 
-                    os << (su_ref == 0 ? 0 : lu_ref/static_cast<double>(all_ref)) << '\t';
+                    // genome wide unique rates 
+                    os << (su_ref == 0 ? 0 : su_ref/static_cast<double>(all_ref)) << '\t';
                     os << (lu_ref == 0 ? 0 : lu_ref/static_cast<double>(all_ref)) << '\t';
                     os << (lsu_ref == 0 ? 0 : lsu_ref/static_cast<double>(all_ref)) << '\t';
 
+                    // 
                     os << taxon.GetLongUniqueGeneRate() << '\t';
                     os << taxon.GetLongSuperUniqueGeneRate() << '\t';
                     os << taxon.GetLongUniqueGeneRate(1) << '\t';

@@ -30,12 +30,12 @@ enum class AbundanceDistribution {
 
 struct ProfileDesignOptions {
     std::uint64_t total_read_pairs{100'000};
-    std::size_t genomes_per_sample{10};
+    std::size_t species_per_sample{10};
     AbundanceDistribution distribution{AbundanceDistribution::PowerLaw};
     double powerlaw_alpha{2.0};
     int negative_binomial_r{5};
     double negative_binomial_p{0.5};
-    std::unordered_map<std::string, std::size_t> strains_per_species;
+    std::vector<double> strain_probabilities;  // probabilities for adding 2nd, 3rd, ... strain of a species
 };
 
 struct ArtIlluminaOptions {

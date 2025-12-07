@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 #include <cstdlib>
 #include <filesystem>
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <optional>
 #include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "RandomForest/MetagenomeSimulator.h"
@@ -44,7 +45,8 @@ static void write_protal_metafile(
     const std::vector<protal::sim::SampleOutput>& samples,
     const fs::path& output_dir,
     const fs::path& reads_dir,
-    const fs::path& metafile_path) {
+    const fs::path& metafile_path,
+    const std::vector<fs::path>& profile_truth_paths) {
     if (samples.empty()) {
         return;
     }
@@ -65,13 +67,15 @@ static void write_protal_metafile(
     }
     out << "#OUTPUT_DIR\t" << out_abs.string() << "\n";
     out << "#INPUT_DIR\t" << reads_abs.string() << "\n";
-    out << "#SAMPLEID\tFIRST\tSECOND\tSAM\tPREFIX\tPROFILE\n";
-    for (const auto& sample : samples) {
+    out << "#SAMPLEID\tFIRST\tSECOND\tSAM\tPREFIX\tPROFILE\tPROFILE_TRUTH\n";
+    for (std::size_t i = 0; i < samples.size(); ++i) {
+        const auto& sample = samples[i];
         auto first = sample.read1_path.filename().string();
         auto second = sample.read2_path.filename().string();
         auto prefix = derive_prefix_from_r1(sample.read1_path);
+        fs::path truth_abs = to_abs(profile_truth_paths[i]);
         out << sample.sample_name << '\t' << first << '\t' << second << '\t' << prefix << ".sam.gz"
-            << '\t' << prefix << '\t' << prefix << ".profile" << '\n';
+            << '\t' << prefix << '\t' << prefix << ".profile" << '\t' << truth_abs.string() << '\n';
     }
 }
 
@@ -81,12 +85,13 @@ struct CliOptions {
     std::size_t samples{1};
     std::string sample_prefix{"sample"};
     std::uint64_t total_read_pairs{100'000};
-    std::size_t genomes_per_sample{10};
+    std::size_t species_per_sample{10};
+    std::size_t genomes_per_sample{0};  // deprecated fallback
     AbundanceDistribution distribution{AbundanceDistribution::PowerLaw};
     double alpha{2.0};
     int nb_r{5};
     double nb_p{0.5};
-    std::string strains_per_species;
+    std::string strain_probabilities;
     ArtIlluminaOptions art;
     std::optional<std::uint64_t> seed;
     bool plot_png{false};
@@ -104,12 +109,12 @@ void print_usage() {
               << "  --samples <int>                 Number of metagenome samples (default: 1)\n"
               << "  --sample-prefix <str>           Prefix for sample names (default: sample)\n"
               << "  --total-read-pairs <int>        Read pairs per sample (default: 100000)\n"
-              << "  --genomes-per-sample <int>      Number of genomes per sample (default: 10)\n"
+              << "  --species-per-sample <int>      Number of species per sample (default: 10)\n"
               << "  --distribution <power_law|negative_binomial>  Abundance model (default: power_law)\n"
               << "  --alpha <float>                 Power law alpha (default: 2.0)\n"
               << "  --nb-r <int>                    Negative binomial r (default: 5)\n"
               << "  --nb-p <float>                  Negative binomial p (default: 0.5)\n"
-              << "  --strains-per-species \"SpeciesA=2,SpeciesB=1\"  Force strains per species\n"
+              << "  --strains-per-species \"0.4,0.2,0.1\"  Probabilities for adding 2nd, 3rd, ... strains per species\n"
               << "  --art-path <path>               art_illumina executable (default: art_illumina)\n"
               << "  --read-length <int>             Read length (default: 150)\n"
               << "  --fragment-mean <int>           Fragment mean (default: 350)\n"
@@ -147,8 +152,8 @@ bool parse_cli(int argc, char** argv, CliOptions& opts, std::string& err) {
             opts.sample_prefix = require_value(i);
         } else if (arg == "--total-read-pairs") {
             opts.total_read_pairs = std::stoull(require_value(i));
-        } else if (arg == "--genomes-per-sample") {
-            opts.genomes_per_sample = static_cast<std::size_t>(std::stoull(require_value(i)));
+        } else if (arg == "--species-per-sample") {
+            opts.species_per_sample = static_cast<std::size_t>(std::stoull(require_value(i)));
         } else if (arg == "--distribution") {
             std::string val = require_value(i);
             if (val == "power_law") {
@@ -165,7 +170,7 @@ bool parse_cli(int argc, char** argv, CliOptions& opts, std::string& err) {
         } else if (arg == "--nb-p") {
             opts.nb_p = std::stod(require_value(i));
         } else if (arg == "--strains-per-species") {
-            opts.strains_per_species = require_value(i);
+            opts.strain_probabilities = require_value(i);
         } else if (arg == "--art-path") {
             opts.art.art_path = require_value(i);
         } else if (arg == "--read-length") {
@@ -228,13 +233,17 @@ int main(int argc, char** argv) {
         }
 
         ProfileDesignOptions profile{};
-        profile.total_read_pairs = cli.total_read_pairs;
-        profile.genomes_per_sample = cli.genomes_per_sample;
+        // Species count: if user didn't provide species-per-sample, fall back to previous flag value.
+        if (cli.species_per_sample == 0 && cli.genomes_per_sample != 0) {
+            profile.species_per_sample = cli.genomes_per_sample;
+        } else {
+            profile.species_per_sample = cli.species_per_sample;
+        }
         profile.distribution = cli.distribution;
         profile.powerlaw_alpha = cli.alpha;
         profile.negative_binomial_r = cli.nb_r;
         profile.negative_binomial_p = cli.nb_p;
-        profile.strains_per_species = protal::sim::parse_strains_per_species(cli.strains_per_species);
+        profile.strain_probabilities = protal::sim::parse_strain_probabilities(cli.strain_probabilities);
         profile.total_read_pairs = cli.total_read_pairs;
 
         std::uint64_t seed = cli.seed ? *cli.seed : std::random_device{}();
@@ -286,8 +295,29 @@ int main(int argc, char** argv) {
 
         if (cli.protal_metafile) {
             fs::path reads_dir = cli.output_dir / "reads";
-            write_protal_metafile(samples, cli.output_dir, reads_dir, cli.output_dir / "protal.meta");
-            std::cout << "Wrote Protal metafile: " << (cli.output_dir / "protal.meta") << '\n';
+            fs::path goldstd_dir = cli.output_dir / "protal_goldstd";
+            fs::create_directories(goldstd_dir);
+
+            std::vector<fs::path> truth_paths;
+            truth_paths.reserve(samples.size());
+            for (const auto& sample : samples) {
+                fs::path truth_path = goldstd_dir / (sample.sample_name + ".profile_truth");
+                truth_paths.push_back(truth_path);
+                std::unordered_set<std::string> seen;
+                std::ofstream truth_out(truth_path);
+                if (!truth_out) {
+                    throw std::runtime_error("Unable to write profile truth: " + truth_path.string());
+                }
+                for (const auto& assignment : sample.assignments) {
+                    if (seen.insert(assignment.genome.taxonomy).second) {
+                        truth_out << assignment.genome.taxonomy << '\n';
+                    }
+                }
+            }
+
+            fs::path metafile_path = cli.output_dir / "protal.meta";
+            write_protal_metafile(samples, cli.output_dir, reads_dir, metafile_path, truth_paths);
+            std::cout << "Wrote Protal metafile: " << metafile_path << '\n';
         }
     } catch (const std::exception& ex) {
         std::cerr << "Simulation failed: " << ex.what() << '\n';

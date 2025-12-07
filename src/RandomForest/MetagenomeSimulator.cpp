@@ -61,11 +61,8 @@ std::vector<GenomeRecord> read_genome_table(const fs::path& tsv_path) {
     return genomes;
 }
 
-std::unordered_map<std::string, std::size_t> parse_strains_per_species(const std::string& text) {
-    std::unordered_map<std::string, std::size_t> result;
-    if (text.empty()) {
-        return result;
-    }
+std::vector<double> parse_strain_probabilities(const std::string& text) {
+    std::vector<double> probs;
     std::size_t start = 0;
     while (start < text.size()) {
         auto end = text.find(',', start);
@@ -73,26 +70,14 @@ std::unordered_map<std::string, std::size_t> parse_strains_per_species(const std
             end = text.size();
         }
         std::string token = text.substr(start, end - start);
-        auto eq = token.find('=');
-        if (eq != std::string::npos) {
-            std::string species = token.substr(0, eq);
-            std::string value_str = token.substr(eq + 1);
-            // Trim whitespace.
-            species.erase(species.begin(),
-                          std::find_if(species.begin(), species.end(), [](unsigned char c) { return !std::isspace(c); }));
-            species.erase(std::find_if(species.rbegin(), species.rend(), [](unsigned char c) { return !std::isspace(c); }).base(),
-                          species.end());
-            value_str.erase(value_str.begin(),
-                            std::find_if(value_str.begin(), value_str.end(), [](unsigned char c) { return !std::isspace(c); }));
-            value_str.erase(std::find_if(value_str.rbegin(), value_str.rend(), [](unsigned char c) { return !std::isspace(c); }).base(),
-                            value_str.end());
-            if (!species.empty()) {
-                result[species] = static_cast<std::size_t>(std::stoull(value_str));
-            }
+        token.erase(token.begin(), std::find_if(token.begin(), token.end(), [](unsigned char c) { return !std::isspace(c); }));
+        token.erase(std::find_if(token.rbegin(), token.rend(), [](unsigned char c) { return !std::isspace(c); }).base(), token.end());
+        if (!token.empty()) {
+            probs.push_back(std::stod(token));
         }
         start = end + 1;
     }
-    return result;
+    return probs;
 }
 
 void write_sample_manifest(const SampleOutput& sample, const fs::path& manifest_path) {
