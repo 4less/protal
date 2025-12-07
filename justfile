@@ -12,5 +12,11 @@ avx2:
     cmake -S . -B cmake-build-avx2 -DCMAKE_BUILD_TYPE=Release
     cmake --build cmake-build-avx2 --target protal_avx2 -- -j$(nproc)
 
+# Baseline simulate_metagenomes build
+simulate:
+    rm -rf cmake-build-baseline
+    cmake -S . -B cmake-build-baseline -DCMAKE_BUILD_TYPE=Release
+    cmake --build cmake-build-baseline --target simulate_metagenomes -- -j$(nproc)
+
 # Build both
 build-all: baseline avx2
