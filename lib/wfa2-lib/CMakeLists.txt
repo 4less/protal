@@ -3,7 +3,8 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_EXE_LINKER_FLAGS " -lrt -lz")
 set(CMAKE_CXX_FLAGS_DEBUG "-pthread -ggdb -g -std=c++17 -fopenmp -Wall")
-set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -march=native -mavx2")
+# set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -march=native -mavx2")
+set(CMAKE_CXX_FLAGS_RELEASE "-std=c++17 -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas")
 
 
 file (GLOB wfa_sources

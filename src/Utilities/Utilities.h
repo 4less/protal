@@ -13,6 +13,7 @@
 #include <robin/robin_set.h>
 #include <iostream>
 #include <emmintrin.h>
+#include <cstdint>
 
 #include <time.h>
 #include <fstream>
@@ -290,11 +291,11 @@ namespace Utils {
     static std::string FormatSeconds(size_t s) {
         std::string result = "";
 
-        uint hours = s/3600;
+        size_t hours = s/3600;
         s -= hours * 3600;
-        uint mins = s/60;
+        size_t mins = s/60;
         s -= mins * 60;
-        uint secs = s;
+        size_t secs = s;
 
         if (hours) result += std::to_string(hours) + "h ";
         if (mins) result += std::to_string(mins) + "m ";
@@ -306,11 +307,11 @@ namespace Utils {
     static std::string FormatMilliseconds(size_t ms) {
         std::string result = "";
 
-        uint hours = ms/3600000;
+        size_t hours = ms/3600000;
         ms -= hours * 3600000;
-        uint mins = ms/60000;
+        size_t mins = ms/60000;
         ms -= mins * 60000;
-        uint secs = ms/1000;
+        size_t secs = ms/1000;
         ms -= secs * 1000;
 
         if (hours) result += std::to_string(hours) + "h ";

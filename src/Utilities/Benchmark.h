@@ -7,6 +7,7 @@
 #include <string>
 #include <chrono>
 #include <iostream>
+#include <cstdint>
 
 using namespace std::chrono;
 using namespace std;
@@ -91,13 +92,13 @@ namespace protal {
 
             auto time_sum_local = time_sum;
 
-            uint hours = time_sum_local / 3600000000;
+            uint64_t hours = time_sum_local / 3600000000;
             time_sum_local -= hours * 3600000000;
-            uint mins = time_sum_local / 60000000;
+            uint64_t mins = time_sum_local / 60000000;
             time_sum_local -= mins * 60000000;
-            uint secs = time_sum_local / 1000000;
+            uint64_t secs = time_sum_local / 1000000;
             time_sum_local -= secs * 1000000;
-            uint msecs = time_sum_local / 1000;
+            uint64_t msecs = time_sum_local / 1000;
 
             std::cout << name << " took ";
             if (hours) std::cout << hours << "h ";

@@ -174,6 +174,8 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/../lib/wfa2-lib wfa)
 add_subdirectory(${PROJECT_SOURCE_DIR}/../lib/gzstream gzstream)
 add_subdirectory(${PROJECT_SOURCE_DIR}/../lib/cPMML cPMML)
 
+target_link_libraries(protal_lib PRIVATE isa_baseline)
+
 # Create an external library target
 #add_library(cPMML STATIC IMPORTED)
 #

@@ -29,7 +29,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 #set(CMAKE_EXE_LINKER_FLAGS "-lz")
 #set(CMAKE_CXX_FLAGS_DEBUG "-pthread -ggdb -g -std=c++2a")# -mavx -march=native")
-set(CMAKE_CXX_FLAGS_RELEASE "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas") #-march=native
+set(CMAKE_CXX_FLAGS_RELEASE "-std=c++2a -DNDEBUG -pthread -O3 -Werror=unknown-pragmas") #-march=native
+set(OPENMP_FLAG "")
 
 
 #set(CMAKE_CXX_FLAGS_DEBUG "-pthread -ggdb -g -std=c++2a -mavx2 -fopenmp")
@@ -50,35 +51,61 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS} -lomp")
 	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -lomp")
 elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-	find_package(OpenMP REQUIRED)
-	set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS} -fopenmp")
-	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} -fopenmp")
-	set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+	if (CMAKE_DISABLE_FIND_PACKAGE_OpenMP)
+		message(STATUS "OpenMP disabled by configuration")
+	else()
+		find_package(OpenMP REQUIRED)
+		set (OPENMP_FLAG "-fopenmp")
+		set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS} ${OPENMP_FLAG}")
+		set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS} ${OPENMP_FLAG}")
+		set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+	endif()
 endif()
+
+if (CMAKE_DISABLE_FIND_PACKAGE_OpenMP)
+	# Avoid failing builds when OpenMP pragmas are present but support is disabled.
+	add_compile_options(-Wno-error=unknown-pragmas)
+	string(REPLACE "-Werror=unknown-pragmas" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+	string(REPLACE "-fopenmp" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+endif()
+
+set(PROTAL_COMMON_COMPILE_OPTIONS
+        -std=c++2a
+        -DNDEBUG
+        -pthread
+        -O3
+        -Werror=unknown-pragmas)
+if (OPENMP_FLAG)
+	list(APPEND PROTAL_COMMON_COMPILE_OPTIONS ${OPENMP_FLAG})
+endif()
+
+add_library(isa_baseline INTERFACE)
+target_compile_options(isa_baseline INTERFACE -march=x86-64 -mtune=generic)
+
+add_library(isa_avx2 INTERFACE)
+target_compile_options(isa_avx2 INTERFACE -march=x86-64-v3 -mtune=generic)
 
 include_directories(src/ lib/)
 
 add_executable(protal
         src/main.cpp
         protal_config.h.in)
-# Force a baseline, non-AVX build for protal.
-set_target_properties(protal PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -march=x86-64 -mtune=generic -mno-avx -mno-avx2 -fno-tree-vectorize")
+target_compile_options(protal PRIVATE ${PROTAL_COMMON_COMPILE_OPTIONS})
 
 add_executable(protal_avx2
         src/main.cpp
         protal_config.h.in)
-#target_compile_options(protal_avx2 PRIVATE -std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx)
-set_target_properties(protal_avx2 PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -mavx2 -mavx")
+target_compile_options(protal_avx2 PRIVATE ${PROTAL_COMMON_COMPILE_OPTIONS})
 
 add_executable(simulate_metagenomes
         src/simulate_metagenomes_main.cpp)
-set_target_properties(simulate_metagenomes PROPERTIES COMPILE_FLAGS "-std=c++2a -DNDEBUG -pthread -O3 -fopenmp -Werror=unknown-pragmas -march=x86-64 -mtune=generic -mno-avx -mno-avx2 -fno-tree-vectorize")
+target_compile_options(simulate_metagenomes PRIVATE ${PROTAL_COMMON_COMPILE_OPTIONS})
 
 
 # Link to cmake file in src
-target_link_libraries(protal PRIVATE protal_lib dl z)
-target_link_libraries(protal_avx2 PRIVATE protal_lib dl z)
-target_link_libraries(simulate_metagenomes PRIVATE protal_lib dl z)
+target_link_libraries(protal PRIVATE protal_lib dl z isa_baseline)
+target_link_libraries(protal_avx2 PRIVATE protal_lib dl z isa_avx2)
+target_link_libraries(simulate_metagenomes PRIVATE protal_lib dl z isa_baseline)
 
 add_subdirectory(src/)
 #add_subdirectory(tests/)

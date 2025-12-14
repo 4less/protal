@@ -23,7 +23,6 @@
 #include "sparse_map.h"
 #include "Benchmark.h"
 #include <string>
-
 #include <ranges>
 
 namespace protal {
