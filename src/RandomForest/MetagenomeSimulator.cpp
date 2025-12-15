@@ -22,6 +22,7 @@ static std::string lowercase(std::string s) {
 }
 
 std::vector<GenomeRecord> read_genome_table(const fs::path& tsv_path) {
+    std::cout << "Load genome table" << std::endl;
     std::ifstream in(tsv_path);
     if (!in) {
         throw std::runtime_error("Unable to open genome table: " + tsv_path.string());
