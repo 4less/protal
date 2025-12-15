@@ -83,7 +83,8 @@ static void write_protal_metafile(
     const fs::path& output_dir,
     const fs::path& reads_dir,
     const fs::path& metafile_path,
-    const std::vector<fs::path>& profile_truth_paths) {
+    const std::vector<fs::path>& profile_truth_paths,
+    const std::optional<fs::path>& output_dir_override) {
     if (samples.empty()) {
         return;
     }
@@ -95,7 +96,7 @@ static void write_protal_metafile(
         auto c = fs::canonical(p, ec);
         return ec ? fs::absolute(p) : c;
     };
-    fs::path out_abs = to_abs(output_dir);
+    fs::path out_abs = to_abs(output_dir_override ? *output_dir_override : output_dir);
     fs::path reads_abs = to_abs(reads_dir);
 
     std::ofstream out(metafile_path);
@@ -134,7 +135,7 @@ struct CliOptions {
     bool plot_png{false};
     int threads{1};
     std::string pigz_path{"pigz"};
-    bool protal_metafile{false};
+    std::optional<fs::path> protal_metafile_output_dir;
 };
 
 void print_usage() {
@@ -161,7 +162,7 @@ void print_usage() {
               << "  --seed <int>                    RNG seed (default: random)\n"
               << "  --threads <int>                 Threads for ART/pigz (default: 1)\n"
               << "  --pigz-path <path>              Path to pigz (default: pigz)\n"
-              << "  --protal_metafile               Write a Protal meta file (protal.meta) describing simulated reads\n"
+              << "  --protal_metafile <path>        Write a Protal meta file (output_dir/protal.meta) but set OUTPUT_DIR to <path>\n"
               << "  --plot-png                      Generate barplot PNG of species abundances\n"
               << "  --help                          Show this message\n";
 }
@@ -231,7 +232,7 @@ bool parse_cli(int argc, char** argv, CliOptions& opts, std::string& err) {
         } else if (arg == "--pigz-path") {
             opts.pigz_path = require_value(i);
         } else if (arg == "--protal_metafile") {
-            opts.protal_metafile = true;
+            opts.protal_metafile_output_dir = require_value(i);
         } else if (arg == "--plot-png") {
             opts.plot_png = true;
         } else {
@@ -331,7 +332,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        if (cli.protal_metafile) {
+        if (cli.protal_metafile_output_dir) {
             fs::path reads_dir = cli.output_dir / "reads";
             fs::path goldstd_dir = cli.output_dir / "protal_goldstd";
             fs::create_directories(goldstd_dir);
@@ -354,7 +355,8 @@ int main(int argc, char** argv) {
             }
 
             fs::path metafile_path = cli.output_dir / "protal.meta";
-            write_protal_metafile(samples, cli.output_dir, reads_dir, metafile_path, truth_paths);
+            write_protal_metafile(
+                samples, cli.output_dir, reads_dir, metafile_path, truth_paths, cli.protal_metafile_output_dir);
             std::cout << "Wrote Protal metafile: " << metafile_path << '\n';
         }
     } catch (const std::exception& ex) {
