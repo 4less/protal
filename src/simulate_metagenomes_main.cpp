@@ -19,6 +19,43 @@ using protal::sim::ArtIlluminaOptions;
 using protal::sim::MetagenomeSimulator;
 using protal::sim::ProfileDesignOptions;
 
+static std::optional<fs::path> find_executable_path(const std::string& arg0) {
+    std::error_code ec;
+    fs::path direct = arg0;
+    if (!direct.empty() && fs::exists(direct, ec)) {
+        fs::path canonical = fs::canonical(direct, ec);
+        if (ec) {
+            canonical = fs::absolute(direct);
+        }
+        return canonical;
+    }
+    const char* path_env = std::getenv("PATH");
+    if (!path_env) {
+        return std::nullopt;
+    }
+    std::string path_list(path_env);
+    std::size_t start = 0;
+    while (start <= path_list.size()) {
+        auto end = path_list.find(':', start);
+        std::string dir = path_list.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        if (!dir.empty()) {
+            fs::path candidate = fs::path(dir) / arg0;
+            if (fs::exists(candidate, ec)) {
+                fs::path canonical = fs::canonical(candidate, ec);
+                if (ec) {
+                    canonical = fs::absolute(candidate);
+                }
+                return canonical;
+            }
+        }
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+    return std::nullopt;
+}
+
 static std::string derive_prefix_from_r1(const fs::path& r1) {
     std::string base = r1.filename().string();
     auto strip_suffix = [&](const std::string& suf) {
@@ -272,8 +309,9 @@ int main(int argc, char** argv) {
             fs::path script_path = fs::path("scripts/plot_abundances.R");
             if (!fs::exists(script_path)) {
                 // Try locating relative to the executable (../scripts/plot_abundances.R).
-                fs::path exe_path = fs::canonical(argv[0]);
-                script_path = exe_path.parent_path().parent_path() / "scripts" / "plot_abundances.R";
+                if (auto exe_path = find_executable_path(argv[0])) {
+                    script_path = exe_path->parent_path().parent_path() / "scripts" / "plot_abundances.R";
+                }
             }
             if (!fs::exists(script_path)) {
                 throw std::runtime_error("plot_abundances.R not found; please run from repo root");
