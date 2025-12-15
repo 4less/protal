@@ -35,9 +35,6 @@ std::vector<GenomeRecord> read_genome_table(const fs::path& tsv_path) {
         if (line.empty() || line[0] == '#') {
             continue;
         }
-        if ((line_no % 1000) == 0) {
-            std::cout << "lines read: " << line_no << std::endl;
-        }
 
         std::istringstream iss(line);
         std::string name, taxonomy, fasta_path;
@@ -182,8 +179,14 @@ static std::uint64_t read_genome_length(const fs::path& fasta_path) {
 static std::unordered_map<std::string, std::uint64_t> build_length_cache(const std::vector<GenomeRecord>& genomes) {
     std::unordered_map<std::string, std::uint64_t> lengths;
     lengths.reserve(genomes.size());
+    size_t read_genomes = 0;
     for (const auto& genome : genomes) {
+        
+        if ((read_genomes % 100) == 0) {
+            std::cout << "genomes read: " << read_genomes << std::endl;
+        }
         lengths.emplace(genome.name, read_genome_length(genome.fasta_path));
+        read_genomes++;
     }
     return lengths;
 }
