@@ -35,6 +35,10 @@ std::vector<GenomeRecord> read_genome_table(const fs::path& tsv_path) {
         if (line.empty() || line[0] == '#') {
             continue;
         }
+        if ((line_no % 1000) == 0) {
+            std::cout << "lines read: " << line_no << std::endl;
+        }
+
         std::istringstream iss(line);
         std::string name, taxonomy, fasta_path;
         if (!std::getline(iss, name, '\t') || !std::getline(iss, taxonomy, '\t') ||
