@@ -308,9 +308,9 @@ int main(int argc, char** argv) {
             fs::create_directories(plots_dir);
             fs::path script_path = fs::path("scripts/plot_abundances.R");
             if (!fs::exists(script_path)) {
-                // Try locating relative to the executable (../scripts/plot_abundances.R).
+                // Try locating next to the executable.
                 if (auto exe_path = find_executable_path(argv[0])) {
-                    script_path = exe_path->parent_path().parent_path() / "scripts" / "plot_abundances.R";
+                    script_path = exe_path->parent_path() / "plot_abundances.R";
                 }
             }
             if (!fs::exists(script_path)) {
