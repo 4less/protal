@@ -4,10 +4,12 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include <zlib.h>
 
 #include "../Utilities/Benchmark.h"
@@ -21,6 +23,21 @@ static std::string lowercase(std::string s) {
     return s;
 }
 
+static std::vector<std::string> split_tab(const std::string& line) {
+    std::vector<std::string> fields;
+    std::size_t start = 0;
+    while (start <= line.size()) {
+        auto pos = line.find('\t', start);
+        if (pos == std::string::npos) {
+            fields.emplace_back(line.substr(start));
+            break;
+        }
+        fields.emplace_back(line.substr(start, pos - start));
+        start = pos + 1;
+    }
+    return fields;
+}
+
 std::vector<GenomeRecord> read_genome_table(const fs::path& tsv_path) {
     std::cout << "Load genome table" << std::endl;
     std::ifstream in(tsv_path);
@@ -28,6 +45,11 @@ std::vector<GenomeRecord> read_genome_table(const fs::path& tsv_path) {
         throw std::runtime_error("Unable to open genome table: " + tsv_path.string());
     }
     std::vector<GenomeRecord> genomes;
+    int name_idx = 0;
+    int tax_idx = 1;
+    int path_idx = 2;
+    int len_idx = -1;
+    bool header_checked = false;
     std::string line;
     std::size_t line_no = 0;
     while (std::getline(in, line)) {
@@ -36,26 +58,66 @@ std::vector<GenomeRecord> read_genome_table(const fs::path& tsv_path) {
             continue;
         }
 
-        std::istringstream iss(line);
-        std::string name, taxonomy, fasta_path;
-        if (!std::getline(iss, name, '\t') || !std::getline(iss, taxonomy, '\t') ||
-            !std::getline(iss, fasta_path, '\t')) {
-            throw std::runtime_error("Malformed line " + std::to_string(line_no) + " in " + tsv_path.string());
-        }
-        if (line_no == 1) {
-            auto lname = lowercase(name);
-            auto ltax = lowercase(taxonomy);
-            auto lpath = lowercase(fasta_path);
-            const bool looks_like_header =
-                (lname.find("name") != std::string::npos || lname.find("genome") != std::string::npos ||
-                 lname.find("accession") != std::string::npos) &&
-                (ltax.find("tax") != std::string::npos || ltax.find("taxonomy") != std::string::npos) &&
-                (lpath.find("path") != std::string::npos || lpath.find("fasta") != std::string::npos);
+        auto fields = split_tab(line);
+        if (!header_checked) {
+            int header_name = -1;
+            int header_tax = -1;
+            int header_path = -1;
+            int header_len = -1;
+            for (int i = 0; i < static_cast<int>(fields.size()); ++i) {
+                auto lf = lowercase(fields[i]);
+                if (header_name == -1 &&
+                    (lf.find("name") != std::string::npos || lf.find("genome") != std::string::npos ||
+                     lf.find("accession") != std::string::npos)) {
+                    header_name = i;
+                }
+                if (header_tax == -1 &&
+                    (lf.find("tax") != std::string::npos || lf.find("taxonomy") != std::string::npos)) {
+                    header_tax = i;
+                }
+                if (header_path == -1 &&
+                    (lf.find("path") != std::string::npos || lf.find("fasta") != std::string::npos ||
+                     lf.find("file") != std::string::npos)) {
+                    header_path = i;
+                }
+                if (header_len == -1 && lf.find("length") != std::string::npos) {
+                    header_len = i;
+                }
+            }
+            const bool looks_like_header = header_name != -1 && header_tax != -1 && header_path != -1;
             if (looks_like_header) {
+                name_idx = header_name;
+                tax_idx = header_tax;
+                path_idx = header_path;
+                len_idx = header_len;
+                header_checked = true;
                 continue;  // header row
             }
+            len_idx = static_cast<int>(fields.size()) > 3 ? 3 : -1;  // fallback: fourth column if present
+            header_checked = true;
         }
-        genomes.push_back(GenomeRecord{std::move(name), std::move(taxonomy), fs::path(fasta_path)});
+
+        if (fields.size() <= static_cast<std::size_t>(std::max({name_idx, tax_idx, path_idx}))) {
+            throw std::runtime_error("Malformed line " + std::to_string(line_no) + " in " + tsv_path.string());
+        }
+
+        std::string name = fields[name_idx];
+        std::string taxonomy = fields[tax_idx];
+        std::string fasta_path = fields[path_idx];
+        std::optional<std::uint64_t> provided_length;
+        if (len_idx >= 0 && static_cast<std::size_t>(len_idx) < fields.size() && !fields[len_idx].empty()) {
+            try {
+                provided_length = std::stoull(fields[len_idx]);
+            } catch (const std::exception&) {
+                throw std::runtime_error("Invalid genome_length on line " + std::to_string(line_no) + " in " +
+                                         tsv_path.string());
+            }
+        }
+        genomes.push_back(GenomeRecord{
+            std::move(name),
+            std::move(taxonomy),
+            fs::path(std::move(fasta_path)),
+            provided_length});
     }
     if (genomes.empty()) {
         throw std::runtime_error("Genome table is empty: " + tsv_path.string());
@@ -181,12 +243,12 @@ static std::unordered_map<std::string, std::uint64_t> build_length_cache(const s
     lengths.reserve(genomes.size());
     size_t read_genomes = 0;
     for (const auto& genome : genomes) {
-        
         if ((read_genomes % 100) == 0) {
-            std::cout << "genomes read: " << read_genomes << std::endl;
+            std::cout << "genomes processed: " << read_genomes << std::endl;
         }
-        lengths.emplace(genome.name, read_genome_length(genome.fasta_path));
-        read_genomes++;
+        const auto len = genome.genome_length ? *genome.genome_length : read_genome_length(genome.fasta_path);
+        lengths.emplace(genome.name, len);
+        ++read_genomes;
     }
     return lengths;
 }

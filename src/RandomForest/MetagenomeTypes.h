@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -13,6 +14,7 @@ struct GenomeRecord {
     std::string name;
     std::string taxonomy;
     std::filesystem::path fasta_path;
+    std::optional<std::uint64_t> genome_length;
 };
 
 struct GenomeAssignment {
