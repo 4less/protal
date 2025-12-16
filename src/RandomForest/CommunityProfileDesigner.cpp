@@ -94,6 +94,18 @@ std::vector<double> CommunityProfileDesigner::draw_weights(
         for (std::size_t i = 0; i < count; ++i) {
             weights.push_back(static_cast<double>(nb(rng) + 1));
         }
+    } else if (options.distribution == AbundanceDistribution::PoissonLognormal) {
+        const double mu = options.pln_mu;
+        const double sigma = std::max(1e-6, options.pln_sigma);
+        std::lognormal_distribution<double> logn(mu, sigma);
+        for (std::size_t i = 0; i < count; ++i) {
+            double lambda = logn(rng);
+            if (lambda <= 0.0) {
+                lambda = 1e-6;
+            }
+            std::poisson_distribution<int> pois(lambda);
+            weights.push_back(static_cast<double>(pois(rng) + 1));
+        }
     }
     return weights;
 }

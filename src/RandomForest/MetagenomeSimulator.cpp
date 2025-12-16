@@ -331,20 +331,27 @@ SampleOutput MetagenomeSimulator::simulate_single(
     const std::string& sample_name,
     const fs::path& output_dir,
     const std::unordered_map<std::string, std::uint64_t>& genome_lengths,
-    std::uint64_t paired_read_length) {
+    std::uint64_t paired_read_length,
+    bool skip_reads) {
     auto assignments = designer_.design_profile(profile_options, rng_);
     fs::path reads_dir = output_dir / "reads";
     fs::create_directories(reads_dir);
     const fs::path sample_prefix = reads_dir / sample_name;
-    const fs::path r1_path = sample_prefix.string() + "_R1.fq";
-    const fs::path r2_path = sample_prefix.string() + "_R2.fq";
+    fs::path r1_path = sample_prefix.string() + (skip_reads ? "_R1.fq.gz" : "_R1.fq");
+    fs::path r2_path = sample_prefix.string() + (skip_reads ? "_R2.fq.gz" : "_R2.fq");
     fs::path temp_dir = output_dir / (sample_name + "_tmp");
-    fs::create_directories(temp_dir);
+    if (!skip_reads) {
+        fs::create_directories(temp_dir);
+    }
 
-    std::ofstream r1_out(r1_path, std::ios::binary);
-    std::ofstream r2_out(r2_path, std::ios::binary);
-    if (!r1_out || !r2_out) {
-        throw std::runtime_error("Unable to create output FASTQ files for " + sample_name);
+    std::ofstream r1_out;
+    std::ofstream r2_out;
+    if (!skip_reads) {
+        r1_out.open(r1_path, std::ios::binary);
+        r2_out.open(r2_path, std::ios::binary);
+        if (!r1_out || !r2_out) {
+            throw std::runtime_error("Unable to create output FASTQ files for " + sample_name);
+        }
     }
 
     for (auto& assignment : assignments) {
@@ -353,35 +360,47 @@ SampleOutput MetagenomeSimulator::simulate_single(
                 throw std::runtime_error("Missing genome length for " + assignment.genome.name);
             }
             const auto genome_len = it_len->second;
-            fs::path genome_prefix = temp_dir / assignment.genome.name;
-            auto [fq1, fq2] =
-                art_.simulate_read_pairs(assignment.genome, assignment.read_pairs, genome_len, genome_prefix, rng_, temp_dir);
-            append_fastq(fq1, r1_out);
-            append_fastq(fq2, r2_out);
+            if (!skip_reads) {
+                fs::path genome_prefix = temp_dir / assignment.genome.name;
+                auto [fq1, fq2] = art_.simulate_read_pairs(
+                    assignment.genome, assignment.read_pairs, genome_len, genome_prefix, rng_, temp_dir);
+                append_fastq(fq1, r1_out);
+                append_fastq(fq2, r2_out);
+            }
             const double bases = static_cast<double>(assignment.read_pairs * paired_read_length);
             const double coverage = bases / static_cast<double>(genome_len);
         assignment.relative_abundance = coverage;  // normalized later
         assignment.genome_length = genome_len;
     }
 
-    // Compress reads with pigz
-    auto compress_with_pigz = [&](const fs::path& fq_path) {
-        std::stringstream cmd;
-        cmd << pigz_path_ << " -p " << std::max(1, art_.options().threads) << " -f \"" << fq_path.string() << "\"";
-        int rc = std::system(cmd.str().c_str());
-        if (rc != 0) {
-            throw std::runtime_error("pigz failed on " + fq_path.string() + " with code " + std::to_string(rc));
-        }
-    };
-
-    compress_with_pigz(r1_path);
-    compress_with_pigz(r2_path);
-
-    fs::remove_all(temp_dir);
     fs::path r1_gz = r1_path;
-    r1_gz += ".gz";
     fs::path r2_gz = r2_path;
-    r2_gz += ".gz";
+    if (!skip_reads) {
+        // Compress reads with pigz
+        auto compress_with_pigz = [&](const fs::path& fq_path) {
+            std::stringstream cmd;
+            cmd << pigz_path_ << " -p " << std::max(1, art_.options().threads) << " -f \"" << fq_path.string() << "\"";
+            int rc = std::system(cmd.str().c_str());
+            if (rc != 0) {
+                throw std::runtime_error("pigz failed on " + fq_path.string() + " with code " + std::to_string(rc));
+            }
+        };
+
+        compress_with_pigz(r1_path);
+        compress_with_pigz(r2_path);
+
+        fs::remove_all(temp_dir);
+        r1_gz = r1_path;
+        r1_gz += ".gz";
+        r2_gz = r2_path;
+        r2_gz += ".gz";
+    } else {
+        // Create empty placeholder files for manifests to point to.
+        std::ofstream placeholder1(r1_gz, std::ios::binary);
+        std::ofstream placeholder2(r2_gz, std::ios::binary);
+        (void)placeholder1;
+        (void)placeholder2;
+    }
 
     return SampleOutput{sample_name, r1_gz, r2_gz, std::move(assignments)};
 }
@@ -390,7 +409,8 @@ std::vector<SampleOutput> MetagenomeSimulator::simulate_samples(
     const ProfileDesignOptions& profile_options,
     std::size_t sample_count,
     const std::string& sample_prefix,
-    const fs::path& output_dir) {
+    const fs::path& output_dir,
+    bool skip_reads) {
     if (sample_count == 0) {
         return {};
     }
@@ -403,7 +423,8 @@ std::vector<SampleOutput> MetagenomeSimulator::simulate_samples(
         name << sample_prefix << "_" << (i + 1);
         protal::Benchmark timer("simulate_metagenome " + name.str());
         timer.Start();
-        auto sample = simulate_single(profile_options, name.str(), output_dir, genome_lengths, paired_read_length);
+        auto sample =
+            simulate_single(profile_options, name.str(), output_dir, genome_lengths, paired_read_length, skip_reads);
         timer.Stop();
 
         double coverage_sum = 0.0;

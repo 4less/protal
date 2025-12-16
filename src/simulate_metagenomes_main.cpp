@@ -125,16 +125,19 @@ struct CliOptions {
     std::uint64_t total_read_pairs{100'000};
     std::size_t species_per_sample{10};
     std::size_t genomes_per_sample{0};  // deprecated fallback
-    AbundanceDistribution distribution{AbundanceDistribution::PowerLaw};
+    AbundanceDistribution distribution{AbundanceDistribution::PoissonLognormal};
     double alpha{2.0};
     int nb_r{5};
     double nb_p{0.5};
+    double pln_mu{0.0};
+    double pln_sigma{1.3};
     std::string strain_probabilities;
     std::string include_species;
     std::string genus_counts;
     ArtIlluminaOptions art;
     std::optional<std::uint64_t> seed;
     bool plot_png{false};
+    bool test_mode{false};
     int threads{1};
     std::string pigz_path{"pigz"};
     std::optional<fs::path> protal_metafile_output_dir;
@@ -150,13 +153,16 @@ void print_usage() {
               << "  --sample-prefix <str>           Prefix for sample names (default: sample)\n"
               << "  --total-read-pairs <int>        Read pairs per sample (default: 100000)\n"
               << "  --species-per-sample <int>      Number of species per sample (default: 10)\n"
-              << "  --distribution <power_law|negative_binomial>  Abundance model (default: power_law)\n"
+              << "  --distribution <power_law|negative_binomial|poisson_lognormal>  Abundance model (default: poisson_lognormal)\n"
               << "  --alpha <float>                 Power law alpha (default: 2.0)\n"
               << "  --nb-r <int>                    Negative binomial r (default: 5)\n"
               << "  --nb-p <float>                  Negative binomial p (default: 0.5)\n"
+              << "  --pln-mu <float>                Poisson-lognormal mean (log-scale) (default: 0.0)\n"
+              << "  --pln-sigma <float>             Poisson-lognormal sigma (log-scale) (default: 1.3)\n"
               << "  --strains-per-species \"0.4,0.2,0.1\"  Probabilities for adding 2nd, 3rd, ... strains per species\n"
               << "  --include-species \"SpeciesA,SpeciesB\" Comma-separated list of species to force-include in each sample\n"
               << "  --genus \"g__A:10,g__B:2\"       Comma-separated genus:count pairs; randomly pick <count> species per genus\n"
+              << "  --test                          Generate profiles/manifests but skip read simulation (fast dry run)\n"
               << "  --art-path <path>               art_illumina executable (default: art_illumina)\n"
               << "  --read-length <int>             Read length (default: 150)\n"
               << "  --fragment-mean <int>           Fragment mean (default: 350)\n"
@@ -202,6 +208,8 @@ bool parse_cli(int argc, char** argv, CliOptions& opts, std::string& err) {
                 opts.distribution = AbundanceDistribution::PowerLaw;
             } else if (val == "negative_binomial") {
                 opts.distribution = AbundanceDistribution::NegativeBinomial;
+            } else if (val == "poisson_lognormal") {
+                opts.distribution = AbundanceDistribution::PoissonLognormal;
             } else {
                 throw std::runtime_error("Unknown distribution: " + val);
             }
@@ -211,6 +219,10 @@ bool parse_cli(int argc, char** argv, CliOptions& opts, std::string& err) {
             opts.nb_r = std::stoi(require_value(i));
         } else if (arg == "--nb-p") {
             opts.nb_p = std::stod(require_value(i));
+        } else if (arg == "--pln-mu") {
+            opts.pln_mu = std::stod(require_value(i));
+        } else if (arg == "--pln-sigma") {
+            opts.pln_sigma = std::stod(require_value(i));
         } else if (arg == "--strains-per-species") {
             opts.strain_probabilities = require_value(i);
         } else if (arg == "--include-species") {
@@ -243,6 +255,8 @@ bool parse_cli(int argc, char** argv, CliOptions& opts, std::string& err) {
             opts.protal_metafile_output_dir = require_value(i);
         } else if (arg == "--plot-png") {
             opts.plot_png = true;
+        } else if (arg == "--test") {
+            opts.test_mode = true;
         } else {
             err = "Unknown argument: " + arg;
             return false;
@@ -289,6 +303,8 @@ int main(int argc, char** argv) {
         profile.powerlaw_alpha = cli.alpha;
         profile.negative_binomial_r = cli.nb_r;
         profile.negative_binomial_p = cli.nb_p;
+        profile.pln_mu = cli.pln_mu;
+        profile.pln_sigma = cli.pln_sigma;
         profile.strain_probabilities = protal::sim::parse_strain_probabilities(cli.strain_probabilities);
         profile.include_species = protal::sim::parse_species_list(cli.include_species);
         profile.genus_species_counts = protal::sim::parse_genus_selection(cli.genus_counts);
@@ -299,7 +315,7 @@ int main(int argc, char** argv) {
         MetagenomeSimulator simulator(std::move(genomes), cli.art, seed, cli.pigz_path);
 
         auto samples =
-            simulator.simulate_samples(profile, cli.samples, cli.sample_prefix, cli.output_dir);
+            simulator.simulate_samples(profile, cli.samples, cli.sample_prefix, cli.output_dir, cli.test_mode);
 
         auto combined_manifest_path = cli.output_dir / "manifest.tsv";
         protal::sim::write_combined_manifest(samples, combined_manifest_path);
