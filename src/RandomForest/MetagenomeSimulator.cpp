@@ -144,6 +144,71 @@ std::vector<double> parse_strain_probabilities(const std::string& text) {
     return probs;
 }
 
+std::vector<std::string> parse_species_list(const std::string& text) {
+    std::vector<std::string> species;
+    std::size_t start = 0;
+    while (start < text.size()) {
+        auto end = text.find(',', start);
+        if (end == std::string::npos) {
+            end = text.size();
+        }
+        std::string token = text.substr(start, end - start);
+        token.erase(token.begin(),
+                    std::find_if(token.begin(), token.end(), [](unsigned char c) { return !std::isspace(c); }));
+        token.erase(std::find_if(token.rbegin(), token.rend(), [](unsigned char c) { return !std::isspace(c); }).base(),
+                    token.end());
+        if (!token.empty()) {
+            species.push_back(token);
+        }
+        start = end + 1;
+    }
+    return species;
+}
+
+std::unordered_map<std::string, std::size_t> parse_genus_selection(const std::string& text) {
+    std::unordered_map<std::string, std::size_t> genus_counts;
+    auto trim = [](std::string s) {
+        s.erase(s.begin(),
+                std::find_if(s.begin(), s.end(), [](unsigned char c) { return !std::isspace(c); }));
+        s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char c) { return !std::isspace(c); }).base(), s.end());
+        return s;
+    };
+
+    std::size_t start = 0;
+    while (start < text.size()) {
+        auto end = text.find(',', start);
+        if (end == std::string::npos) {
+            end = text.size();
+        }
+        std::string token = trim(text.substr(start, end - start));
+        if (!token.empty()) {
+            auto sep = token.find(':');
+            if (sep == std::string::npos) {
+                throw std::runtime_error("Invalid --genus entry (expected genus:count): " + token);
+            }
+            std::string genus = trim(token.substr(0, sep));
+            if (genus.rfind("g__", 0) == 0 && genus.size() > 3) {
+                genus = genus.substr(3);  // allow g__ prefix from GTDB-style names
+            }
+            std::string count_str = trim(token.substr(sep + 1));
+            if (genus.empty() || count_str.empty()) {
+                throw std::runtime_error("Invalid --genus entry (missing genus or count): " + token);
+            }
+            std::size_t count = 0;
+            try {
+                count = static_cast<std::size_t>(std::stoull(count_str));
+            } catch (const std::exception&) {
+                throw std::runtime_error("Invalid --genus count for entry: " + token);
+            }
+            if (count > 0) {
+                genus_counts[genus] += count;
+            }
+        }
+        start = end + 1;
+    }
+    return genus_counts;
+}
+
 void write_sample_manifest(const SampleOutput& sample, const fs::path& manifest_path) {
     if (!manifest_path.parent_path().empty()) {
         fs::create_directories(manifest_path.parent_path());

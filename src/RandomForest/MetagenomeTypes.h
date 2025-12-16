@@ -37,6 +37,8 @@ struct ProfileDesignOptions {
     double powerlaw_alpha{2.0};
     int negative_binomial_r{5};
     double negative_binomial_p{0.5};
+    std::vector<std::string> include_species;  // species that must be present in each sample
+    std::unordered_map<std::string, std::size_t> genus_species_counts;  // requested species counts per genus
     std::vector<double> strain_probabilities;  // probabilities for adding 2nd, 3rd, ... strain of a species
 };
 

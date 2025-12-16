@@ -130,6 +130,8 @@ struct CliOptions {
     int nb_r{5};
     double nb_p{0.5};
     std::string strain_probabilities;
+    std::string include_species;
+    std::string genus_counts;
     ArtIlluminaOptions art;
     std::optional<std::uint64_t> seed;
     bool plot_png{false};
@@ -153,6 +155,8 @@ void print_usage() {
               << "  --nb-r <int>                    Negative binomial r (default: 5)\n"
               << "  --nb-p <float>                  Negative binomial p (default: 0.5)\n"
               << "  --strains-per-species \"0.4,0.2,0.1\"  Probabilities for adding 2nd, 3rd, ... strains per species\n"
+              << "  --include-species \"SpeciesA,SpeciesB\" Comma-separated list of species to force-include in each sample\n"
+              << "  --genus \"g__A:10,g__B:2\"       Comma-separated genus:count pairs; randomly pick <count> species per genus\n"
               << "  --art-path <path>               art_illumina executable (default: art_illumina)\n"
               << "  --read-length <int>             Read length (default: 150)\n"
               << "  --fragment-mean <int>           Fragment mean (default: 350)\n"
@@ -209,6 +213,10 @@ bool parse_cli(int argc, char** argv, CliOptions& opts, std::string& err) {
             opts.nb_p = std::stod(require_value(i));
         } else if (arg == "--strains-per-species") {
             opts.strain_probabilities = require_value(i);
+        } else if (arg == "--include-species") {
+            opts.include_species = require_value(i);
+        } else if (arg == "--genus") {
+            opts.genus_counts = require_value(i);
         } else if (arg == "--art-path") {
             opts.art.art_path = require_value(i);
         } else if (arg == "--read-length") {
@@ -282,6 +290,8 @@ int main(int argc, char** argv) {
         profile.negative_binomial_r = cli.nb_r;
         profile.negative_binomial_p = cli.nb_p;
         profile.strain_probabilities = protal::sim::parse_strain_probabilities(cli.strain_probabilities);
+        profile.include_species = protal::sim::parse_species_list(cli.include_species);
+        profile.genus_species_counts = protal::sim::parse_genus_selection(cli.genus_counts);
         profile.total_read_pairs = cli.total_read_pairs;
 
         std::uint64_t seed = cli.seed ? *cli.seed : std::random_device{}();

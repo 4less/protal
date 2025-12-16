@@ -7,6 +7,7 @@
 #include <random>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace protal::sim {
 
@@ -33,6 +34,31 @@ std::string extract_species(const std::string& taxonomy) {
         best = current.size() > 3 ? current.substr(3) : current;
     }
     return best.empty() ? "unknown_species" : best;
+}
+
+std::string extract_genus(const std::string& taxonomy) {
+    std::string current;
+    std::string best = "unknown_genus";
+    for (char c : taxonomy) {
+        if (c == ';') {
+            if (current.rfind("g__", 0) == 0 && current.size() > 3) {
+                return current.substr(3);
+            }
+            if (!current.empty()) {
+                best = current.size() > 3 ? current.substr(3) : current;
+            }
+            current.clear();
+        } else {
+            current.push_back(c);
+        }
+    }
+    if (!current.empty()) {
+        if (current.rfind("g__", 0) == 0 && current.size() > 3) {
+            return current.substr(3);
+        }
+        best = current.size() > 3 ? current.substr(3) : current;
+    }
+    return best.empty() ? "unknown_genus" : best;
 }
 
 CommunityProfileDesigner::CommunityProfileDesigner(std::vector<GenomeRecord> genomes)
@@ -75,8 +101,103 @@ std::vector<double> CommunityProfileDesigner::draw_weights(
 std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
     const ProfileDesignOptions& options, std::mt19937_64& rng) const {
     auto grouped = group_by_species();
+    std::unordered_map<std::string, std::vector<std::string>> genus_to_species;
+    std::unordered_map<std::string, std::string> species_to_genus;
+    for (const auto& [spec, genomes] : grouped) {
+        const std::string genus =
+            genomes.empty() ? std::string{"unknown_genus"} : extract_genus(genomes.front().taxonomy);
+        species_to_genus.emplace(spec, genus);
+        genus_to_species[genus].push_back(spec);
+    }
+
     std::vector<std::pair<std::string, std::vector<GenomeRecord>>> selected_species;
     selected_species.reserve(options.species_per_sample);
+    std::unordered_set<std::string> selected_set;
+
+    auto pick_strains = [&](const std::vector<GenomeRecord>& genomes) {
+        std::vector<std::size_t> idx(genomes.size());
+        std::iota(idx.begin(), idx.end(), 0);
+        std::shuffle(idx.begin(), idx.end(), rng);
+        std::vector<GenomeRecord> strains;
+        if (!idx.empty()) {
+            strains.push_back(genomes[idx[0]]);
+        }
+        std::size_t next_idx = 1;
+        for (double p : options.strain_probabilities) {
+            if (next_idx >= idx.size()) break;
+            if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) <= p) {
+                strains.push_back(genomes[idx[next_idx]]);
+                ++next_idx;
+            } else {
+                break;
+            }
+        }
+        return strains;
+    };
+
+    auto genus_remaining = options.genus_species_counts;
+    auto reduce_genus_quota = [&](const std::string& species) {
+        auto it_genus = species_to_genus.find(species);
+        if (it_genus != species_to_genus.end()) {
+            auto it_quota = genus_remaining.find(it_genus->second);
+            if (it_quota != genus_remaining.end() && it_quota->second > 0) {
+                --it_quota->second;
+            }
+        }
+    };
+
+    std::unordered_set<std::string> include_species_set;
+    include_species_set.reserve(options.include_species.size());
+    for (const auto& spec : options.include_species) {
+        if (!include_species_set.insert(spec).second) {
+            continue;  // ignore duplicates
+        }
+        auto it = grouped.find(spec);
+        if (it == grouped.end() || it->second.empty()) {
+            throw std::runtime_error("Requested species not found: " + spec);
+        }
+        auto strains = pick_strains(it->second);
+        if (strains.empty()) {
+            continue;
+        }
+        selected_species.emplace_back(spec, std::move(strains));
+        selected_set.insert(spec);
+        reduce_genus_quota(spec);
+    }
+
+    std::size_t requested_total = include_species_set.size();
+    for (const auto& [_, remaining] : genus_remaining) {
+        requested_total += remaining;
+    }
+    if (requested_total > options.species_per_sample) {
+        throw std::runtime_error("Requested species/genus counts exceed species-per-sample");
+    }
+
+    std::vector<std::pair<std::string, std::size_t>> genus_requests(
+        genus_remaining.begin(), genus_remaining.end());
+    std::shuffle(genus_requests.begin(), genus_requests.end(), rng);
+    for (auto& [genus, remaining] : genus_requests) {
+        if (remaining == 0 || selected_species.size() >= options.species_per_sample) {
+            continue;
+        }
+        auto it = genus_to_species.find(genus);
+        if (it == genus_to_species.end()) {
+            continue;
+        }
+        auto candidates = it->second;
+        std::shuffle(candidates.begin(), candidates.end(), rng);
+        for (const auto& species : candidates) {
+            if (remaining == 0 || selected_species.size() >= options.species_per_sample) break;
+            if (selected_set.count(species) > 0) continue;
+            const auto& genomes = grouped.at(species);
+            if (genomes.empty()) continue;
+            auto strains = pick_strains(genomes);
+            if (strains.empty()) continue;
+            selected_species.emplace_back(species, std::move(strains));
+            selected_set.insert(species);
+            --remaining;
+        }
+    }
 
     // Shuffle species order to pick initial strain per species.
     std::vector<std::string> species_order;
@@ -86,28 +207,12 @@ std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
 
     for (const auto& species : species_order) {
         if (selected_species.size() >= options.species_per_sample) break;
+        if (selected_set.count(species) > 0) continue;
         const auto& genomes = grouped.at(species);
         if (genomes.empty()) continue;
-        std::vector<std::size_t> idx(genomes.size());
-        std::iota(idx.begin(), idx.end(), 0);
-        std::shuffle(idx.begin(), idx.end(), rng);
-
-        // Always pick one strain for the species.
-        std::vector<GenomeRecord> strains;
-        strains.push_back(genomes[idx[0]]);
-
-        // Additional strains decided by probabilities sequence.
-        std::size_t next_idx = 1;
-        for (double p : options.strain_probabilities) {
-            if (next_idx >= idx.size()) break;
-            if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) <= p) {
-                strains.push_back(genomes[idx[next_idx]]);
-                ++next_idx;
-            } else {
-                break;  // stop adding further strains for this species
-            }
-        }
+        auto strains = pick_strains(genomes);
         selected_species.emplace_back(species, std::move(strains));
+        selected_set.insert(species);
     }
 
     if (selected_species.empty()) {
