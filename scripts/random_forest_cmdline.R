@@ -13,7 +13,10 @@ suppressPackageStartupMessages({
   library(pmml)
   library(caret)
   library(dplyr)
+  library(doParallel)
 })
+
+
 
 sensitivity <- function(ct) {
   tp <- ct[2, 2]; fp <- ct[2, 1]; fn <- ct[1, 2]
@@ -82,6 +85,7 @@ parse_args <- function() {
       else if (key == "--output-prefix") opts$output_prefix <- val
       else if (key == "--seed") opts$seed <- as.integer(val)
       else if (key == "--test-fraction") opts$test_fraction <- as.numeric(val)
+      else if (key == "--threads") opts$threads <- as.numeric(val)
       else stop(paste("Unknown option", key))
       i <- i + 2
     } else {
@@ -91,9 +95,10 @@ parse_args <- function() {
   if (is.null(opts$truth_file) || is.null(opts$output_prefix)) {
     stop("Required: --truth-file <path> --output-prefix <path>")
   }
-  if (is.null(opts$ntree)) opts$ntree <- 512L
-  if (is.null(opts$maxnodes)) opts$maxnodes <- 0L
+  if (is.null(opts$ntree)) opts$ntree <- 256L
+  if (is.null(opts$maxnodes)) opts$maxnodes <- 128L
   if (is.null(opts$test_fraction)) opts$test_fraction <- 0.2
+  if (is.null(opts$threads)) opts$threads <- 4
   opts
 }
 
@@ -170,14 +175,24 @@ main <- function() {
     print("Feature cols")
     print(feature_cols)
     print("------")
+
+    n_cores <- min(parallel::detectCores() - 1, opts$threads)
+    cl <- makeCluster(n_cores)
+    registerDoParallel(cl)
+
+    cat(paste0("Execute in parallel with ", n_cores, " cores"))
+
     caret_fit <- caret::train(
       x = data[, feature_cols],
       y = data[["truth"]],
       method = "rf",
       trControl = trControl,
       ntree = opts$ntree,
-      tuneGrid = tuneGrid
+      tuneGrid = tuneGrid,
+      allowParallel = TRUE
     )
+    stopCluster(cl)
+    registerDoSEQ()
     saveRDS(caret_fit, caret_tmp)
     print("caret_tmp saved")
   }
