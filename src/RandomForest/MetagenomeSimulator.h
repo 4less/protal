@@ -35,7 +35,8 @@ public:
         std::size_t sample_count,
         const std::string& sample_prefix,
         const std::filesystem::path& output_dir,
-        bool skip_reads = false);
+        bool skip_reads = false,
+        bool keep_tmp = false);
 
 private:
     std::vector<GenomeRecord> genomes_;
@@ -50,7 +51,8 @@ private:
         const std::filesystem::path& output_dir,
         const std::unordered_map<std::string, std::uint64_t>& genome_lengths,
         std::uint64_t paired_read_length,
-        bool skip_reads);
+        bool skip_reads,
+        bool keep_tmp);
 };
 
 }  // namespace protal::sim

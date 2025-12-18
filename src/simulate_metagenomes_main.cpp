@@ -138,6 +138,7 @@ struct CliOptions {
     std::optional<std::uint64_t> seed;
     bool plot_png{false};
     bool test_mode{false};
+    bool keep_tmp{false};
     int threads{1};
     std::string pigz_path{"pigz"};
     std::optional<fs::path> protal_metafile_output_dir;
@@ -163,6 +164,7 @@ void print_usage() {
               << "  --include-species \"SpeciesA,SpeciesB\" Comma-separated list of species to force-include in each sample\n"
               << "  --genus \"g__A:10,g__B:2\"       Comma-separated genus:count pairs; randomly pick <count> species per genus\n"
               << "  --test                          Generate profiles/manifests but skip read simulation (fast dry run)\n"
+              << "  --keep-tmp                      Keep the individual reads\n"
               << "  --art-path <path>               art_illumina executable (default: art_illumina)\n"
               << "  --read-length <int>             Read length (default: 150)\n"
               << "  --fragment-mean <int>           Fragment mean (default: 350)\n"
@@ -257,6 +259,8 @@ bool parse_cli(int argc, char** argv, CliOptions& opts, std::string& err) {
             opts.plot_png = true;
         } else if (arg == "--test") {
             opts.test_mode = true;
+        } else if (arg == "--keep-tmp") {
+            opts.keep_tmp = true;
         } else {
             err = "Unknown argument: " + arg;
             return false;
@@ -315,7 +319,7 @@ int main(int argc, char** argv) {
         MetagenomeSimulator simulator(std::move(genomes), cli.art, seed, cli.pigz_path);
 
         auto samples =
-            simulator.simulate_samples(profile, cli.samples, cli.sample_prefix, cli.output_dir, cli.test_mode);
+            simulator.simulate_samples(profile, cli.samples, cli.sample_prefix, cli.output_dir, cli.test_mode, cli.keep_tmp);
 
         auto combined_manifest_path = cli.output_dir / "manifest.tsv";
         protal::sim::write_combined_manifest(samples, combined_manifest_path);

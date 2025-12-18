@@ -318,21 +318,66 @@ static std::unordered_map<std::string, std::uint64_t> build_length_cache(const s
     return lengths;
 }
 
-static void append_fastq(const fs::path& src, std::ofstream& dst) {
+//static void append_fastq(const fs::path& src, std::ofstream& dst) {
+//    std::ifstream in(src, std::ios::binary);
+//    if (!in) {
+//        throw std::runtime_error("Unable to open FASTQ chunk: " + src.string());
+//    }
+//    dst << in.rdbuf();
+//}
+
+//static void append_fastq(const fs::path& src, std::ofstream& dst) {
+//    std::ifstream in(src, std::ios::binary);
+//    if (!in) {
+//        throw std::runtime_error("Unable to open FASTQ chunk: " + src.string());
+//    }
+//
+//    dst << in.rdbuf();
+//
+//    if (!dst) {
+//        throw std::runtime_error("Write failed while appending " + src.string());
+//    }
+//
+//    dst.clear();  // ← THIS IS THE CRITICAL FIX
+//}
+
+static void append_fastq(const fs::path& src, std::ofstream& dst)
+{
     std::ifstream in(src, std::ios::binary);
     if (!in) {
         throw std::runtime_error("Unable to open FASTQ chunk: " + src.string());
     }
-    dst << in.rdbuf();
+
+    constexpr std::size_t bufsize = 1 << 20; // 1 MB
+    std::vector<char> buffer(bufsize);
+
+    while (in) {
+        in.read(buffer.data(), buffer.size());
+        std::streamsize n = in.gcount();
+        if (n > 0) {
+            dst.write(buffer.data(), n);
+            if (!dst) {
+                throw std::runtime_error("Write failed while appending " + src.string());
+            }
+        }
+    }
+
+    dst.flush();
+    if (!dst) {
+        throw std::runtime_error("Flush failed after appending " + src.string());
+    }
 }
 
+
 SampleOutput MetagenomeSimulator::simulate_single(
-    const ProfileDesignOptions& profile_options,
-    const std::string& sample_name,
-    const fs::path& output_dir,
-    const std::unordered_map<std::string, std::uint64_t>& genome_lengths,
-    std::uint64_t paired_read_length,
-    bool skip_reads) {
+        const ProfileDesignOptions& profile_options,
+        const std::string& sample_name,
+        const fs::path& output_dir,
+        const std::unordered_map<std::string, std::uint64_t>& genome_lengths,
+        std::uint64_t paired_read_length,
+        bool skip_reads,
+        bool keep_tmp) 
+{
     auto assignments = designer_.design_profile(profile_options, rng_);
     fs::path reads_dir = output_dir / "reads";
     fs::create_directories(reads_dir);
@@ -340,6 +385,7 @@ SampleOutput MetagenomeSimulator::simulate_single(
     fs::path r1_path = sample_prefix.string() + (skip_reads ? "_R1.fq.gz" : "_R1.fq");
     fs::path r2_path = sample_prefix.string() + (skip_reads ? "_R2.fq.gz" : "_R2.fq");
     fs::path temp_dir = output_dir / (sample_name + "_tmp");
+
     if (!skip_reads) {
         fs::create_directories(temp_dir);
     }
@@ -347,8 +393,8 @@ SampleOutput MetagenomeSimulator::simulate_single(
     std::ofstream r1_out;
     std::ofstream r2_out;
     if (!skip_reads) {
-        r1_out.open(r1_path, std::ios::binary);
-        r2_out.open(r2_path, std::ios::binary);
+        r1_out.open(r1_path, std::ios::binary | std::ios::app);
+        r2_out.open(r2_path, std::ios::binary | std::ios::app);
         if (!r1_out || !r2_out) {
             throw std::runtime_error("Unable to create output FASTQ files for " + sample_name);
         }
@@ -389,7 +435,9 @@ SampleOutput MetagenomeSimulator::simulate_single(
         compress_with_pigz(r1_path);
         compress_with_pigz(r2_path);
 
-        fs::remove_all(temp_dir);
+        if (!keep_tmp) {
+            fs::remove_all(temp_dir);
+        }
         r1_gz = r1_path;
         r1_gz += ".gz";
         r2_gz = r2_path;
@@ -410,7 +458,9 @@ std::vector<SampleOutput> MetagenomeSimulator::simulate_samples(
     std::size_t sample_count,
     const std::string& sample_prefix,
     const fs::path& output_dir,
-    bool skip_reads) {
+    bool skip_reads,
+    bool keep_tmp)
+{
     if (sample_count == 0) {
         return {};
     }
@@ -424,7 +474,7 @@ std::vector<SampleOutput> MetagenomeSimulator::simulate_samples(
         protal::Benchmark timer("simulate_metagenome " + name.str());
         timer.Start();
         auto sample =
-            simulate_single(profile_options, name.str(), output_dir, genome_lengths, paired_read_length, skip_reads);
+            simulate_single(profile_options, name.str(), output_dir, genome_lengths, paired_read_length, skip_reads, keep_tmp);
         timer.Stop();
 
         double coverage_sum = 0.0;
