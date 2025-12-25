@@ -1,0 +1,1028 @@
+---
+title: "random_forests"
+author: "Joachim Fritscher"
+date: "2025-01-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r libraries, message=FALSE, warning=FALSE, include=FALSE}
+library(dplyr)
+library(randomForest) 
+library(ranger)
+#library(Metrics)
+library(caret)
+library(rfviz)
+library(pmml)
+# library(tuneRanger)
+
+
+save_forest <- function(model, file) {
+  pmod <- pmml(model, file)
+  save_pmml(pmod, file)
+}
+
+sensitivity <- function(ct) {
+  tp <- ct[2, 2]
+  tn <- ct[1, 1]
+  fp <- ct[2, 1]
+  fn <- ct[1, 2]
+  
+  return(tp / (tp+fn))
+}
+
+precision <- function(ct) {
+  tp <- ct[2, 2]
+  tn <- ct[1, 1]
+  fp <- ct[2, 1]
+  fn <- ct[1, 2]
+  
+  return(tp / (tp+fp))
+}
+
+f1 <- function(ct) {
+  tp <- ct[2, 2]
+  tn <- ct[1, 1]
+  fp <- ct[2, 1]
+  fn <- ct[1, 2]
+  return(((2*tp) / (2*tp+fp+fn)))
+}
+
+
+fill_in_allele_info <- function(data4) {
+  data4$total_a <- data4$A0 + data4$A1 + data4$A2 + data4$A3 + data4$A4
+  data4$total_af <- data4$AF0 + data4$AF1 + data4$AF2 + data4$AF3 + data4$AF4
+  data4$RA0 <- data4$A0 / data4$total_a
+  data4$RA1 <- data4$A1 / data4$total_a
+  data4$RA2 <- data4$A2 / data4$total_a
+  data4$RA3 <- data4$A3 / data4$total_a
+  data4$RA4 <- data4$A4 / data4$total_a
+  data4$RAF0 <- data4$AF0 / data4$total_af
+  data4$RAF1 <- data4$AF1 / data4$total_af
+  data4$RAF2 <- data4$AF2 / data4$total_af
+  data4$RAF3 <- data4$AF3 / data4$total_af
+  data4$RAF4 <- data4$AF4 / data4$total_af
+  data4$RA0[is.nan(data4$RA0)] <- 0
+  data4$RA1[is.nan(data4$RA1)] <- 0
+  data4$RA2[is.nan(data4$RA2)] <- 0
+  data4$RA3[is.nan(data4$RA3)] <- 0
+  data4$RA4[is.nan(data4$RA4)] <- 0
+  data4$RAF0[is.nan(data4$RAF0)] <- 0
+  data4$RAF1[is.nan(data4$RAF1)] <- 0
+  data4$RAF2[is.nan(data4$RAF2)] <- 0
+  data4$RAF3[is.nan(data4$RAF3)] <- 0
+  data4$RAF4[is.nan(data4$RAF4)] <- 0
+  return(data4)
+}
+
+evaluate <- function(rf, test.data, training.data, col.names=NA) {
+  predictions.test <- predict(rf,  newdata=test.data)
+  predictions.train <- predict(rf,  newdata=training.data)
+  ct.test <- table(predictions.test, test.data$truth)
+  ct.train <- table(predictions.train, training.data$truth)
+  
+  if (is.na(col.names[1])) {
+    col.names = c("Test:  ", "Training:  ")
+  }
+  
+  print(paste(col.names[2], "n=", nrow(training.data) , "  Sensitivity: ", sensitivity(ct.train), " Precision: ", precision(ct.train), " F1: ", f1(ct.train), sep=''))
+  print(paste(col.names[1], "n=", nrow(test.data) , "  Sensitivity: ", sensitivity(ct.test), " Precision: ", precision(ct.test), " F1: ", f1(ct.test), sep=''))
+  
+  test.data$prediction <- predictions.test
+  training.data$prediction <- predictions.train
+  
+  result <- list()
+  result$training <- list(sensitivity = sensitivity(ct.train), precision=precision(ct.train), f1=f1(ct.train))
+  result$test <- list(sensitivity = sensitivity(ct.test), precision=precision(ct.test), f1=f1(ct.test))
+  
+  t <- result$training
+  if (t$sensitivity > t$f1 && t$precision > t$f1) {
+    debug_train <<- ct.train
+    stop(paste("Training: Sensitivity: ", t$sensitivity, "  Precision: ", t$precision, "  F1: ", t$f1))
+  }
+  t <- result$test
+  if (t$sensitivity > t$f1 && t$precision > t$f1) {
+    debug_test <<- ct.test
+    stop(paste("Test: Sensitivity: ", t$sensitivity, "  Precision: ", t$precision, "  F1: ", t$f1))
+  }
+    
+  return(result)
+}
+
+
+evaluate_single <- function(rf, test.data) {
+  predictions.test <- predict(rf,  newdata=test.data)
+  ct.test <- table(predictions.test, test.data$truth)
+  
+  print(paste("Sensitivity: ", sensitivity(ct.test), " Precision: ", precision(ct.test), " F1: ", f1(ct.test), sep=''))
+  
+  result <- list()
+  result$precision <- precision(ct.test)
+  result$sensitivity <- sensitivity(ct.test)
+  result$f1 <- f1(ct.test)
+  return(result)
+}
+
+evaluate_ranger <- function(rf, test.data, training.data) {
+  predictions.test <- predict(rf,  test.data)$predictions
+  predictions.train <- predict(rf,  training.data)$predictions
+  ct.test <- table(predictions.test, test.data$truth)
+  ct.train <- table(predictions.train, training.data$truth)
+  
+  print(paste("TRAINING: Sensitivity: ", sensitivity(ct.train), " Precision: ", precision(ct.train), sep=''))
+  print(paste("TEST:     Sensitivity: ", sensitivity(ct.test), " Precision: ", precision(ct.test), sep=''))
+}
+
+evaluate_tuned <- function(rf, test.data, training.data) {
+  predictions.test <- predict(rf,  newdata=test.data)
+  predictions.train <- predict(rf,  newdata=training.data)
+  ct.test <- table(predictions.test$data$response, test.data$truth)
+  ct.train <- table(predictions.train$data$response, training.data$truth)
+  
+  print(paste("TRAINING: Sensitivity: ", sensitivity(ct.train), " Precision: ", precision(ct.train), sep=''))
+  print(paste("TEST:     Sensitivity: ", sensitivity(ct.test), " Precision: ", precision(ct.test), sep=''))
+}
+
+
+split.tt <- function(data, columns) {
+  sample <- sample.int(n = nrow(data), size = floor(.8*nrow(data)), replace = F)
+  result <- list()
+  result$training <- data[sample, columns]
+  result$test <- data[-sample, columns]
+  paste("Training/Test  ", nrow(result$training), "/", nrow(result$test), sep='')
+  return(result)
+}
+
+split.cv <- function(data, columns, k) {
+  # Number of chunks
+  n_chunks <- k
+  
+  # Randomize the dataset by shuffling rows
+  data_shuffled <- data[sample(nrow(data)), columns]
+  
+  # Create a vector of chunk indices
+  chunk_indices <- cut(seq(1, nrow(data_shuffled)), breaks = n_chunks, labels = FALSE)
+  
+  # Split the randomized dataset into chunks
+  chunks <- split(data_shuffled, chunk_indices)
+  
+  
+  return(chunks)
+}
+
+
+
+split.group <- function(data, columns, group) {
+  # Split the randomized dataset into chunks
+  chunks <- split(data[, columns], data[group])
+  
+  
+  
+  return(chunks)
+}
+
+split_train_forest <- function(data, columns, ntree, maxnodes) {
+  result <- list()
+  data.tt <- split.tt(data, columns)
+  result$data <- data.tt
+  result$rf <- randomForest(formula = truth ~ ., 
+                         data = data.tt$training,
+                         ntree = ntree, maxnodes=maxnodes)
+  result$eval <- evaluate(result$rf , data.tt$test, data.tt$training)
+  result$varImportance <- varImpPlot(result$rf , sort = TRUE , length(columns), main = "Variable importance" )
+  return(result)
+}
+
+split_train_forest_cv <- function(data, columns, ntree, maxnodes, k) {
+  result <- list()
+  data.tt <- split.cv(data, columns, k)
+  
+  for (i in seq(length(data.tt))) {
+    splitdata <- list()
+    splitdata$test <- data.tt[i][[1]]
+    splitdata$train <- data.tt[-1] %>% bind_rows()
+    splitdata$rf <- randomForest(formula = truth ~ ., 
+                           data = splitdata$train,
+                           ntree = ntree, maxnodes=maxnodes)
+    splitdata$eval <- evaluate(splitdata$rf , splitdata$test, splitdata$train)
+    splitdata$varImportance <- varImpPlot(splitdata$rf , sort = TRUE , length(columns), main = "Variable importance" )
+    
+    result[[paste("split_", i, collapse = "", sep = "")]] <- splitdata
+      
+  }
+  
+  training <- list()
+  test <- list()
+  for (key in names(result)) {
+    value <- result[[key]]
+    
+    training$sensitivity <- c(training$sensitivity, value$eval$training$sensitivity)
+    training$precision <- c(training$precision, value$eval$training$precision)
+    training$f1 <- c(training$f1, value$eval$training$f1)
+    test$sensitivity <- c(test$sensitivity, value$eval$test$sensitivity)
+    test$precision <- c(test$precision, value$eval$test$precision)
+    test$f1 <- c(test$f1, value$eval$test$f1)
+  }
+  result$training <- training
+  result$test <- test
+  return(result)
+}
+
+
+split_train_forest_1 <- function(data.tt, columns, ntree, maxnodes, train_on_smaller_split=FALSE) {
+  result <- list()
+  for (i in seq(length(data.tt))) {
+    print(names(data.tt)[i])
+    splitdata <- list()
+    
+    if (train_on_smaller_split) {
+      splitdata$train <- data.tt[i][[1]]
+      splitdata$test <- data.tt[-1] %>% bind_rows()
+    } else {
+      splitdata$test <- data.tt[i][[1]]
+      splitdata$train <- data.tt[-1] %>% bind_rows()
+    }
+    
+    print("Random forest")
+    splitdata$rf <- randomForest(formula = truth ~ ., 
+                           data = splitdata$train,
+                           ntree = ntree, maxnodes=maxnodes)
+    print("Eval")
+    splitdatatmp <<- splitdata
+    splitdata$eval <- evaluate(splitdata$rf, splitdata$test, splitdata$train)
+    print("Eval done")
+    splitdata$varImportance <- varImpPlot(splitdata$rf , sort = TRUE , length(columns), main = "Variable importance" )
+    
+    result[[names(data.tt)[i]]] <- splitdata
+      
+  }
+  return(result)
+}
+
+train_final <- function(data.tt, columns, ntree, maxnodes){
+  subset <- data.tt[, columns]
+  result <- list()
+  result$rf <- randomForest(formula = truth ~ ., 
+                           data = subset,
+                           ntree = ntree, maxnodes=maxnodes)
+  result$eval <- evaluate_single(result$rf, subset)
+  result$varImportance <- varImpPlot(result$rf , sort = TRUE , length(columns), main = "Variable importance" )
+  return(result)
+}
+
+set.seed(1234)
+
+load_data <- function(path) {
+  
+  tmpdata <- read.csv(path, header=FALSE, sep='\t')
+  colnames(tmpdata) <- c("dataset","truth", "prediction", "taxon", "present_genes", "total_hits", "unique_hits", "mean_ani", "expected_gene_presence", "expected_gene_presence_ratio", #1-10
+                      "uniqueness", "mean_mapq", "variance1", "variance2", "A0", "A1", "A2" , "A3", "A4", "AF0",  #11-20
+                      "AF1", "AF2", "AF3", "AF4","stddev", "hittable", "lu", "lu_genes", "lsu", "lsu_genes", #21-30 (20-29)
+                      "su_genome", "lu_genome", "lsu_genome", "total_genome", 
+                      "su_rate", "lu_rate", "lsu_rate", 
+                      "lu_gene_rate", "lsu_gene_rate", 
+                      "lu_gene_rate2", "lsu_gene_rate2",
+                      "lu_gene_rate3", "lsu_gene_rate3", "lsu_per_read", "lu_per_read")
+  
+  tmpdata$truth_raw <- as.logical(tmpdata$truth)
+  tmpdata$prediction <- as.logical(tmpdata$prediction)
+  tmpdata$truth <- as.factor(tmpdata$truth_raw)
+  tmpdata[is.infinite(tmpdata$lu_gene_rate),"lu_gene_rate"] <- 0
+  tmpdata[is.infinite(tmpdata$lsu_gene_rate),"lsu_gene_rate"] <- 0
+  tmpdata[is.infinite(tmpdata$lu_gene_rate2),"lu_gene_rate2"] <- 0
+  tmpdata[is.infinite(tmpdata$lsu_gene_rate2),"lsu_gene_rate2"] <- 0
+  tmpdata[is.infinite(tmpdata$lu_gene_rate3),"lu_gene_rate3"] <- 0
+  tmpdata[is.infinite(tmpdata$lsu_gene_rate3),"lsu_gene_rate3"] <- 0
+  
+  tmpdata <- fill_in_allele_info(tmpdata)
+  
+  return(tmpdata)
+}
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r setup, echo=FALSE}
+
+data_path6 <- "/usr/users/QIB_fr017/fritsche/CLionProjects/protal/scripts/data/forest_data/all/data/combined.tsv"
+
+data6 <- read.csv(data_path6, header=FALSE, sep='\t')
+colnames(data6) <- c("dataset","truth", "prediction", "taxon", "present_genes", "total_hits", "unique_hits", "mean_ani", "expected_gene_presence", "expected_gene_presence_ratio", #1-10
+                    "uniqueness", "mean_mapq", "variance1", "variance2", "A0", "A1", "A2" , "A3", "A4", "AF0",  #11-20
+                    "AF1", "AF2", "AF3", "AF4","stddev", "hittable", "lu", "lu_genes", "lsu", "lsu_genes", #21-30 (20-29)
+                    "su_genome", "lu_genome", "lsu_genome", "total_genome", 
+                    "su_rate", "lu_rate", "lsu_rate", 
+                    "lu_gene_rate", "lsu_gene_rate", 
+                    "lu_gene_rate2", "lsu_gene_rate2",
+                    "lu_gene_rate3", "lsu_gene_rate3", "lsu_per_read", "lu_per_read")
+
+data6$truth_raw <- as.logical(data6$truth)
+data6$prediction <- as.logical(data6$prediction)
+data6$truth <- as.factor(data6$truth_raw)
+data6[is.infinite(data6$lu_gene_rate),"lu_gene_rate"] <- 0
+data6[is.infinite(data6$lsu_gene_rate),"lsu_gene_rate"] <- 0
+data6[is.infinite(data6$lu_gene_rate2),"lu_gene_rate2"] <- 0
+data6[is.infinite(data6$lsu_gene_rate2),"lsu_gene_rate2"] <- 0
+data6[is.infinite(data6$lu_gene_rate3),"lu_gene_rate3"] <- 0
+data6[is.infinite(data6$lsu_gene_rate3),"lsu_gene_rate3"] <- 0
+
+data6 <- fill_in_allele_info(data6)
+
+msss200c <- load_data("/usr/users/QIB_fr017/fritsche/CLionProjects/protal/scripts/data/forest_data/all/data/msss200c3.tsv")
+combined2 <- load_data("/usr/users/QIB_fr017/fritsche/CLionProjects/protal/scripts/data/forest_data/all2/combined.tsv")
+```
+
+```{r}
+
+columns_with_unique <- c("truth", "present_genes", "expected_gene_presence", "total_hits", "unique_hits", "RA3", "RAF0", "RAF1", "mean_ani", "variance1", "stddev", "hittable", "lsu_per_read", "lu_per_read", "lu_genome", "lsu_genome", "lu", "lsu", "lsu_genes", "lu_genes", "lu_rate", "lsu_rate")
+columns_with_unique2 <- c("truth", "taxon", "present_genes", "total_hits", "unique_hits", "mean_ani", "expected_gene_presence", "expected_gene_presence_ratio", #1-10
+                    "uniqueness", "mean_mapq", "variance1", "variance2", "A0", "A1", "A2" , "A3", "A4", "AF0",  #11-20
+                    "AF1", "AF2", "AF3", "AF4","stddev", "hittable", "lu", "lu_genes", "lsu", "lsu_genes", #21-30 (20-29)
+                    "su_genome", "lu_genome", "lsu_genome", "total_genome", 
+                    "su_rate", "lu_rate", "lsu_rate", 
+                    "lu_gene_rate", "lsu_gene_rate", 
+                    "lu_gene_rate2", "lsu_gene_rate2",
+                    "lu_gene_rate3", "lsu_gene_rate3", "lsu_per_read", "lu_per_read")
+columns_without_unique <- c("truth", "present_genes", "expected_gene_presence", "total_hits", "unique_hits", "RA3", "RAF0", "RAF1", "mean_ani", "variance1", "stddev", "hittable")
+
+
+data.unique <- split.tt(data6, columns_with_unique)
+data.nonunique <- split.tt(data6, columns_without_unique)
+
+
+data.cv.unique <- split.cv(data6, columns_with_unique, 5)
+data.cv.nonunique <- split.cv(data6, columns_without_unique,5)
+```
+
+
+```{r}
+get_cv_df <- function(res) {
+    
+  dataset <- c()
+  type <- c()
+  sensitivities <- c()
+  precisions <- c()
+  f1s <- c()
+  for (key in names(res)) {
+    print(key)
+    value <- res[[key]]
+    dataset <- c(dataset, key, key)
+    type <- c(type, "test", "train")
+    
+    sensitivities <- c(sensitivities, value$eval$test$sensitivity)
+    precisions <- c(precisions, value$eval$test$precision)
+    f1s <- c(f1s, value$eval$test$f1)
+    
+    sensitivities <- c(sensitivities, value$eval$train$sensitivity)
+    precisions <- c(precisions, value$eval$train$precision)
+    f1s <- c(f1s, value$eval$train$f1)
+  }
+  result_df <- data.frame(dataset=dataset, type=type, sensitivity=sensitivities, precision=precisions, f1=f1s)
+  
+  return(result_df)
+}
+
+
+save_forest <- function(model, file) {
+  pmod <- pmml(model, file)
+  save_pmml(pmod, file)
+}
+
+varImpPlotNice <- function(importance, take_top=10) {
+  importance %>%
+    as.data.frame() %>%
+    rownames_to_column(var = "Feature") %>%
+    arrange(MeanDecreaseGini) %>%
+    mutate(Feature=ordered(Feature, levels=Feature)) %>%
+    tail(take_top) %>%
+    ggplot(aes(x=Feature, y=MeanDecreaseGini)) +
+    geom_bar(stat="identity") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+    coord_flip()
+}
+
+varImpPlotIncrease <- function(importance, take_top=10) {
+  importance %>%
+      as.data.frame() %>%
+      rownames_to_column(var = "Feature") %>%
+      arrange(desc(MeanDecreaseGini)) %>%
+      mutate(Feature=ordered(Feature, levels=Feature),
+             CumulativeSum=cumsum(MeanDecreaseGini)) %>%
+      ggplot(aes(x=Feature, y=CumulativeSum)) +
+      geom_point() +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+}
+
+
+```
+
+
+
+```{r feature_selection}
+data <- data6 %>% filter(dataset != "rhizo")
+
+columns <- columns_with_unique2[! columns_with_unique2 %in% c("truth")]
+columns_all <- colnames(data)[! colnames(data) %in% c("truth")]
+train_data <- data[, columns]
+train_truth <- data[, "truth"]
+
+#         42          21          10           5           3           1 
+#0.003385866 0.003139621 0.003837314 0.005191661 0.007100057 0.085467455 
+cv_result <- rfcv(train_data, train_truth, cv.fold=5)
+
+features_all <- train_final(data, columns_with_unique2, 512, NULL)
+
+# Features by importance
+features_ordered <- all_features$varImportance %>% 
+  as.data.frame() %>% 
+  arrange(desc(MeanDecreaseGini))
+
+# 21 best features:
+columns_21 <- features_ordered %>% 
+  head(21) %>%
+  rownames()
+
+
+# 21 best features:
+columns_12 <- features_ordered %>% 
+  head(12) %>%
+  rownames()
+
+# 21 best features:
+columns_10 <- features_ordered %>% 
+  head(10) %>%
+  rownames()
+
+features_21 <- train_final(data, columns_21 %>% c("truth"), 512, NULL)
+features_10 <- train_final(data, columns_10 %>% c("truth"), 512, NULL)
+```
+
+```{r caret_train_full_model}
+library(caret) 
+data <- data6 %>% filter(dataset != "rhizo")
+
+# Define the control
+trControl <- trainControl(method = "cv",
+    number = 5,
+    search = "grid",
+    savePredictions = TRUE,
+    allowParallel = TRUE)
+
+tuneGrid <- expand.grid(mtry = seq(6, 25, step=1))
+
+caret_full_result <- caret::train(x=data[,columns], 
+                             y=data[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=512,
+                             tuneGrid = tuneGrid)
+
+chosen_full_mtry <- caret_full_result$finalModel$mtry
+chosen_full_columns <- varImp(caret_full_result$finalModel) %>% arrange(desc(Overall)) %>% head(chosen_full_mtry) %>% rownames()
+caret_full_result_reproduced <- caret::train(x=data[,chosen_full_columns], 
+                             y=data[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=512,
+                             tuneGrid = expand.grid(mtry = chosen_full_mtry))
+
+caret_full_result_data <- list()
+caret_full_result_data$data <- data[,columns %>% c("truth")]
+caret_full_result_data$caret_result <- caret_full_result
+caret_full_result_data$caret_result_reproduced <- caret_full_result_reproduced
+saveRDS(caret_full_result_data, file="/usr/users/QIB_fr017/fritsche/CLionProjects/protal/data/random_forest/caret_full_result_data.rds")
+
+evaluate_single(caret_full_result_reproduced$finalModel, data[, chosen_full_columns %>% c("truth")])
+evaluate_single(caret_full_result_reproduced$finalModel, data_rhizo[, chosen_full_columns %>% c("truth")])
+evaluate_single(caret_full_result_reproduced$finalModel, msss200c[, chosen_full_columns %>% c("truth")])
+
+caret_full_result_reproduced
+
+caret_retrain <- train_final(data, chosen_full_columns %>% c("truth"), 512, NULL)
+
+
+evaluate_single(caret_retrain$rf, data[, chosen_full_columns %>% c("truth")])
+evaluate_single(caret_retrain$rf, data_rhizo[, chosen_full_columns %>% c("truth")])
+evaluate_single(caret_retrain$rf, msss200c[, chosen_full_columns %>% c("truth")])
+
+save_forest(caret_retrain$rf, "/usr/users/QIB_fr017/fritsche/CLionProjects/protal/scripts/forests/random_forest_caret.xml")
+
+
+```
+
+
+
+```{r cv_on_rhizo}
+columns <- columns_with_unique2[! columns_with_unique2 %in% c("truth")]
+data_rhizo <- data6 %>% filter(dataset == "rhizo")
+data_rhizo
+
+# Define the control
+trControl <- trainControl(method = "cv",
+    number = 5,
+    search = "grid",
+    savePredictions = TRUE,
+    allowParallel = TRUE)
+
+tuneGrid <- expand.grid(mtry = seq(8, 18, step=1))
+
+caret_rhizo_result <- caret::train(x=data_rhizo[,columns], 
+                             y=data_rhizo[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=512,
+                             tuneGrid = tuneGrid)
+
+chosen_rhizo_mtry <- caret_rhizo_result$finalModel$mtry
+chosen_rhizo_columns <- varImp(caret_rhizo_result$finalModel) %>% arrange(desc(Overall)) %>% head(chosen_rhizo_mtry) %>% rownames()
+caret_rhizo_result_reproduced <- caret::train(x=data_rhizo[,chosen_rhizo_columns], 
+                             y=data_rhizo[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=16,
+                             tuneGrid = expand.grid(mtry = chosen_rhizo_mtry))
+
+evaluate_single(caret_rhizo_result_reproduced$finalModel, data_rhizo[, chosen_rhizo_columns %>% c("truth")])
+evaluate_single(caret_rhizo_result_reproduced$finalModel, data[, chosen_rhizo_columns %>% c("truth")])
+
+evaluate_single(caret_full_result_reproduced$finalModel, data_rhizo[, chosen_full_columns %>% c("truth")])
+evaluate_single(caret_full_result_reproduced$finalModel, data[, chosen_full_columns %>% c("truth")])
+
+
+
+
+
+```
+
+```{r cv__all_all}
+columns_all <- columns_all[!(columns_all %in% c("prediction", "truth_raw", "total_genome", "dataset", "taxon"))]
+# data_all <- data6
+data_all <- combined2 %>% filter(!(dataset %in% c("msss200c")))
+msss200c2 <- combined2 %>% filter(dataset == "msss200c")
+
+# Define the control
+trControl <- trainControl(method = "cv",
+    number = 5,
+    search = "grid",
+    savePredictions = TRUE,
+    allowParallel = TRUE)
+
+tuneGrid <- expand.grid(mtry = seq(10, 20, step=1))
+
+caret_all_result <- caret::train(x=data_all[,columns_all], 
+                             y=data_all[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=16,
+                             tuneGrid = tuneGrid)
+
+chosen_all_mtry <- caret_all_result$finalModel$mtry
+chosen_all_mtry <- 16
+chosen_all_columns <- varImp(caret_all_result$finalModel) %>% arrange(desc(Overall)) %>% head(chosen_all_mtry) %>% rownames()
+caret_all_result_reproduced <- caret::train(x=data_all[,chosen_all_columns], 
+                             y=data_all[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=512,
+                             tuneGrid = expand.grid(mtry = chosen_all_mtry))
+
+saveRDS(caret_all_result_reproduced, file="/usr/users/QIB_fr017/fritsche/Documents/Protal_Paper/main_figures/overview_taxonomy_randomforest/random_forest_data.rds")
+
+
+
+saveRDS(caret_all_result, file="/usr/users/QIB_fr017/fritsche/Documents/Protal_Paper/main_figures/overview_taxonomy_randomforest/test_save.rds")
+obj <- readRDS("/usr/users/QIB_fr017/fritsche/Documents/Protal_Paper/main_figures/overview_taxonomy_randomforest/test_save.rds")
+
+evaluate_single(caret_all_result$finalModel, data_all[, columns_all %>% c("truth")])
+evaluate_single(caret_all_result$finalModel, data_all[, columns_all %>% c("truth")])
+evaluate_single(caret_all_result$finalModel, data_rhizo[, columns_all %>% c("truth")])
+evaluate_single(caret_all_result$finalModel, data[, columns_all %>% c("truth")])
+evaluate_single(caret_all_result$finalModel, msss200c[, columns_all %>% c("truth")])
+
+evaluate_single(caret_all_result_reproduced$finalModel, data_all[, chosen_all_columns %>% c("truth")])
+evaluate_single(caret_all_result_reproduced$finalModel, data_rhizo[, chosen_all_columns %>% c("truth")])
+evaluate_single(caret_all_result_reproduced$finalModel, data[, chosen_all_columns %>% c("truth")])
+evaluate_single(caret_all_result_reproduced$finalModel, msss200c[, chosen_all_columns %>% c("truth")])
+evaluate_single(caret_all_result_reproduced$finalModel, msss200c2[, chosen_all_columns %>% c("truth")])
+# combined2_2 <- combined2 %>% filter(!(dataset %in% c("rhizosphere", "msss200c")))
+# evaluate_single(caret_all_result_reproduced$finalModel, combined2[, chosen_all_columns %>% c("truth")])
+# evaluate_single(caret_all_result_reproduced$finalModel, combined2_2[, chosen_all_columns %>% c("truth")])
+
+varImpPlot(caret_all_result$finalModel)
+varImpPlot(caret_all_result_reproduced$finalModel)
+
+
+
+evaluate_single(caret_full_result_reproduced$finalModel, data_rhizo[, chosen_full_columns %>% c("truth")])
+evaluate_single(caret_full_result_reproduced$finalModel, data[, chosen_full_columns %>% c("truth")])
+
+
+combine_all <- data6 %>% rbind(combined2)
+
+caret_all_result <- caret::train(x=combine_all[,columns_all], 
+                             y=combine_all[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=16,
+                             tuneGrid = tuneGrid)
+plot(caret_all_result)
+plot(caret_all_result$finalModel)
+varImpPlot(caret_all_result$finalModel)
+
+evaluate_single(caret_all_result$finalModel, data[, columns_all %>% c("truth")])
+evaluate_single(caret_all_result$finalModel, combined2[, columns_all %>% c("truth")] %>% mutate(lu_genome = 0))
+
+for (ds in data$dataset %>% unique()) {
+  data_sub <- data %>% filter(dataset == ds)
+  
+  print(paste("Dataset", ds))
+  evaluate_single(caret_all_result$finalModel, data_sub[, columns_all %>% c("truth")])
+  
+}
+evaluate_single(caret_all_result$finalModel, msss200c2[, columns_all %>% c("truth")])
+
+chosen_all_mtry <- caret_all_result$finalModel$mtry
+chosen_all_columns <- varImp(caret_all_result$finalModel) %>% arrange(desc(Overall)) %>% head(chosen_all_mtry) %>% rownames()
+
+caret_all_result_reproduced <- caret::train(x=combine_all[,chosen_all_columns], 
+                             y=combine_all[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=256,
+                             tuneGrid = expand.grid(mtry = chosen_all_mtry))
+
+chosen_all_mtry <- caret_all_result_reproduced$finalModel$mtry
+chosen_all_columns <- varImp(caret_all_result_reproduced$finalModel) %>% arrange(desc(Overall)) %>% head(chosen_all_mtry) %>% rownames()
+
+evaluate_single(caret_all_result_reproduced$finalModel, combine_all[, chosen_all_columns %>% c("truth")])
+evaluate_single(caret_all_result_reproduced$finalModel, data_all[, chosen_all_columns %>% c("truth")])
+evaluate_single(caret_all_result_reproduced$finalModel, data[, chosen_all_columns %>% c("truth")])
+evaluate_single(caret_all_result_reproduced$finalModel, msss200c[, chosen_all_columns %>% c("truth")])
+evaluate_single(caret_all_result_reproduced$finalModel, msss200c2[, chosen_all_columns %>% c("truth")])
+
+```
+
+
+```{r cv_new_data}
+new_data <- load_data("")
+columns_all <- columns_all[!(columns_all %in% c("prediction", "truth_raw", "total_genome", "dataset", "taxon"))]
+data_all <- new_data
+data_all
+
+# Define the control
+trControl <- trainControl(method = "cv",
+    number = 5,
+    search = "grid",
+    savePredictions = TRUE,
+    allowParallel = TRUE)
+
+tuneGrid <- expand.grid(mtry = seq(10, 25, step=1))
+
+caret_all_result <- caret::train(x=data_all[,columns_all], 
+                             y=data_all[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=16,
+                             tuneGrid = tuneGrid)
+
+chosen_all_mtry <- caret_all_result$finalModel$mtry
+chosen_all_mtry <- 18
+chosen_all_columns <- varImp(caret_all_result$finalModel) %>% arrange(desc(Overall)) %>% head(chosen_all_mtry) %>% rownames()
+caret_all_result_reproduced <- caret::train(x=data_all[,chosen_all_columns], 
+                             y=data_all[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=512,
+                             tuneGrid = expand.grid(mtry = chosen_all_mtry))
+
+
+evaluate_single(caret_all_result$finalModel, data_all[, columns_all %>% c("truth")])
+evaluate_single(caret_all_result$finalModel, data_rhizo[, columns_all %>% c("truth")])
+evaluate_single(caret_all_result$finalModel, data[, columns_all %>% c("truth")])
+evaluate_single(caret_all_result$finalModel, msss200c[, columns_all %>% c("truth")])
+
+evaluate_single(caret_all_result_reproduced$finalModel, data_all[, chosen_all_columns %>% c("truth")])
+evaluate_single(caret_all_result_reproduced$finalModel, data_rhizo[, chosen_all_columns %>% c("truth")])
+evaluate_single(caret_all_result_reproduced$finalModel, data[, chosen_all_columns %>% c("truth")])
+evaluate_single(caret_all_result_reproduced$finalModel, msss200c[, chosen_all_columns %>% c("truth")])
+
+varImpPlot(caret_all_result$finalModel)
+varImpPlot(caret_all_result_reproduced$finalModel)
+
+evaluate_single(caret_full_result_reproduced$finalModel, data_rhizo[, chosen_full_columns %>% c("truth")])
+evaluate_single(caret_full_result_reproduced$finalModel, data[, chosen_full_columns %>% c("truth")])
+
+```
+
+
+```{r cv_on_rhizo}
+data_rhizo <- data6 %>% filter(dataset == "rhizo")
+data_rhizo
+
+
+# Define the control
+trControl <- trainControl(method = "cv",
+    number = 5,
+    search = "grid",
+    savePredictions = TRUE,
+    allowParallel = TRUE)
+
+tuneGrid <- expand.grid(mtry = seq(6, 12, step=1))
+
+caret_result <- caret::train(x=data_rhizo[,columns], 
+                             y=data_rhizo[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=16,
+                             tuneGrid = tuneGrid)
+
+chosen_mtry <- old_result$finalModel$mtry
+chosen_columns <- varImp(old_result$finalModel) %>% arrange(desc(Overall)) %>% head(chosen_mtry) %>% rownames()
+caret_result_reproduced <- caret::train(x=data_rhizo[,chosen_columns], 
+                             y=data_rhizo[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=16,
+                             tuneGrid = expand.grid(mtry = chosen_mtry))
+
+
+```
+
+
+
+```{r cv_tiny}
+data_tiny <- data6 %>% filter(dataset == "mouse")
+data_tiny <- data6 %>% filter(dataset != "rhizo")
+
+# Define the control
+trControl <- trainControl(method = "cv",
+    number = 5,
+    search = "grid",
+    savePredictions = TRUE,
+    allowParallel = TRUE)
+
+tuneGrid <- expand.grid(mtry = seq(6, 12, step=1))
+
+caret_result <- caret::train(x=data_tiny[,columns_12], 
+                             y=data_tiny[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=16,
+                             tuneGrid = tuneGrid)
+
+chosen_mtry <- old_result$finalModel$mtry
+chosen_columns <- varImp(old_result$finalModel) %>% arrange(desc(Overall)) %>% head(chosen_mtry) %>% rownames()
+caret_result_reproduced <- caret::train(x=data_tiny[,chosen_columns], 
+                             y=data_tiny[, "truth"], 
+                             method="rf", 
+                             trControl = trControl, 
+                             ntree=16,
+                             tuneGrid = expand.grid(mtry = chosen_mtry))
+
+```
+
+
+```{r per_dataset_train_with_unique_all}
+data_subset <- data6 %>% filter(dataset != "rhizo")
+data_subset_group <- split.group(data_subset, columns_with_unique2, "dataset")
+
+ntrees <- c(4, 8, 16, 32, 64, 128, 258, 512, 1024, 2048)
+nnodes <- c(4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048)
+
+global_result <- NULL
+for (tree in ntrees) {
+  print(paste("Tree: ", tree))
+  for (node in nnodes) {
+  print(paste("Node: ", node))
+    train.result <- split_train_forest_1(data_subset_group, columns_with_unique2, tree, node, TRUE)
+    train.df <- get_cv_df(train.result)
+    train.df <- train.df %>% mutate(nnodes=node, ntree=tree, label=paste(node, tree, sep='_'))
+    
+    if (is.null(global_result)) {
+      global_result <- train.df
+    } else {
+      global_result <- global_result %>% rbind(train.df)
+    }
+  }
+}
+
+global_result %>%
+  filter(type == "test" & dataset == "mouse") %>%
+  ggplot(aes(x=ntree, y=f1)) +
+  geom_line() +
+  scale_x_log10() +
+  facet_grid(rows=vars(nnodes))
+
+
+global_result %>%
+  filter(type == "test" & nnodes >= 8 & nnodes <= 512) %>%
+  ggplot(aes(x=ntree, y=f1, color=nnodes, group=nnodes)) +
+  geom_line() +
+  scale_x_log10() +
+  facet_grid(rows=vars(dataset))
+
+global_result %>%
+  filter(type == "test" & dataset == "mouse") %>%
+  ggplot(aes(x=ntree, y=sensitivity)) +
+  geom_line() +
+  scale_x_log10() +
+  facet_grid(rows=vars(nnodes), cols=vars(ntree))
+
+global_result %>%
+  filter(type == "test" && dataset == "mouse") %>%
+  ggplot(aes(x=ntree, y=precision)) +
+  geom_line() +
+  scale_x_log10() +
+  facet_grid(rows=vars(nnodes), cols=vars(ntree))
+
+
+dataset <- c()
+type <- c()
+sensitivities <- c()
+precisions <- c()
+f1s <- c()
+for (key in names(rf.unique.cv.result)) {
+  print(key)
+  value <- rf.unique.cv.result[[key]]
+  dataset <- c(dataset, key, key)
+  type <- c(type, "test", "train")
+  
+  sensitivities <- c(sensitivities, value$eval$test$sensitivity)
+  precisions <- c(precisions, value$eval$test$precision)
+  f1s <- c(f1s, value$eval$test$f1)
+  
+  sensitivities <- c(sensitivities, value$eval$train$sensitivity)
+  precisions <- c(precisions, value$eval$train$precision)
+  f1s <- c(f1s, value$eval$train$f1)
+}
+per_df_eval <- data.frame(dataset=dataset, type=type, sensitivity=sensitivities, precision=precisions, f1=f1s)
+per_df_eval %>% 
+  pivot_wider(names_from=type, values_from=c(sensitivity, precision, f1)) %>%
+  ggplot(aes(x=sensitivity_test, y=sensitivity_train, color=dataset)) +
+  geom_point()
+
+per_df_eval %>% 
+  pivot_longer(cols=c("sensitivity", "precision", "f1"), names_to="metric") %>%
+  ggplot(aes(x=type, y=value, group=type, fill=metric)) + 
+  facet_wrap(~metric) +
+  geom_boxplot()
+
+per_df_eval_unique_512_128 <- per_df_eval
+```
+
+
+
+```{r per_dataset_train}
+data_subset <- data6 %>% filter(dataset != "rhizo")
+
+data_subset_group <- split.group(data_subset, columns_without_unique, "dataset")
+rf.unique.cv.result <- split_train_forest_1(data_subset_group, columns_without_unique, 2048, 2048, TRUE)
+
+
+is_bc_valid <- function(r) {
+  if ((r$sensitivity > r$f1 && r$precision > r$f1) || (r$sensitivity < r$f1 && r$precision < r$f1)) {
+    stop("F1 and precision and sensitivity do not make sense")
+  }
+}
+
+dataset <- c()
+type <- c()
+sensitivities <- c()
+precisions <- c()
+f1s <- c()
+for (key in names(rf.unique.cv.result)) {
+  print(key)
+  value <- rf.unique.cv.result[[key]]
+  dataset <- c(dataset, key, key)
+  type <- c(type, "test", "train")
+  
+  
+  sensitivities <- c(sensitivities, value$eval$test$sensitivity)
+  precisions <- c(precisions, value$eval$test$precision)
+  f1s <- c(f1s, value$eval$test$f1)
+  
+  print(paste("Test.......",
+              "Sensitivity: ", value$eval$test$sensitivity,
+              "Precision: ", value$eval$test$precision,
+              "F1: ", value$eval$test$f1))
+  
+  print(paste("Training...",
+              "Sensitivity: ", value$eval$train$sensitivity,
+              "Precision: ", value$eval$train$precision,
+              "F1: ", value$eval$train$f1))
+  is_bc_valid(value$eval$test)
+  is_bc_valid(value$eval$train)
+  
+  sensitivities <- c(sensitivities, value$eval$train$sensitivity)
+  precisions <- c(precisions, value$eval$train$precision)
+  f1s <- c(f1s, value$eval$train$f1)
+}
+per_df_eval <- data.frame(dataset=dataset, type=type, sensitivity=sensitivities, precision=precisions, f1=f1s)
+per_df_eval %>% 
+  pivot_wider(names_from=type, values_from=c(sensitivity, precision, f1)) %>%
+  ggplot(aes(x=sensitivity_test, y=sensitivity_train, color=dataset)) +
+  geom_point()
+
+per_df_eval %>% 
+  pivot_longer(cols=c("sensitivity", "precision", "f1"), names_to="metric") %>%
+  ggplot(aes(x=type, y=value, group=type, fill=metric)) + 
+  facet_wrap(~metric) +
+  geom_boxplot()
+
+per_df_eval_nounique_512_128 <- per_df_eval
+```
+
+```{r}
+data_subset <- data6 %>% filter(dataset != "rhizo")
+
+
+print("With Unique")
+rf.unique.result <- split_train_forest(data_subset, columns_with_unique, 32, 8)
+varImpPlot(rf.unique.result$rf, sort = TRUE , length(columns_with_unique), main = "Variable importance" )
+
+
+print("Without Unique")
+rf.nonunique.result <- split_train_forest(data_subset, columns_without_unique, 32, 8)
+varImpPlot(rf.nonunique.result$rf, sort = TRUE , length(columns_without_unique), main = "Variable importance" )
+
+print("With Unique")
+rf.unique.result <- split_train_forest(data_subset, columns_with_unique, 128, 32)
+varImpPlot(rf.unique.result$rf, sort = TRUE , length(columns_with_unique), main = "Variable importance" )
+
+
+print("Without Unique")
+rf.nonunique.result <- split_train_forest(data_subset, columns_without_unique, 128, 32)
+varImpPlot(rf.nonunique.result$rf, sort = TRUE , length(columns_without_unique), main = "Variable importance" )
+
+
+print("With Unique 512 128")
+rf.unique.result <- split_train_forest(data_subset, columns_with_unique, 512, 128)
+varImpPlot(rf.unique.result$rf, sort = TRUE , length(columns_with_unique), main = "Variable importance" )
+
+
+print("Without Unique 512 128")
+rf.nonunique.result <- split_train_forest(data_subset, columns_without_unique, 512, 128)
+varImpPlot(rf.nonunique.result$rf, sort = TRUE , length(columns_without_unique), main = "Variable importance" )
+
+
+
+print("With Unique")
+rf.unique.cv.result <- split_train_forest_cv(data_subset, columns_with_unique, 32, 8, 5)
+varImpPlot(rf.unique.result$rf, sort = TRUE , length(columns_with_unique), main = "Variable importance" )
+
+
+print("With Unique")
+data_subset_split <- split.cv(data_subset, columns_with_unique, 5)
+data_subset_group <- split.group(data_subset, columns_with_unique, "dataset")
+rf.unique.cv.result <- split_train_forest_1(data_subset_group, columns_with_unique, 512, 128)
+varImpPlot(rf.unique.result$rf, sort = TRUE , length(columns_with_unique), main = "Variable importance" )
+
+print("With Unique 512 128")
+split_result <- split_train_forest_cv(data_subset, columns_with_unique, 512, 128, 5)
+
+print("With Unique Final")
+final_result <- train_final(data_subset, columns_with_unique, 512, 128)
+print(paste(mean(split_result$test$sensitivity), sd(split_result$test$sensitivity), sep='+-'))
+print(paste(mean(split_result$test$precision), sd(split_result$test$precision), sep='+-'))
+print(paste(mean(split_result$test$f1), sd(split_result$test$f1), sep='+-'))
+
+print("With Unique Final")
+final_result_null <- train_final(data_subset, columns_with_unique, 256, NULL)
+print(paste(mean(split_result$test$sensitivity), sd(split_result$test$sensitivity), sep='+-'))
+print(paste(mean(split_result$test$precision), sd(split_result$test$precision), sep='+-'))
+print(paste(mean(split_result$test$f1), sd(split_result$test$f1), sep='+-'))
+
+
+print("Without Unique 512 128")
+split_result_nonunique <- split_train_forest_cv(data_subset, columns_without_unique, 512, 128, 5)
+split_result_nonunique <- split_train_forest_cv(data_subset, columns_without_unique, 64, 16, 5)
+print(paste(mean(split_result_nonunique$test$sensitivity), sd(split_result_nonunique$test$sensitivity), sep='+-'))
+print(paste(mean(split_result_nonunique$test$precision), sd(split_result_nonunique$test$precision), sep='+-'))
+print(paste(mean(split_result_nonunique$test$f1), sd(split_result_nonunique$test$f1), sep='+-'))
+
+print("Without Unique Final")
+final_result_nonunique <- train_final(data_subset, columns_without_unique, 512, 128)
+
+
+
+lapply(split_result_nonunique$test, FUN=function(x) {
+  print(x$f1)
+})
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

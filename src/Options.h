@@ -481,14 +481,20 @@ namespace protal {
             return m_second_list[index];
         }
 
-        std::pair<std::string, bool> SamFile(int index) const {
+        std::pair<std::string, bool> SamFile(int index, bool strip_gzip=false) const {
             if (index >= m_sam_list.size()) {
                 std::cerr << "Cannot access index " << index << " of sam files (Length: " << m_sam_list.size() << ")" << std::endl;
                 exit(33);
             }
             auto sam = m_sam_list[index];
 
-            return {sam, sam.substr(sam.size() - 3) == ".gz"};
+            bool gzipped = sam.size() >= 3 && sam.compare(sam.size() - 3, 3, ".gz") == 0;
+            if (strip_gzip && gzipped) {
+                sam = sam.substr(0, sam.size() - 3);
+                gzipped = false;
+            }
+
+            return {sam, gzipped};
         }
 
 
