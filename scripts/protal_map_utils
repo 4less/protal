@@ -1,0 +1,377 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
+
+
+MAP_SAMPLEID = "#SAMPLEID"
+MAP_FIRST_READ = "FIRST"
+MAP_SECOND_READ = "SECOND"
+MAP_SAM = "SAM"
+MAP_PROFILE = "PROFILE"
+MAP_PROFILE_TRUTH = "PROFILE_TRUTH"
+MAP_HEADER_TO_SPECIES = "HEADER_TO_SPECIES"
+MAP_PREFIX = "PREFIX"
+
+MAP_VAR_INPUT_DIR = "#INPUT_DIR"
+MAP_VAR_OUTPUT_DIR = "#OUTPUT_DIR"
+MAP_VAR_SAM_OUTPUT_DIR = "#SAM_OUTPUT_DIR"
+MAP_VAR_PROFILE_OUTPUT_DIR = "#PROFILE_OUTPUT_DIR"
+MAP_VAR_STRAIN_OUTPUT_DIR = "#STRAIN_OUTPUT_DIR"
+MAP_VAR_MISC_OUTPUT_DIR = "#MISC_OUTPUT_DIR"
+
+MAP_VAR_DEFAULT_SAM_OUTPUT_DIR = "alignments"
+MAP_VAR_DEFAULT_PROFILE_OUTPUT_DIR = "profiles"
+MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR = "strains"
+MAP_VAR_DEFAULT_MISC_OUTPUT_DIR = "misc"
+
+
+@dataclass
+class MapFile:
+    path: str
+    vars: Dict[str, str]
+    var_lines: List[Tuple[str, str]]
+    header_cols: List[str]
+    rows: List[List[str]]
+
+
+def parse_map(path: str) -> MapFile:
+    vars_map: Dict[str, str] = {}
+    var_lines: List[Tuple[str, str]] = []
+    header_cols: List[str] = []
+    rows: List[List[str]] = []
+
+    saw_header = False
+    with open(path, "r", encoding="utf-8") as handle:
+        for line_num, raw_line in enumerate(handle, start=1):
+            line = raw_line.rstrip("\n")
+            if not line:
+                continue
+            tokens = line.split("\t")
+            if line.startswith("#"):
+                if saw_header:
+                    raise ValueError(
+                        f"{path}:{line_num}: did not expect header line after data rows"
+                    )
+                if tokens[0] == MAP_SAMPLEID:
+                    header_cols = tokens
+                    saw_header = True
+                    continue
+                if len(tokens) < 2:
+                    raise ValueError(
+                        f"{path}:{line_num}: expected value for key {tokens[0]}"
+                    )
+                vars_map[tokens[0]] = tokens[1]
+                var_lines.append((tokens[0], tokens[1]))
+            else:
+                if not saw_header:
+                    raise ValueError(
+                        f"{path}:{line_num}: expected header line starting with {MAP_SAMPLEID}"
+                    )
+                rows.append(tokens)
+
+    if not header_cols:
+        raise ValueError(f"{path}: missing {MAP_SAMPLEID} header line")
+
+    return MapFile(path=path, vars=vars_map, var_lines=var_lines, header_cols=header_cols, rows=rows)
+
+
+def find_col(header_cols: List[str], name: str) -> Optional[int]:
+    try:
+        return header_cols.index(name)
+    except ValueError:
+        return None
+
+
+def map_dir(path: str) -> str:
+    return os.path.dirname(os.path.abspath(path))
+
+
+def input_base(map_file: MapFile) -> str:
+    return map_file.vars.get(MAP_VAR_INPUT_DIR, map_dir(map_file.path))
+
+
+def output_base(map_file: MapFile) -> Optional[str]:
+    return map_file.vars.get(MAP_VAR_OUTPUT_DIR)
+
+
+def sam_output_base(map_file: MapFile) -> Optional[str]:
+    base = map_file.vars.get(MAP_VAR_SAM_OUTPUT_DIR)
+    if base:
+        return base
+    out_dir = output_base(map_file)
+    if out_dir:
+        return os.path.join(out_dir, MAP_VAR_DEFAULT_SAM_OUTPUT_DIR)
+    return None
+
+
+def profile_output_base(map_file: MapFile) -> Optional[str]:
+    base = map_file.vars.get(MAP_VAR_PROFILE_OUTPUT_DIR)
+    if base:
+        return base
+    out_dir = output_base(map_file)
+    if out_dir:
+        return os.path.join(out_dir, MAP_VAR_DEFAULT_PROFILE_OUTPUT_DIR)
+    return None
+
+
+def resolve_path(base: Optional[str], value: str, fallback_base: str) -> str:
+    if os.path.isabs(value):
+        return value
+    use_base = base if base else fallback_base
+    return os.path.abspath(os.path.join(use_base, value))
+
+
+def write_map(map_file: MapFile) -> None:
+    for key, value in map_file.var_lines:
+        sys.stdout.write(f"{key}\t{value}\n")
+    sys.stdout.write("\t".join(map_file.header_cols) + "\n")
+    for row in map_file.rows:
+        sys.stdout.write("\t".join(row) + "\n")
+
+
+def validate_map(path: str) -> int:
+    map_file = parse_map(path)
+    first_idx = find_col(map_file.header_cols, MAP_FIRST_READ)
+    second_idx = find_col(map_file.header_cols, MAP_SECOND_READ)
+    if first_idx is None or second_idx is None:
+        raise ValueError(
+            f"{path}: missing required columns {MAP_FIRST_READ} and {MAP_SECOND_READ}"
+        )
+
+    base_dir = input_base(map_file)
+    missing: List[str] = []
+    for row_idx, row in enumerate(map_file.rows, start=1):
+        if first_idx >= len(row) or second_idx >= len(row):
+            missing.append(f"row {row_idx}: missing FIRST/SECOND value")
+            continue
+        for col_idx in (first_idx, second_idx):
+            value = row[col_idx]
+            resolved = resolve_path(base_dir, value, map_dir(map_file.path))
+            if not os.path.exists(resolved):
+                missing.append(f"row {row_idx}: {resolved}")
+
+    if missing:
+        sys.stderr.write("Missing read files:\n")
+        for item in missing:
+            sys.stderr.write(f"- {item}\n")
+        return 1
+    return 0
+
+
+def flatten_map(path: str, output_dir_override: Optional[str]) -> None:
+    map_file = parse_map(path)
+    first_idx = find_col(map_file.header_cols, MAP_FIRST_READ)
+    second_idx = find_col(map_file.header_cols, MAP_SECOND_READ)
+    if first_idx is None or second_idx is None:
+        raise ValueError(
+            f"{path}: missing required columns {MAP_FIRST_READ} and {MAP_SECOND_READ}"
+        )
+
+    base_dir = input_base(map_file)
+    for row in map_file.rows:
+        if first_idx < len(row):
+            row[first_idx] = resolve_path(base_dir, row[first_idx], map_dir(map_file.path))
+        if second_idx < len(row):
+            row[second_idx] = resolve_path(base_dir, row[second_idx], map_dir(map_file.path))
+
+    map_file.var_lines = [
+        (k, v) for (k, v) in map_file.var_lines if k != MAP_VAR_INPUT_DIR
+    ]
+    map_file.vars.pop(MAP_VAR_INPUT_DIR, None)
+    if output_dir_override:
+        map_file.vars[MAP_VAR_OUTPUT_DIR] = output_dir_override
+        map_file.var_lines = [
+            (k, v) for (k, v) in map_file.var_lines if k != MAP_VAR_OUTPUT_DIR
+        ]
+        map_file.var_lines.append((MAP_VAR_OUTPUT_DIR, output_dir_override))
+    write_map(map_file)
+
+
+def common_path(paths: List[str]) -> Optional[str]:
+    if not paths:
+        return None
+    return os.path.commonpath(paths)
+
+
+def strip_prefix(path: str, prefix: str) -> str:
+    prefix = os.path.abspath(prefix)
+    path = os.path.abspath(path)
+    if path == prefix:
+        return "."
+    if path.startswith(prefix + os.sep):
+        return path[len(prefix) + 1 :]
+    return path
+
+
+def normalize_prefix(value: str, output_dir: Optional[str]) -> str:
+    if not output_dir or not os.path.isabs(value):
+        if value.startswith(MAP_VAR_DEFAULT_MISC_OUTPUT_DIR + os.sep):
+            return value[len(MAP_VAR_DEFAULT_MISC_OUTPUT_DIR) + 1 :]
+        if value.startswith(MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR + os.sep):
+            return value[len(MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR) + 1 :]
+        return value
+    if value.startswith(os.path.abspath(output_dir) + os.sep):
+        return strip_prefix(value, output_dir)
+    for subdir in (MAP_VAR_DEFAULT_MISC_OUTPUT_DIR, MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR):
+        marker = os.sep + subdir + os.sep
+        if marker in value:
+            return value.split(marker, 1)[1]
+    return os.path.basename(value)
+
+
+def merge_maps(paths: List[str], output_dir_override: Optional[str]) -> None:
+    maps = [parse_map(p) for p in paths]
+    header = maps[0].header_cols
+    for mp in maps[1:]:
+        if mp.header_cols != header:
+            raise ValueError("All map files must use the same header columns")
+
+    first_idx = find_col(header, MAP_FIRST_READ)
+    second_idx = find_col(header, MAP_SECOND_READ)
+    prefix_idx = find_col(header, MAP_PREFIX)
+    sam_idx = find_col(header, MAP_SAM)
+    profile_idx = find_col(header, MAP_PROFILE)
+
+    if first_idx is None or second_idx is None or prefix_idx is None:
+        raise ValueError(
+            f"Missing required columns {MAP_FIRST_READ}, {MAP_SECOND_READ}, {MAP_PREFIX}"
+        )
+
+    read_paths: List[str] = []
+    prefix_paths: List[str] = []
+    sam_paths: List[str] = []
+    profile_paths: List[str] = []
+
+    merged_rows: List[List[str]] = []
+
+    for mp in maps:
+        base_dir = input_base(mp)
+        out_dir = output_base(mp)
+        sam_base = sam_output_base(mp)
+        profile_base = profile_output_base(mp)
+        fallback_base = map_dir(mp.path)
+
+        for row in mp.rows:
+            row = list(row)
+            first_abs = resolve_path(base_dir, row[first_idx], fallback_base)
+            second_abs = resolve_path(base_dir, row[second_idx], fallback_base)
+            read_paths.extend([first_abs, second_abs])
+
+            prefix_abs = resolve_path(out_dir, row[prefix_idx], fallback_base)
+            prefix_paths.append(prefix_abs)
+
+            if sam_idx is not None and sam_idx < len(row):
+                sam_abs = resolve_path(sam_base, row[sam_idx], fallback_base)
+                sam_paths.append(sam_abs)
+            if profile_idx is not None and profile_idx < len(row):
+                profile_abs = resolve_path(profile_base, row[profile_idx], fallback_base)
+                profile_paths.append(profile_abs)
+
+            row[first_idx] = first_abs
+            row[second_idx] = second_abs
+            row[prefix_idx] = prefix_abs
+            if sam_idx is not None and sam_idx < len(row):
+                row[sam_idx] = sam_paths[-1] if sam_paths else row[sam_idx]
+            if profile_idx is not None and profile_idx < len(row):
+                row[profile_idx] = profile_paths[-1] if profile_paths else row[profile_idx]
+
+            merged_rows.append(row)
+
+    input_dir = common_path(read_paths)
+    output_dir = output_dir_override or common_path(prefix_paths + sam_paths + profile_paths)
+    if output_dir:
+        for subdir in (
+            MAP_VAR_DEFAULT_SAM_OUTPUT_DIR,
+            MAP_VAR_DEFAULT_PROFILE_OUTPUT_DIR,
+            MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR,
+            MAP_VAR_DEFAULT_MISC_OUTPUT_DIR,
+        ):
+            if os.path.basename(output_dir) == subdir:
+                output_dir = os.path.dirname(output_dir)
+                break
+    if input_dir:
+        for row in merged_rows:
+            row[first_idx] = strip_prefix(row[first_idx], input_dir)
+            row[second_idx] = strip_prefix(row[second_idx], input_dir)
+    if output_dir:
+        for row in merged_rows:
+            row[prefix_idx] = normalize_prefix(row[prefix_idx], output_dir)
+
+    var_lines: List[Tuple[str, str]] = []
+    if input_dir:
+        var_lines.append((MAP_VAR_INPUT_DIR, input_dir))
+    if output_dir:
+        var_lines.append((MAP_VAR_OUTPUT_DIR, output_dir))
+        var_lines.append((MAP_VAR_SAM_OUTPUT_DIR, MAP_VAR_DEFAULT_SAM_OUTPUT_DIR))
+        var_lines.append((MAP_VAR_PROFILE_OUTPUT_DIR, MAP_VAR_DEFAULT_PROFILE_OUTPUT_DIR))
+        var_lines.append((MAP_VAR_STRAIN_OUTPUT_DIR, MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR))
+        var_lines.append((MAP_VAR_MISC_OUTPUT_DIR, MAP_VAR_DEFAULT_MISC_OUTPUT_DIR))
+
+    if output_dir:
+        if sam_idx is not None:
+            for row in merged_rows:
+                if sam_idx < len(row):
+                    row[sam_idx] = os.path.basename(row[sam_idx])
+        if profile_idx is not None:
+            for row in merged_rows:
+                if profile_idx < len(row):
+                    row[profile_idx] = os.path.basename(row[profile_idx])
+
+    merged = MapFile(
+        path="",
+        vars={k: v for k, v in var_lines},
+        var_lines=var_lines,
+        header_cols=header,
+        rows=merged_rows,
+    )
+    write_map(merged)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="protal_map_utils")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    validate = sub.add_parser("validate")
+    validate.add_argument("--map", required=True)
+
+    flatten = sub.add_parser("flatten")
+    flatten.add_argument("--map", required=True)
+    flatten.add_argument("--out")
+
+    merge = sub.add_parser("merge")
+    merge.add_argument("--map", required=True, action="append", nargs="+")
+    merge.add_argument("--out")
+
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    try:
+        if args.command == "validate":
+            return validate_map(args.map)
+        if args.command == "flatten":
+            flatten_map(args.map, args.out)
+            return 0
+        if args.command == "merge":
+            maps = [item for group in args.map for item in group]
+            if len(maps) < 2:
+                raise ValueError("merge requires at least two --map arguments")
+            merge_maps(maps, args.out)
+            return 0
+    except Exception as exc:
+        sys.stderr.write(f"Error: {exc}\n")
+        return 2
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
