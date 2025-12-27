@@ -49,6 +49,9 @@ def IsPair(read1: str, read2: str):
     return False
 
 def GetRelevantIndices(path_list):
+    if not path_list:
+        raise ValueError("No read files found in input directory")
+
     path_list_split = [path.split('/') for path in path_list]
     
     min_len = min([len(path) for path in path_list_split])
@@ -93,8 +96,8 @@ def GenerateSampleName(read1: str, read2: str, indices):
     r1_base = OmitExtension(os.path.basename(read1))
     r2_base = OmitExtension(os.path.basename(read2))
     
-    sample_name = '_'.join([r1[i] for i in indices if i < len(r1)])
-    sample_name += '_' + RemovePair(r1_base, r2_base)
+    prefix = '_'.join([r1[i] for i in indices if i < len(r1)])
+    sample_name = prefix + ('_' if prefix else '') + RemovePair(r1_base, r2_base)
     
     return sample_name
     
@@ -105,9 +108,10 @@ def GenerateSamplesFromReads(read_files):
     
     samples = []
     
-    for i in range(0, len(read_files) - 1):
+    i = 0
+    while i < len(read_files) - 1:
         first_path = read_files[i]
-        potential_second_path = read_files[i+1]
+        potential_second_path = read_files[i + 1]
         
         first = OmitExtension(os.path.basename(first_path))
         potential_second = OmitExtension(os.path.basename(potential_second_path))
@@ -123,9 +127,9 @@ def GenerateSamplesFromReads(read_files):
                 "PROFILE": "{}.profile".format(sample_name),
                 "PREFIX": sample_name,
             })
-            i += 1
-        # else:
-        #     #print(first)
+            i += 2
+            continue
+        i += 1
         
     return samples
 
@@ -182,6 +186,7 @@ class ProtalMap:
 
     def GenerateHeader(self):
         header = ""
+        header += "{}\t{}\n".format(self.INPUT_DIR, self.input_dir)
         header += "{}\t{}\n".format(self.MISC_OUTPUT_DIR, self.misc_output_dir)
         header += "{}\t{}\n".format(self.STRAIN_OUTPUT_DIR, self.strain_output_dir)
         header += "{}\t{}\n".format(self.PROFILE_OUTPUT_DIR, self.profile_output_dir)
@@ -219,7 +224,8 @@ read_base = args.input
 output_base = args.output
 
 all_files = get_all_files_recursive(read_base)
-all_files_fastq = [f for f in all_files if f.endswith(".fq")]
+fastq_exts = (".fq", ".fastq", ".fq.gz", ".fastq.gz")
+all_files_fastq = [f for f in all_files if f.endswith(fastq_exts)]
 all_files_fastq = [os.path.normpath(path).replace(os.path.normpath(read_base) + '/', "") for path in all_files_fastq if os.path.normpath(path).startswith(read_base)]
 
 map = ProtalMap(read_base)
