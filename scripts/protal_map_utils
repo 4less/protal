@@ -227,17 +227,18 @@ def normalize_prefix(value: str, output_dir: Optional[str]) -> str:
 def merge_maps(paths: List[str], output_dir_override: Optional[str]) -> None:
     maps = [parse_map(p) for p in paths]
     header = maps[0].header_cols
+    header_set = set(header)
     for mp in maps[1:]:
-        if mp.header_cols != header:
-            raise ValueError("All map files must use the same header columns")
+        if set(mp.header_cols) != header_set:
+            raise ValueError("All map files must use the same header columns (order may differ)")
 
-    first_idx = find_col(header, MAP_FIRST_READ)
-    second_idx = find_col(header, MAP_SECOND_READ)
-    prefix_idx = find_col(header, MAP_PREFIX)
-    sam_idx = find_col(header, MAP_SAM)
-    profile_idx = find_col(header, MAP_PROFILE)
+    out_first_idx = find_col(header, MAP_FIRST_READ)
+    out_second_idx = find_col(header, MAP_SECOND_READ)
+    out_prefix_idx = find_col(header, MAP_PREFIX)
+    out_sam_idx = find_col(header, MAP_SAM)
+    out_profile_idx = find_col(header, MAP_PROFILE)
 
-    if first_idx is None or second_idx is None or prefix_idx is None:
+    if out_first_idx is None or out_second_idx is None or out_prefix_idx is None:
         raise ValueError(
             f"Missing required columns {MAP_FIRST_READ}, {MAP_SECOND_READ}, {MAP_PREFIX}"
         )
@@ -256,31 +257,37 @@ def merge_maps(paths: List[str], output_dir_override: Optional[str]) -> None:
         profile_base = profile_output_base(mp)
         fallback_base = map_dir(mp.path)
 
+        col_index = {name: idx for idx, name in enumerate(mp.header_cols)}
         for row in mp.rows:
-            row = list(row)
-            first_abs = resolve_path(base_dir, row[first_idx], fallback_base)
-            second_abs = resolve_path(base_dir, row[second_idx], fallback_base)
+            out_row = [""] * len(header)
+            for out_idx, col_name in enumerate(header):
+                src_idx = col_index.get(col_name)
+                if src_idx is not None and src_idx < len(row):
+                    out_row[out_idx] = row[src_idx]
+
+            first_abs = resolve_path(base_dir, out_row[out_first_idx], fallback_base)
+            second_abs = resolve_path(base_dir, out_row[out_second_idx], fallback_base)
             read_paths.extend([first_abs, second_abs])
 
-            prefix_abs = resolve_path(out_dir, row[prefix_idx], fallback_base)
+            prefix_abs = resolve_path(out_dir, out_row[out_prefix_idx], fallback_base)
             prefix_paths.append(prefix_abs)
 
-            if sam_idx is not None and sam_idx < len(row):
-                sam_abs = resolve_path(sam_base, row[sam_idx], fallback_base)
+            if out_sam_idx is not None and out_sam_idx < len(out_row):
+                sam_abs = resolve_path(sam_base, out_row[out_sam_idx], fallback_base)
                 sam_paths.append(sam_abs)
-            if profile_idx is not None and profile_idx < len(row):
-                profile_abs = resolve_path(profile_base, row[profile_idx], fallback_base)
+            if out_profile_idx is not None and out_profile_idx < len(out_row):
+                profile_abs = resolve_path(profile_base, out_row[out_profile_idx], fallback_base)
                 profile_paths.append(profile_abs)
 
-            row[first_idx] = first_abs
-            row[second_idx] = second_abs
-            row[prefix_idx] = prefix_abs
-            if sam_idx is not None and sam_idx < len(row):
-                row[sam_idx] = sam_paths[-1] if sam_paths else row[sam_idx]
-            if profile_idx is not None and profile_idx < len(row):
-                row[profile_idx] = profile_paths[-1] if profile_paths else row[profile_idx]
+            out_row[out_first_idx] = first_abs
+            out_row[out_second_idx] = second_abs
+            out_row[out_prefix_idx] = prefix_abs
+            if out_sam_idx is not None and out_sam_idx < len(out_row):
+                out_row[out_sam_idx] = sam_paths[-1] if sam_paths else out_row[out_sam_idx]
+            if out_profile_idx is not None and out_profile_idx < len(out_row):
+                out_row[out_profile_idx] = profile_paths[-1] if profile_paths else out_row[out_profile_idx]
 
-            merged_rows.append(row)
+            merged_rows.append(out_row)
 
     input_dir = common_path(read_paths)
     output_dir = output_dir_override or common_path(prefix_paths + sam_paths + profile_paths)
@@ -296,11 +303,11 @@ def merge_maps(paths: List[str], output_dir_override: Optional[str]) -> None:
                 break
     if input_dir:
         for row in merged_rows:
-            row[first_idx] = strip_prefix(row[first_idx], input_dir)
-            row[second_idx] = strip_prefix(row[second_idx], input_dir)
+            row[out_first_idx] = strip_prefix(row[out_first_idx], input_dir)
+            row[out_second_idx] = strip_prefix(row[out_second_idx], input_dir)
     if output_dir:
         for row in merged_rows:
-            row[prefix_idx] = normalize_prefix(row[prefix_idx], output_dir)
+            row[out_prefix_idx] = normalize_prefix(row[out_prefix_idx], output_dir)
 
     var_lines: List[Tuple[str, str]] = []
     if input_dir:
@@ -313,14 +320,14 @@ def merge_maps(paths: List[str], output_dir_override: Optional[str]) -> None:
         var_lines.append((MAP_VAR_MISC_OUTPUT_DIR, MAP_VAR_DEFAULT_MISC_OUTPUT_DIR))
 
     if output_dir:
-        if sam_idx is not None:
+        if out_sam_idx is not None:
             for row in merged_rows:
-                if sam_idx < len(row):
-                    row[sam_idx] = os.path.basename(row[sam_idx])
-        if profile_idx is not None:
+                if out_sam_idx < len(row):
+                    row[out_sam_idx] = os.path.basename(row[out_sam_idx])
+        if out_profile_idx is not None:
             for row in merged_rows:
-                if profile_idx < len(row):
-                    row[profile_idx] = os.path.basename(row[profile_idx])
+                if out_profile_idx < len(row):
+                    row[out_profile_idx] = os.path.basename(row[out_profile_idx])
 
     merged = MapFile(
         path="",
