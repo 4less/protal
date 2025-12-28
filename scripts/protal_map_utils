@@ -28,6 +28,7 @@ MAP_VAR_DEFAULT_SAM_OUTPUT_DIR = "alignments"
 MAP_VAR_DEFAULT_PROFILE_OUTPUT_DIR = "profiles"
 MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR = "strains"
 MAP_VAR_DEFAULT_MISC_OUTPUT_DIR = "misc"
+READ_EXTENSIONS = (".fq", ".fastq", ".fq.gz", ".fastq.gz")
 
 
 @dataclass
@@ -198,6 +199,187 @@ def common_path(paths: List[str]) -> Optional[str]:
     return os.path.commonpath(paths)
 
 
+def iter_read_files(input_dirs: List[str]) -> List[str]:
+    reads: List[str] = []
+    for input_dir in input_dirs:
+        for root, _, files in os.walk(input_dir):
+            for name in files:
+                if name.endswith(READ_EXTENSIONS):
+                    reads.append(os.path.join(root, name))
+    return reads
+
+
+def omit_extension(name: str) -> str:
+    for ext in READ_EXTENSIONS:
+        if name.endswith(ext):
+            return name[: -len(ext)]
+    return name
+
+
+def hamming_distance(a: str, b: str) -> int:
+    if len(a) != len(b):
+        return max(len(a), len(b))
+    return sum(1 for c1, c2 in zip(a, b) if c1 != c2)
+
+
+def is_pair(read1: str, read2: str) -> bool:
+    r1 = os.path.split(read1)
+    r2 = os.path.split(read2)
+    if " ".join(r1[:-1]) != " ".join(r2[:-1]):
+        return False
+    if hamming_distance(read1, read2) != 1 or len(read1) != len(read2):
+        return False
+    for i in range(1, len(read1)):
+        c1 = read1[i]
+        c2 = read2[i]
+        if (
+            c1 != c2
+            and not read1[i - 1].isdigit()
+            and not read2[i - 1].isdigit()
+            and (i == (len(read1) - 1) or (not read1[i + 1].isdigit() and not read2[i + 1].isdigit()))
+        ):
+            if (c1 == "1" and c2 == "2") or (c1 == "2" and c2 == "1"):
+                return True
+    return False
+
+
+def first_diff_index(str1: str, str2: str) -> int:
+    if len(str1) != len(str2):
+        return -1
+    for i, (c1, c2) in enumerate(zip(str1, str2)):
+        if c1 != c2:
+            return i
+    return -1
+
+
+def remove_pair(read1: str, read2: str) -> str:
+    diff_idx = first_diff_index(read1, read2)
+    sample = read1
+    remove_set = {"_", "/", "."}
+    if diff_idx == len(read1) - 1:
+        i = diff_idx - 1
+        while i > 0 and read1[i] in remove_set:
+            i -= 1
+        sample = read1[: i + 1]
+    return sample
+
+
+def get_relevant_indices(path_list: List[str]) -> List[int]:
+    if not path_list:
+        raise ValueError("No read files found in input directory")
+    path_list_split = [path.split("/") for path in path_list]
+    min_len = min(len(path) for path in path_list_split)
+    max_len = max(len(path) for path in path_list_split)
+    relevant_indices = [*range(min_len, max_len)]
+    for i in range(0, min_len):
+        if not all(path[i] == path_list_split[0][i] for path in path_list_split):
+            relevant_indices.append(i)
+    return relevant_indices
+
+
+def generate_sample_name(read1: str, read2: str, indices: List[int]) -> str:
+    r1 = read1.split("/")[:-1]
+    r2 = read2.split("/")[:-1]
+    r1_base = omit_extension(os.path.basename(read1))
+    r2_base = omit_extension(os.path.basename(read2))
+    prefix = "_".join([r1[i] for i in indices if i < len(r1)])
+    sample_name = prefix + ("_" if prefix else "") + remove_pair(r1_base, r2_base)
+    return sample_name
+
+
+def generate_samples_from_reads(read_files: List[str], gzip_sam: bool) -> List[Dict[str, str]]:
+    read_files = sorted(read_files)
+    indices = get_relevant_indices(read_files)
+    samples: List[Dict[str, str]] = []
+    i = 0
+    while i < len(read_files) - 1:
+        first_path = read_files[i]
+        potential_second_path = read_files[i + 1]
+        first = omit_extension(os.path.basename(first_path))
+        potential_second = omit_extension(os.path.basename(potential_second_path))
+        if is_pair(first, potential_second):
+            sample_name = generate_sample_name(first_path, potential_second_path, indices)
+            sam_name = f"{sample_name}.sam.gz" if gzip_sam else f"{sample_name}.sam"
+            samples.append(
+                {
+                    MAP_SAMPLEID: sample_name,
+                    MAP_FIRST_READ: first_path,
+                    MAP_SECOND_READ: potential_second_path,
+                    MAP_SAM: sam_name,
+                    MAP_PROFILE: f"{sample_name}.profile",
+                    MAP_PREFIX: sample_name,
+                }
+            )
+            i += 2
+            continue
+        i += 1
+    return samples
+
+
+def generate_map(input_dirs: List[str], output_dir: str, gzip_sam: bool) -> None:
+    input_dirs_abs = [os.path.abspath(d) for d in input_dirs]
+    input_dir = common_path(input_dirs_abs)
+    if not input_dir:
+        raise ValueError("No input directories provided")
+
+    all_reads = iter_read_files(input_dirs_abs)
+    if not all_reads:
+        raise ValueError("No read files found in input directories")
+
+    reads_rel = [
+        strip_prefix(os.path.normpath(path), input_dir)
+        for path in all_reads
+        if os.path.normpath(path).startswith(input_dir)
+    ]
+    samples = generate_samples_from_reads(reads_rel, gzip_sam)
+
+    seen_sample_ids: Dict[str, str] = {}
+    seen_files: Dict[str, str] = {}
+    for idx, sample in enumerate(samples, start=1):
+        sample_id = sample[MAP_SAMPLEID]
+        if sample_id in seen_sample_ids:
+            raise ValueError(
+                f"Duplicate sample id '{sample_id}' in generate (rows {seen_sample_ids[sample_id]} and {idx})"
+            )
+        seen_sample_ids[sample_id] = str(idx)
+        for col in (MAP_FIRST_READ, MAP_SECOND_READ, MAP_SAM, MAP_PROFILE, MAP_PREFIX):
+            value = sample.get(col, "")
+            if not value:
+                continue
+            if value in seen_files:
+                raise ValueError(
+                    f"Duplicate {col} entry '{value}' in generate (rows {seen_files[value]} and {idx})"
+                )
+            seen_files[value] = str(idx)
+
+    header_cols = [
+        MAP_SAMPLEID,
+        MAP_FIRST_READ,
+        MAP_SECOND_READ,
+        MAP_SAM,
+        MAP_PROFILE,
+        MAP_PREFIX,
+    ]
+    rows = [[sample.get(col, "") for col in header_cols] for sample in samples]
+
+    var_lines = [
+        (MAP_VAR_INPUT_DIR, input_dir),
+        (MAP_VAR_OUTPUT_DIR, os.path.abspath(output_dir)),
+        (MAP_VAR_SAM_OUTPUT_DIR, MAP_VAR_DEFAULT_SAM_OUTPUT_DIR),
+        (MAP_VAR_PROFILE_OUTPUT_DIR, MAP_VAR_DEFAULT_PROFILE_OUTPUT_DIR),
+        (MAP_VAR_STRAIN_OUTPUT_DIR, MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR),
+        (MAP_VAR_MISC_OUTPUT_DIR, MAP_VAR_DEFAULT_MISC_OUTPUT_DIR),
+    ]
+    merged = MapFile(
+        path="",
+        vars={k: v for k, v in var_lines},
+        var_lines=var_lines,
+        header_cols=header_cols,
+        rows=rows,
+    )
+    write_map(merged)
+
+
 def strip_prefix(path: str, prefix: str) -> str:
     prefix = os.path.abspath(prefix)
     path = os.path.abspath(path)
@@ -228,6 +410,7 @@ def merge_maps(
     paths: List[str],
     output_dir_override: Optional[str],
     use_sampleid: bool,
+    gzip_sam: bool,
 ) -> None:
     maps = [parse_map(p) for p in paths]
     header = maps[0].header_cols
@@ -254,6 +437,9 @@ def merge_maps(
     prefix_paths: List[str] = []
     sam_paths: List[str] = []
     profile_paths: List[str] = []
+
+    seen_sample_ids: Dict[str, str] = {}
+    seen_files: Dict[str, str] = {}
 
     merged_rows: List[List[str]] = []
 
@@ -341,10 +527,35 @@ def merge_maps(
             sample_id = row[out_sampleid_idx]
             row[out_prefix_idx] = sample_id
             if out_sam_idx is not None and out_sam_idx < len(row):
-                row[out_sam_idx] = f"{sample_id}.sam.gz"
+                row[out_sam_idx] = f"{sample_id}.sam.gz" if gzip_sam else f"{sample_id}.sam"
             if out_profile_idx is not None and out_profile_idx < len(row):
                 row[out_profile_idx] = f"{sample_id}.profile"
 
+    for idx, row in enumerate(merged_rows, start=1):
+        sample_id = row[out_sampleid_idx] if out_sampleid_idx is not None else ""
+        if sample_id:
+            if sample_id in seen_sample_ids:
+                raise ValueError(
+                    f"Duplicate sample id '{sample_id}' in merge (rows {seen_sample_ids[sample_id]} and {idx})"
+                )
+            seen_sample_ids[sample_id] = str(idx)
+        for col_name, col_idx in (
+            (MAP_FIRST_READ, out_first_idx),
+            (MAP_SECOND_READ, out_second_idx),
+            (MAP_SAM, out_sam_idx),
+            (MAP_PROFILE, out_profile_idx),
+            (MAP_PREFIX, out_prefix_idx),
+        ):
+            if col_idx is None or col_idx >= len(row):
+                continue
+            value = row[col_idx]
+            if not value:
+                continue
+            if value in seen_files:
+                raise ValueError(
+                    f"Duplicate {col_name} entry '{value}' in merge (rows {seen_files[value]} and {idx})"
+                )
+            seen_files[value] = str(idx)
     merged = MapFile(
         path="",
         vars={k: v for k, v in var_lines},
@@ -366,10 +577,16 @@ def build_parser() -> argparse.ArgumentParser:
     flatten.add_argument("--map", required=True)
     flatten.add_argument("--out")
 
+    generate = sub.add_parser("generate")
+    generate.add_argument("--input", required=True, nargs="+")
+    generate.add_argument("--out", required=True)
+    generate.add_argument("--nogzip", action="store_true")
+
     merge = sub.add_parser("merge")
     merge.add_argument("--map", required=True, action="append", nargs="+")
     merge.add_argument("--out")
     merge.add_argument("--use-sampleid", action="store_true")
+    merge.add_argument("--nogzip", action="store_true")
 
     return parser
 
@@ -384,11 +601,14 @@ def main() -> int:
         if args.command == "flatten":
             flatten_map(args.map, args.out)
             return 0
+        if args.command == "generate":
+            generate_map(args.input, args.out, not args.nogzip)
+            return 0
         if args.command == "merge":
             maps = [item for group in args.map for item in group]
             if len(maps) < 2:
                 raise ValueError("merge requires at least two --map arguments")
-            merge_maps(maps, args.out, args.use_sampleid)
+            merge_maps(maps, args.out, args.use_sampleid, not args.nogzip)
             return 0
     except Exception as exc:
         sys.stderr.write(f"Error: {exc}\n")
