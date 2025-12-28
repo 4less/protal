@@ -224,7 +224,11 @@ def normalize_prefix(value: str, output_dir: Optional[str]) -> str:
     return os.path.basename(value)
 
 
-def merge_maps(paths: List[str], output_dir_override: Optional[str]) -> None:
+def merge_maps(
+    paths: List[str],
+    output_dir_override: Optional[str],
+    use_sampleid: bool,
+) -> None:
     maps = [parse_map(p) for p in paths]
     header = maps[0].header_cols
     header_set = set(header)
@@ -237,11 +241,14 @@ def merge_maps(paths: List[str], output_dir_override: Optional[str]) -> None:
     out_prefix_idx = find_col(header, MAP_PREFIX)
     out_sam_idx = find_col(header, MAP_SAM)
     out_profile_idx = find_col(header, MAP_PROFILE)
+    out_sampleid_idx = find_col(header, MAP_SAMPLEID)
 
     if out_first_idx is None or out_second_idx is None or out_prefix_idx is None:
         raise ValueError(
             f"Missing required columns {MAP_FIRST_READ}, {MAP_SECOND_READ}, {MAP_PREFIX}"
         )
+    if use_sampleid and out_sampleid_idx is None:
+        raise ValueError(f"Missing required column {MAP_SAMPLEID} for --use-sampleid")
 
     read_paths: List[str] = []
     prefix_paths: List[str] = []
@@ -329,6 +336,15 @@ def merge_maps(paths: List[str], output_dir_override: Optional[str]) -> None:
                 if out_profile_idx < len(row):
                     row[out_profile_idx] = os.path.basename(row[out_profile_idx])
 
+    if use_sampleid:
+        for row in merged_rows:
+            sample_id = row[out_sampleid_idx]
+            row[out_prefix_idx] = sample_id
+            if out_sam_idx is not None and out_sam_idx < len(row):
+                row[out_sam_idx] = f"{sample_id}.sam.gz"
+            if out_profile_idx is not None and out_profile_idx < len(row):
+                row[out_profile_idx] = f"{sample_id}.profile"
+
     merged = MapFile(
         path="",
         vars={k: v for k, v in var_lines},
@@ -353,6 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
     merge = sub.add_parser("merge")
     merge.add_argument("--map", required=True, action="append", nargs="+")
     merge.add_argument("--out")
+    merge.add_argument("--use-sampleid", action="store_true")
 
     return parser
 
@@ -371,7 +388,7 @@ def main() -> int:
             maps = [item for group in args.map for item in group]
             if len(maps) < 2:
                 raise ValueError("merge requires at least two --map arguments")
-            merge_maps(maps, args.out)
+            merge_maps(maps, args.out, args.use_sampleid)
             return 0
     except Exception as exc:
         sys.stderr.write(f"Error: {exc}\n")
