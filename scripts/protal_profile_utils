@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import glob
+import os
+import sys
+from dataclasses import dataclass
+from typing import Dict, Iterable, List, Tuple
+
+
+@dataclass
+class Profile:
+    path: str
+    sample: str
+    abundances: Dict[str, str]
+
+
+def expand_inputs(inputs: Iterable[str]) -> List[str]:
+    paths: List[str] = []
+    for item in inputs:
+        expanded = glob.glob(item)
+        if expanded:
+            paths.extend(expanded)
+        else:
+            paths.append(item)
+    return sorted(set(paths))
+
+
+def sample_name(path: str) -> str:
+    base = os.path.basename(path)
+    for ext in (".profile", ".tsv", ".txt", ".profile.gz"):
+        if base.endswith(ext):
+            return base[: -len(ext)]
+    return os.path.splitext(base)[0]
+
+
+def read_profile(path: str) -> Profile:
+    abundances: Dict[str, str] = {}
+    with open(path, "r", encoding="utf-8") as handle:
+        for line_num, raw in enumerate(handle, start=1):
+            line = raw.rstrip("\n")
+            if not line:
+                continue
+            parts = line.split("\t")
+            if len(parts) < 3:
+                raise ValueError(f"{path}:{line_num}: expected 3 tab-delimited columns")
+            taxonomy = parts[1].strip()
+            abundance = parts[2].strip()
+            if not taxonomy:
+                raise ValueError(f"{path}:{line_num}: empty taxonomy lineage")
+            abundances[taxonomy] = abundance
+    return Profile(path=path, sample=sample_name(path), abundances=abundances)
+
+
+def merge_profiles(inputs: Iterable[str]) -> None:
+    paths = expand_inputs(inputs)
+    if not paths:
+        raise ValueError("No input profiles provided")
+
+    profiles = [read_profile(path) for path in paths]
+    taxa: List[str] = sorted({taxon for profile in profiles for taxon in profile.abundances})
+
+    header = ["taxon"] + [profile.sample for profile in profiles]
+    sys.stdout.write("\t".join(header) + "\n")
+
+    for taxon in taxa:
+        row = [taxon]
+        for profile in profiles:
+            row.append(profile.abundances.get(taxon, "0"))
+        sys.stdout.write("\t".join(row) + "\n")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="protal_profile_utils")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    merge = sub.add_parser("merge")
+    merge.add_argument("--input", required=True, nargs="+")
+
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    try:
+        if args.command == "merge":
+            merge_profiles(args.input)
+            return 0
+    except Exception as exc:
+        sys.stderr.write(f"Error: {exc}\n")
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
