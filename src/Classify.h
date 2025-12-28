@@ -548,7 +548,10 @@ namespace protal::classify {
                       << std::endl;
         }
 
-        auto runtime_output = options.GetPrefix(options.GetCurrentIndex()) + "_runtime.tsv";
+
+        auto runtime_output = std::filesystem::path(options.GetMiscOutputDir())
+                      / (options.GetSampleId(options.GetCurrentIndex()) + "_runtime.tsv");
+
         std::ofstream time_os(runtime_output, std::ios::out);
         time_os << anchor_finder_global.m_bm_seeding.GetName() << '\t' << anchor_finder_global.m_bm_seeding.GetDuration(Time::seconds) << '\n';
         time_os << anchor_finder_global.m_bm_processing.GetName() << '\t' << anchor_finder_global.m_bm_processing.GetDuration(Time::seconds) << '\n';

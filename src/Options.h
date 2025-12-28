@@ -675,11 +675,12 @@ Header lines are indicated with a # and you can define individual output-base fo
 and profile output. You could leave them empty and always specify the full path in the sample rows (not starting with a hashtag),
 but this can get complicated quite quickly. We disabled .gz output in sams as it is faster to use linux command pigz instead
 of writing out compressed internally.
-
-#STRAIN_OUTPUT_DIR	/path-to-your-results-dir/strains					
-#OUTPUT_DIR	/path-to-your-results-dir/misc					
+				
+#OUTPUT_DIR	/path-to-your-results-dir/					
 #SAM_OUTPUT_DIR	/path-to-your-results-dir/alignments					
 #PROFILE_OUTPUT_DIR	/path-to-your-results-dir/profiles
+#STRAIN_OUTPUT_DIR	/path-to-your-results-dir/strains	
+#MISC_OUTPUT_DIR	/path-to-your-results-dir/strains	
 #INPUT_DIR	/path-to-input-dir/					
 #SAMPLEID	FIRST	SECOND	SAM	PREFIX	PROFILE
 SAMPLE1	sample1/reads_1.fq	sample1/reads_2.fq	1.sam	AIR1	1.profile

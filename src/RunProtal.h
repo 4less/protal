@@ -164,6 +164,8 @@ namespace protal {
 
                     // TODO implement logger in protal
                     auto [sam, gzipped] = options.SamFile(index);
+                    auto [sam_nogzip, _] = options.SamFile(index, true);
+
                     auto dir = std::filesystem::path(sam).parent_path();
                     
                     if (!std::filesystem::create_directories(dir.string()) && !std::filesystem::exists(dir)) {
@@ -175,7 +177,7 @@ namespace protal {
                     // std::cout << index << " Process sample " << options.GetSampleId(index) << (std::filesystem::exists(sam) ? " (sam exists)" : " (sam does not exist)") << std::endl;
 
                     // Avoid aligning files that already exist.
-                    if (!options.Force() && std::filesystem::exists(sam)) {
+                    if (!options.Force() && (std::filesystem::exists(sam) || std::filesystem::exists(sam_nogzip))) {
                         std::cout << "Skip " << sam << " continue" << std::endl;
                         continue;
                     }
@@ -188,7 +190,7 @@ namespace protal {
 
 
                     options.SetCurrentIndex(index);
-                    std::ofstream sam_output(sam, std::ios::out);
+                    std::ofstream sam_output(sam_nogzip, std::ios::out);
                     genomes.WriteSamHeader(sam_output);
 
                     igzstream is1 { options.GetFirstFile(index).c_str() };
@@ -235,17 +237,19 @@ namespace protal {
                     is2.close();
                     sam_output.close();
 
-                    if (options.IsSamFileGzipped(index)) {
-                        std::cerr << "[WARNING] SAM file " << sam << " is already gzipped according to internal record. Skipping compression." << std::endl;
-                        continue;
-                    } else {
+                    if (gzipped) {
                         try {
-                            Compressor::compressInPlace(sam, options.GetThreads());
+                            Compressor::compressInPlace(sam_nogzip, options.GetThreads());
                             options.SetSamFileGzip(index, true);
                         } catch (const std::exception& e) {
                         std::cerr << "[WARNING] " << e.what() << std::endl;
                         }
                     }
+                    // if (options.IsSamFileGzipped(index)) {
+                    //     std::cerr << "[WARNING] SAM file " << sam << " is already gzipped according to internal record. Skipping compression." << std::endl;
+                    //     continue;
+                    // } else {
+                    // }
 
                     // CleanUp
                     if (!reader.Success()) {
