@@ -391,7 +391,8 @@ namespace protal {
         // ProgressBar prog;
         // prog.Reset(options.GetFileCount());
 
-        omp_set_num_threads(options.GetThreads());
+        omp_set_num_threads(1);
+        // omp_set_num_threads(options.GetThreads());
 
 
 
@@ -409,7 +410,10 @@ namespace protal {
             
             if (!Utils::exists(sam)) {
                 std::cerr << "Sam file does not exist for sample " << options.GetSampleId(i) << " (" << i << ")" << std::endl;
-                profiles.emplace_back(profiler::MicrobialProfile{genomes});
+                auto profile = profiler::MicrobialProfile{genomes};
+
+                #pragma omp critical(add_profile)
+                profiles.emplace_back(profile);
                 std::cerr << sam << std::endl;
                 continue;
             }
@@ -446,6 +450,7 @@ namespace protal {
 
             if (!profiler.HasReads()) {
                 std::cerr << "Empty sam file" << std::endl;
+                #pragma omp critical(add_profile)
                 profiles.emplace_back(profiler::MicrobialProfile{genomes});
                 continue;
             }
