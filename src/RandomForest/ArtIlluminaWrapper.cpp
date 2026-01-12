@@ -146,6 +146,12 @@ void ArtIlluminaWrapper::run_command(
         throw std::invalid_argument("Command list is empty");
     }
 
+    std::cerr << "[simulate_metagenomes] ART command:";
+    for (const auto& arg : args) {
+        std::cerr << ' ' << arg;
+    }
+    std::cerr << '\n';
+
     std::vector<char*> argv;
     argv.reserve(args.size() + 1);
     for (const auto& arg : args) {
