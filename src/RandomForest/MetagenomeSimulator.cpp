@@ -58,6 +58,7 @@ static bool has_rank_prefix(const std::string& token) {
         return false;
     }
     switch (token[0]) {
+        case 'd':
         case 'k':
         case 'p':
         case 'c':

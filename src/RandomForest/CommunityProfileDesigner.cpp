@@ -31,6 +31,7 @@ static bool has_rank_prefix(const std::string& token) {
         return false;
     }
     switch (token[0]) {
+        case 'd':
         case 'k':
         case 'p':
         case 'c':
@@ -52,7 +53,7 @@ static std::string strip_rank_prefix(const std::string& token) {
 }
 
 static bool has_ordered_rank_prefixes(const std::vector<std::string>& tokens) {
-    static const std::string order = "kpcofgs";
+    static const std::string order = "dkpcofgs";
     int last_rank = -1;
     bool seen_any = false;
     for (const auto& token : tokens) {
