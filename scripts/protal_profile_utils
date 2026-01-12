@@ -108,28 +108,45 @@ def resolve_sample_names(paths: List[str]) -> List[str]:
     dir_parts = [os.path.abspath(path).split(os.sep)[:-1] for path in paths]
     depths = [0 for _ in paths]
 
-    while True:
+    def build_candidates(current_depths: List[int]) -> List[str]:
         candidates: List[str] = []
         for idx, stem in enumerate(short_stems):
-            depth = depths[idx]
+            depth = current_depths[idx]
             if depth == 0:
                 candidates.append(stem)
             else:
                 parts = dir_parts[idx][-depth:] + [stem]
                 candidates.append("_".join(parts))
-        duplicates = find_duplicates(candidates)
-        if not duplicates:
-            return candidates
-        progressed = False
-        for idxs in duplicates.values():
-            for idx in idxs:
-                if depths[idx] < len(dir_parts[idx]):
-                    depths[idx] += 1
-                    progressed = True
-        if not progressed:
-            break
+        return candidates
 
+    def disambiguate(start_depths: List[int]) -> Tuple[List[str], List[int]]:
+        current_depths = list(start_depths)
+        while True:
+            candidates = build_candidates(current_depths)
+            duplicates = find_duplicates(candidates)
+            if not duplicates:
+                return candidates, current_depths
+            progressed = False
+            for idxs in duplicates.values():
+                for idx in idxs:
+                    if current_depths[idx] < len(dir_parts[idx]):
+                        current_depths[idx] += 1
+                        progressed = True
+            if not progressed:
+                return candidates, current_depths
+
+    candidates, depths = disambiguate(depths)
     duplicates = find_duplicates(candidates)
+    if not duplicates:
+        if any(depth > 0 for depth in depths):
+            min_depths = [min(len(dir_parts[idx]), max(depths[idx], 1)) for idx in range(len(paths))]
+            candidates, depths = disambiguate(min_depths)
+            duplicates = find_duplicates(candidates)
+            if not duplicates:
+                return candidates
+        else:
+            return candidates
+
     detail = "; ".join(
         f"{name}: {', '.join(paths[idx] for idx in idxs)}" for name, idxs in duplicates.items()
     )

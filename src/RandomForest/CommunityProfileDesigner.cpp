@@ -11,52 +11,132 @@
 
 namespace protal::sim {
 
-std::string extract_species(const std::string& taxonomy) {
+static std::vector<std::string> split_taxonomy(const std::string& taxonomy) {
+    std::vector<std::string> tokens;
     std::string current;
-    std::string best = "unknown_species";
     for (char c : taxonomy) {
         if (c == ';') {
-            if (current.rfind("s__", 0) == 0 && current.size() > 3) {
-                return current.substr(3);
-            }
-            if (!current.empty()) {
-                best = current.size() > 3 ? current.substr(3) : current;
-            }
+            tokens.push_back(current);
             current.clear();
         } else {
             current.push_back(c);
         }
     }
-    if (!current.empty()) {
-        if (current.rfind("s__", 0) == 0 && current.size() > 3) {
-            return current.substr(3);
+    tokens.push_back(current);
+    return tokens;
+}
+
+static bool has_rank_prefix(const std::string& token) {
+    if (token.size() < 3 || token[1] != '_' || token[2] != '_') {
+        return false;
+    }
+    switch (token[0]) {
+        case 'k':
+        case 'p':
+        case 'c':
+        case 'o':
+        case 'f':
+        case 'g':
+        case 's':
+            return true;
+        default:
+            return false;
+    }
+}
+
+static std::string strip_rank_prefix(const std::string& token) {
+    if (has_rank_prefix(token) && token.size() > 3) {
+        return token.substr(3);
+    }
+    return token;
+}
+
+static bool has_ordered_rank_prefixes(const std::vector<std::string>& tokens) {
+    static const std::string order = "kpcofgs";
+    int last_rank = -1;
+    bool seen_any = false;
+    for (const auto& token : tokens) {
+        if (token.empty()) {
+            continue;
         }
-        best = current.size() > 3 ? current.substr(3) : current;
+        if (!has_rank_prefix(token)) {
+            return false;
+        }
+        const auto pos = order.find(token[0]);
+        if (pos == std::string::npos || static_cast<int>(pos) <= last_rank) {
+            return false;
+        }
+        seen_any = true;
+        last_rank = static_cast<int>(pos);
+    }
+    return seen_any;
+}
+
+static bool has_mixed_rank_prefixes(const std::vector<std::string>& tokens) {
+    bool seen_prefixed = false;
+    bool seen_unprefixed = false;
+    for (const auto& token : tokens) {
+        if (token.empty()) {
+            continue;
+        }
+        if (has_rank_prefix(token)) {
+            seen_prefixed = true;
+        } else {
+            seen_unprefixed = true;
+        }
+    }
+    return seen_prefixed && seen_unprefixed;
+}
+
+static bool taxonomy_has_unclassified(const std::vector<std::string>& tokens, bool ordered_prefixes) {
+    for (const auto& token : tokens) {
+        if (token.empty()) {
+            continue;
+        }
+        const std::string value = ordered_prefixes ? strip_rank_prefix(token) : token;
+        if (value == "Unclassified") {
+            return true;
+        }
+    }
+    return false;
+}
+
+static std::string extract_species_from_tokens(const std::vector<std::string>& tokens, bool ordered_prefixes) {
+    std::string best = "unknown_species";
+    for (const auto& token : tokens) {
+        if (ordered_prefixes && token.rfind("s__", 0) == 0 && token.size() > 3) {
+            return token.substr(3);
+        }
+        if (!token.empty()) {
+            best = ordered_prefixes ? strip_rank_prefix(token) : token;
+        }
     }
     return best.empty() ? "unknown_species" : best;
 }
 
-std::string extract_genus(const std::string& taxonomy) {
-    std::string current;
-    std::string best = "unknown_genus";
-    for (char c : taxonomy) {
-        if (c == ';') {
-            if (current.rfind("g__", 0) == 0 && current.size() > 3) {
-                return current.substr(3);
-            }
-            if (!current.empty()) {
-                best = current.size() > 3 ? current.substr(3) : current;
-            }
-            current.clear();
-        } else {
-            current.push_back(c);
-        }
+std::string extract_species(const std::string& taxonomy) {
+    auto tokens = split_taxonomy(taxonomy);
+    if (has_mixed_rank_prefixes(tokens)) {
+        throw std::runtime_error("GTDB taxonomy lineage is invalid (mixed prefix usage): " + taxonomy);
     }
-    if (!current.empty()) {
-        if (current.rfind("g__", 0) == 0 && current.size() > 3) {
-            return current.substr(3);
+    const bool ordered_prefixes = has_ordered_rank_prefixes(tokens);
+    return extract_species_from_tokens(tokens, ordered_prefixes);
+}
+
+std::string extract_genus(const std::string& taxonomy) {
+    auto tokens = split_taxonomy(taxonomy);
+    if (has_mixed_rank_prefixes(tokens)) {
+        throw std::runtime_error("GTDB taxonomy lineage is invalid (mixed prefix usage): " + taxonomy);
+    }
+    const bool ordered_prefixes = has_ordered_rank_prefixes(tokens);
+    std::string best = "unknown_genus";
+    for (const auto& token : tokens) {
+        if (ordered_prefixes && token.rfind("g__", 0) == 0 && token.size() > 3) {
+            return token.substr(3);
         }
-        best = current.size() > 3 ? current.substr(3) : current;
+        if (!token.empty()) {
+            best = ordered_prefixes ? strip_rank_prefix(token) : token;
+        }
     }
     return best.empty() ? "unknown_genus" : best;
 }
@@ -71,7 +151,16 @@ CommunityProfileDesigner::CommunityProfileDesigner(std::vector<GenomeRecord> gen
 std::unordered_map<std::string, std::vector<GenomeRecord>> CommunityProfileDesigner::group_by_species() const {
     std::unordered_map<std::string, std::vector<GenomeRecord>> grouped;
     for (const auto& genome : genomes_) {
-        grouped[extract_species(genome.taxonomy)].push_back(genome);
+        auto tokens = split_taxonomy(genome.taxonomy);
+        if (has_mixed_rank_prefixes(tokens)) {
+            throw std::runtime_error("GTDB taxonomy lineage is invalid (mixed prefix usage): " + genome.taxonomy);
+        }
+        const bool ordered_prefixes = has_ordered_rank_prefixes(tokens);
+        auto species = extract_species_from_tokens(tokens, ordered_prefixes);
+        if (taxonomy_has_unclassified(tokens, ordered_prefixes)) {
+            species = "unknown_species_" + genome.name;
+        }
+        grouped[species].push_back(genome);
     }
     return grouped;
 }

@@ -38,6 +38,63 @@ static std::vector<std::string> split_tab(const std::string& line) {
     return fields;
 }
 
+static std::vector<std::string> split_semicolon(const std::string& line) {
+    std::vector<std::string> fields;
+    std::size_t start = 0;
+    while (start <= line.size()) {
+        auto pos = line.find(';', start);
+        if (pos == std::string::npos) {
+            fields.emplace_back(line.substr(start));
+            break;
+        }
+        fields.emplace_back(line.substr(start, pos - start));
+        start = pos + 1;
+    }
+    return fields;
+}
+
+static bool has_rank_prefix(const std::string& token) {
+    if (token.size() < 3 || token[1] != '_' || token[2] != '_') {
+        return false;
+    }
+    switch (token[0]) {
+        case 'k':
+        case 'p':
+        case 'c':
+        case 'o':
+        case 'f':
+        case 'g':
+        case 's':
+            return true;
+        default:
+            return false;
+    }
+}
+
+static std::string strip_rank_prefix(const std::string& token) {
+    if (has_rank_prefix(token) && token.size() > 3) {
+        return token.substr(3);
+    }
+    return token;
+}
+
+static bool taxonomy_has_unclassified(const std::string& taxonomy) {
+    for (const auto& token : split_semicolon(taxonomy)) {
+        if (token.empty()) {
+            continue;
+        }
+        if (strip_rank_prefix(token) == "Unclassified") {
+            return true;
+        }
+    }
+    return false;
+}
+
+static std::string make_unclassified_lineage(const std::string& genome_name) {
+    return "k__" + genome_name + ";p__" + genome_name + ";c__" + genome_name + ";o__" + genome_name +
+           ";f__" + genome_name + ";g__" + genome_name + ";s__" + genome_name;
+}
+
 std::vector<GenomeRecord> read_genome_table(const fs::path& tsv_path) {
     std::cout << "Load genome table" << std::endl;
     std::ifstream in(tsv_path);
@@ -103,6 +160,9 @@ std::vector<GenomeRecord> read_genome_table(const fs::path& tsv_path) {
 
         std::string name = fields[name_idx];
         std::string taxonomy = fields[tax_idx];
+        if (taxonomy_has_unclassified(taxonomy)) {
+            taxonomy = make_unclassified_lineage(name);
+        }
         std::string fasta_path = fields[path_idx];
         std::optional<std::uint64_t> provided_length;
         if (len_idx >= 0 && static_cast<std::size_t>(len_idx) < fields.size() && !fields[len_idx].empty()) {
