@@ -66,6 +66,9 @@ namespace protal::build {
                 kmer_handler.SetSequence(std::string_view(record.sequence));
 
                 auto [taxonomic_id, gene_id] = KmerUtils::ExtractHeaderInformation(record.header);
+                if (options.HasBuildGeneSubset() && !options.BuildGeneAllowed(gene_id)) {
+                    continue;
+                }
 
                 thread_statistics.reads++;
 
@@ -136,6 +139,14 @@ namespace protal::build {
                     while (reader(record)) {
                         thread_statistics.reads++;
 
+                        if (options.HasBuildGeneSubset()) {
+                            auto [taxonomic_id, gene_id] = KmerUtils::ExtractHeaderInformation(record.header);
+                            (void)taxonomic_id;
+                            if (!options.BuildGeneAllowed(gene_id)) {
+                                continue;
+                            }
+                        }
+
                         // Retrieve kmers
                         kmers.clear();
                         kmer_handler(std::string_view(record.sequence), kmers);
@@ -197,6 +208,9 @@ namespace protal::build {
             kmer_handler.SetSequence(std::string_view(record.sequence));
 
             auto [taxonomic_id, gene_id] = KmerUtils::ExtractHeaderInformation(record.header);
+            if (options.HasBuildGeneSubset() && !options.BuildGeneAllowed(gene_id)) {
+                continue;
+            }
 
             thread_statistics.reads++;
 

@@ -10,6 +10,8 @@
 #include "LineSplitter.h"
 #include <fstream>
 #include <regex>
+#include <cctype>
+#include <algorithm>
 #include "Utilities.h"
 
 
@@ -76,6 +78,7 @@ namespace protal {
                 ("build", "Build index from reference file with header format ()")
                 ("full_reference", "All marker genomes (not only representative ones) to check unique k-mers during build process", cxxopts::value<std::string>()->default_value(""))
                 ("reference", "Set of reference sequences to build the internal alignment database from", cxxopts::value<std::string>()->default_value(""))
+                ("build_gene_subset", "Newline-delimited gene ids (1-120) to include during build (subset of marker genes)", cxxopts::value<std::string>()->default_value(""))
                 ("preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
 
                 ("profile_truth", "Provide truth file and annotate profile taxa with TP/FP. Format is list of integers (internal ids)", cxxopts::value<std::string>()->default_value(""))
@@ -118,6 +121,7 @@ namespace protal {
 
         size_t m_current_index = 0;
 
+        std::vector<uint8_t> m_build_gene_mask;
 
         std::string m_sequence_file;
         std::string m_full_sequence_file;
@@ -201,7 +205,7 @@ namespace protal {
                 double msa_min_vcov, double snp_min_phred_sum, double snp_min_cov,
                 size_t x_drop, size_t max_key_ubiquity, size_t min_successful_lookups, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
                 std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
-                bool force, bool verbose, std::vector<size_t> range) :
+                bool force, bool verbose, std::vector<size_t> range, std::vector<uint8_t> build_gene_mask) :
                 m_build(build),
                 m_no_profile(no_profile),
                 m_profile_only(profile_only),
@@ -242,7 +246,8 @@ namespace protal {
                 m_mapq_debug_out(mapq_debug_output),
                 m_force(force),
                 m_verbose(verbose),
-                m_range(range) {
+                m_range(range),
+                m_build_gene_mask(std::move(build_gene_mask)) {
             if (samplename_list.empty()) {
                 m_sampleid_list = m_prefix_list;
             } else {
@@ -435,6 +440,16 @@ namespace protal {
 
         std::vector<size_t> GetRange() const {
             return m_range;
+        }
+
+        bool HasBuildGeneSubset() const {
+            return !m_build_gene_mask.empty();
+        }
+
+        bool BuildGeneAllowed(size_t gene_id) const {
+            if (m_build_gene_mask.empty()) return true;
+            if (gene_id >= m_build_gene_mask.size()) return false;
+            return m_build_gene_mask[gene_id] != 0;
         }
 
 //        std::string GetOutputPrefix() const {
@@ -1182,6 +1197,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
             auto reference = result["reference"].as<std::string>();
             auto full_reference = result["full_reference"].as<std::string>();
+            auto build_gene_subset = result["build_gene_subset"].as<std::string>();
 
             auto map_file = result.count("map") ? result["map"].as<std::string>() : "";
             auto first = result.count("first") ? result["first"].as<std::string>() : "";
@@ -1204,6 +1220,43 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
             std::string strain_output_dir = "";
             std::string misc_output_dir = "";
+
+            std::vector<uint8_t> build_gene_mask;
+            if (!build_gene_subset.empty()) {
+                if (!std::filesystem::exists(build_gene_subset)) {
+                    std::cerr << "Gene subset file " << build_gene_subset << " does not exist." << std::endl;
+                    exit(9);
+                }
+                std::ifstream subset_stream(build_gene_subset);
+                if (!subset_stream.good()) {
+                    std::cerr << "Failed to open gene subset file " << build_gene_subset << std::endl;
+                    exit(9);
+                }
+
+                build_gene_mask.assign(121, 0);
+                auto trim = [](std::string &s) {
+                    size_t start = 0;
+                    while (start < s.size() && std::isspace(static_cast<unsigned char>(s[start]))) start++;
+                    size_t end = s.size();
+                    while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1]))) end--;
+                    s = s.substr(start, end - start);
+                };
+                std::string line;
+                while (std::getline(subset_stream, line)) {
+                    trim(line);
+                    if (line.empty() || line[0] == '#') continue;
+                    if (!std::all_of(line.begin(), line.end(), [](unsigned char c){ return std::isdigit(c); })) {
+                        std::cerr << "Invalid gene id in subset file: " << line << std::endl;
+                        exit(9);
+                    }
+                    size_t gene_id = std::stoul(line);
+                    if (gene_id < 1 || gene_id > 120) {
+                        std::cerr << "Gene id out of range (1-120): " << gene_id << std::endl;
+                        exit(9);
+                    }
+                    build_gene_mask[gene_id] = 1;
+                }
+            }
             
             if (!map_file.empty()) {
                 if (!std::filesystem::exists(map_file)) {
@@ -1375,7 +1428,8 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     profile_truth,
                     force,
                     verbose,
-                    range);
+                    range,
+                    build_gene_mask);
 
 
             if (!options.PrepareAndCheckValidity()) {
