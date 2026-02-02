@@ -7,6 +7,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Dict, Iterable, List, Tuple
 
 
@@ -14,7 +15,7 @@ from typing import Dict, Iterable, List, Tuple
 class Profile:
     path: str
     sample: str
-    abundances: Dict[str, str]
+    abundances: Dict[str, Decimal]
 
 
 def expand_inputs(inputs: Iterable[str]) -> List[str]:
@@ -37,7 +38,7 @@ def sample_name(path: str) -> str:
 
 
 def read_profile(path: str, sample: str | None = None) -> Profile:
-    abundances: Dict[str, str] = {}
+    abundances: Dict[str, Decimal] = {}
     with open(path, "r", encoding="utf-8") as handle:
         for line_num, raw in enumerate(handle, start=1):
             line = raw.rstrip("\n")
@@ -50,7 +51,11 @@ def read_profile(path: str, sample: str | None = None) -> Profile:
             abundance = parts[2].strip()
             if not taxonomy:
                 raise ValueError(f"{path}:{line_num}: empty taxonomy lineage")
-            abundances[taxonomy] = abundance
+            try:
+                abundance_value = Decimal(abundance)
+            except InvalidOperation as exc:
+                raise ValueError(f"{path}:{line_num}: invalid abundance '{abundance}'") from exc
+            abundances[taxonomy] = abundances.get(taxonomy, Decimal(0)) + abundance_value
     return Profile(path=path, sample=sample if sample is not None else sample_name(path), abundances=abundances)
 
 
@@ -189,7 +194,7 @@ def merge_profiles(inputs: Iterable[str], resolve_samples: bool = False) -> None
     for taxon in taxa:
         row = [taxon]
         for profile in profiles:
-            row.append(profile.abundances.get(taxon, "0"))
+            row.append(str(profile.abundances.get(taxon, Decimal(0))))
         sys.stdout.write("\t".join(row) + "\n")
 
 
