@@ -1362,10 +1362,14 @@ namespace protal {
         bool all_alignments_exist = std::all_of(sam_files.begin(), sam_files.end(), [](std::string const& file){ return Utils::exists(file); });
 
         bool skip_alignment = !options.BuildMode() && all_alignments_exist && !options.Force();
-        auto [sam, gzipped] = options.SamFile(0);
-        if (!options.BuildMode() && !sam.empty() && (options.ProfileOnly() || skip_alignment)) {
-            std::cout << "All alignments are present." << std::endl;
-            goto Profile;
+
+        if (!options.BuildMode() && (options.ProfileOnly() || skip_alignment) && !sam_files.empty()) {
+            auto [sam, gzipped] = options.SamFile(0);
+
+            if (!sam.empty()) {
+                std::cout << "All alignments are present." << std::endl;
+                goto Profile;
+            }
         }
 
         /*
