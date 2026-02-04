@@ -46,7 +46,7 @@ namespace protal {
                 ("1,first", "Comma separated list of reads. If paired-end, also specify second read via -2/--second.", cxxopts::value<std::string>()->default_value(""))
                 ("2,second", "Comma separated list of reads. must have <-1/--first> specified. Currently this must be specified -- single-end reads are not yet supported.", cxxopts::value<std::string>()->default_value(""))
                 ("prefix", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names by taking their longest common prefix. Only works when both pairs of the read file are in the same folder.", cxxopts::value<std::string>()->default_value(""))
-                ("o,outdir", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names. If not otherwise specified by using --map, sam files, profiles, msas, and other miscellaneous files will be stored in the subfolders to this directory 'sam', 'profiles', 'strains', and 'misc'.", cxxopts::value<std::string>())
+                ("o,outdir", "Overwrites #OUTDIR in map and needs to be defined if #OUTDIR is not defined in the map. If not otherwise specified in the map file, sam files, profiles, msas, and other miscellaneous files will be stored in the subfolders to this directory 'alignments', 'profiles', 'strains', and 'misc'.", cxxopts::value<std::string>())
                 
                 ("map", "For larger datasets you can define parameters -1, -2, --prefix and -o in a tsv-file.", cxxopts::value<std::string>()->default_value(""))
                 ("map_range", "If you specified a map file with --map you can also pass a range to protal to run protal only on a subset. The first entry is 1, the end is inclusive. e.g.: 1-10. If the end open or larger than the number of entries in the map file, the last entry in the map file is selected as end.", cxxopts::value<std::string>()->default_value(""))
@@ -742,6 +742,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             std::ifstream is(map_path, std::ios::in);
 
             std::string global_output_dir = "";
+            std::string map_output_dir = "";
             std::string sam_output_dir = "";
             std::string profile_output_dir = "";
 
@@ -833,14 +834,13 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                         }
                         header = false;
 
-                        if (global_output_dir.empty()) {
-                            if (output_dir.empty()) {
-                                std::cerr << "Line " << line_num << ": Output directory not defined. Please define " << MAP_VAR_OUTPUT_DIR << " before the header line or provide an output directory via --outdir." << std::endl;
-                                return false;
-                            }
+                        if (!output_dir.empty()) {
                             global_output_dir = output_dir;
+                        } else if (!map_output_dir.empty()) {
+                            global_output_dir = map_output_dir;
                         } else {
-                            output_dir = global_output_dir;
+                            std::cerr << "Line " << line_num << ": Output directory not defined. Please define " << MAP_VAR_OUTPUT_DIR << " before the header line or provide an output directory via --outdir." << std::endl;
+                            return false;
                         }
 
                         sam_output_dir = sam_output_dir.empty() ? path(global_output_dir).append(MAP_VAR_DEFAULT_SAM_OUTPUT_DIR) : path(sam_output_dir);
@@ -897,7 +897,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                             std::cerr << "Line " << line_num << ": Expected value for key " << MAP_VAR_OUTPUT_DIR << std::endl;
                             return false;
                         }
-                        global_output_dir = tokens[1];
+                        map_output_dir = tokens[1];
                     }
                     if (!tokens.empty() && tokens[0] == MAP_VAR_MISC_OUTPUT_DIR) {
                         if (tokens.size() < 2) {
