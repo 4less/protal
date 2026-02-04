@@ -1163,7 +1163,7 @@ namespace protal {
         }
 
         bool any_good = std::any_of(msa.begin(), msa.end(), [](MSARow const& row){
-            return IsRowGood(row, 5000);
+            return IsRowGood(row, 1000);
         });
         if (!any_good) {
             std::cout << "No good consensus sequences found for species" << std::endl;
