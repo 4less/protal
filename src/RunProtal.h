@@ -1039,7 +1039,7 @@ namespace protal {
     }
 
     static void GetMSAForTaxon (uint32_t taxid, std::string taxon_name, GenomeLoader& loader, Options& options, Profiles& profiles, std::ostream* os_meta=nullptr, std::optional<profiler::TaxonFilter> filter={}) {
-        auto min_hcov = 5000;
+        auto min_hcov = options.GetMSAMinHCOV();
         auto min_qual_sum = options.GetSNPMinPhredSum();
         auto min_cov = options.GetSNPMinCov();
         auto min_samples_with_gene = 3;
@@ -1162,8 +1162,8 @@ namespace protal {
             }
         }
 
-        bool any_good = std::any_of(msa.begin(), msa.end(), [](MSARow const& row){
-            return IsRowGood(row, 1000);
+        bool any_good = std::any_of(msa.begin(), msa.end(), [min_hcov](MSARow const& row){
+            return IsRowGood(row, min_hcov);
         });
         if (!any_good) {
             std::cout << "No good consensus sequences found for species" << std::endl;

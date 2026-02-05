@@ -20,6 +20,7 @@ namespace protal {
     static const size_t DEFAULT_ALIGN_TOP = 3;
     static const double DEFAULT_MAX_SCORE_ANI = 0.9;
     static const double DEFAULT_MSA_MIN_VCOV = 0.5;
+    static const size_t DEFAULT_MSA_MIN_HCOV = 1000;
     static const size_t DEFAULT_MIN_SUCCESSFUL_LOOKUPS = 4;
     static const size_t DEFAULT_X_DROP = 1000;
     static const size_t DEFAULT_MAX_KEY_UBIQUITY = 256;
@@ -69,7 +70,8 @@ namespace protal {
         options.add_options("Strains")
                 ("snp_min_cov", "Minimum coverage for calling a SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_COV)))
                 ("snp_min_phred_sum", "Minimum phred sum across all observations of allele to call SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_PHRED_SUM)))
-                ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)));
+                ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
+                ("msa_min_hcov", "Minimum non-N/non-'-' bases required per sequence to keep it in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_HCOV)));
                 
         
         // Advanced / benchmarking / build
@@ -155,6 +157,7 @@ namespace protal {
         size_t m_min_successful_lookups = DEFAULT_MIN_SUCCESSFUL_LOOKUPS;
         size_t m_max_out = DEFAULT_MAX_OUT;
         double m_msa_min_vcov = DEFAULT_MSA_MIN_VCOV;
+        size_t m_msa_min_hcov = DEFAULT_MSA_MIN_HCOV;
 
         double m_snp_min_cov = DEFAULT_MIN_SNP_COV;
         double m_snp_min_phred_sum = DEFAULT_MIN_SNP_PHRED_SUM;
@@ -202,7 +205,7 @@ namespace protal {
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
                 std::string database_path, std::vector<std::string>& output_prefix_list, std::string sequence_file,
                 std::string full_sequence_file, std::string map_file, std::string strain_output_dir, std::string misc_output_dir, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
-                double msa_min_vcov, double snp_min_phred_sum, double snp_min_cov,
+                double msa_min_vcov, size_t msa_min_hcov, double snp_min_phred_sum, double snp_min_cov,
                 size_t x_drop, size_t max_key_ubiquity, size_t min_successful_lookups, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
                 std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
                 bool force, bool verbose, std::vector<size_t> range, std::vector<uint8_t> build_gene_mask) :
@@ -233,6 +236,7 @@ namespace protal {
                 m_max_out(max_out),
                 m_max_score_ani(max_score_ani),
                 m_msa_min_vcov(msa_min_vcov),
+                m_msa_min_hcov(msa_min_hcov),
                 m_snp_min_cov(snp_min_cov),
                 m_snp_min_phred_sum(snp_min_phred_sum),
                 m_x_drop(x_drop),
@@ -316,6 +320,7 @@ namespace protal {
             result_str << "------ Strains ------" << std::string(30, '-') << '\n';
             result_str << "snp min cov:         " << std::to_string(m_snp_min_cov) << '\n';
             result_str << "snp min phred sum:   " << std::to_string(m_snp_min_phred_sum) << '\n';
+            result_str << "msa min hcov:        " << std::to_string(m_msa_min_hcov) << '\n';
             result_str << "---- Dev Options ----" << std::string(30, '-') << '\n';
             result_str << "verbose:             " << (m_verbose ? "yes" : "no") << '\n';
             result_str << "benchmark alignment: " << (m_benchmark_alignment ? "yes" : "no") << '\n';
@@ -631,6 +636,10 @@ namespace protal {
 
         auto GetMSAMinVCOV() {
             return m_msa_min_vcov;
+        }
+
+        auto GetMSAMinHCOV() {
+            return m_msa_min_hcov;
         }
 
         auto GetSNPMinCov() {
@@ -1189,6 +1198,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             size_t max_seed_size = result["max_seed_size"].as<size_t>();
             double max_score_ani = result["max_score_ani"].as<double>();
             double msa_min_vcov = result["msa_min_vcov"].as<double>();
+            size_t msa_min_hcov = result["msa_min_hcov"].as<size_t>();
             size_t max_out = result["max_out"].as<size_t>();
 
             double snp_min_cov = result["snp_min_cov"].as<double>();
@@ -1415,6 +1425,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     max_out,
                     max_score_ani,
                     msa_min_vcov,
+                    msa_min_hcov,
                     snp_min_cov,
                     snp_min_phred_sum,
                     x_drop,
