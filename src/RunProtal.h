@@ -800,18 +800,20 @@ namespace protal {
         std::vector<std::string> invalid;
         invalid.reserve(msa_species.size());
 
-        for (const auto& spec : msa_species) {
+        for (const auto& raw_spec : msa_species) {
+            std::string spec = raw_spec;
+            std::replace(spec.begin(), spec.end(), ' ', '_');
             if (spec.rfind("s__", 0) != 0 || spec.find('_', 3) == std::string::npos) {
-                invalid.emplace_back(spec);
+                invalid.emplace_back(raw_spec);
                 continue;
             }
             if (!taxonomy.string_to_id.contains(spec)) {
-                invalid.emplace_back(spec);
+                invalid.emplace_back(raw_spec);
                 continue;
             }
             auto taxid = taxonomy.Get(spec);
             if (taxonomy.Get(taxid).rank != "species") {
-                invalid.emplace_back(spec);
+                invalid.emplace_back(raw_spec);
                 continue;
             }
             taxids.emplace_back(taxid);
