@@ -410,10 +410,10 @@ namespace protal {
         CoverageVecs covs = LoadCoverageVectors(items, reference);
         auto valid_bases = GetValidBases(covs, min_cov);
 
-        std::cout << "Covs" << std::endl;
-        for (auto cov : covs) {
-            std::cout << std::accumulate(cov.begin(), cov.end(), std::string{}, [](std::string a, auto b){ return std::move(a) + (a.empty() ? "" : ",") + std::to_string(b); });
-        }
+        std::cout << "Covs snps min cov " << min_cov << std::endl;
+        // for (auto cov : covs) {
+        //     std::cout << std::accumulate(cov.begin(), cov.end(), std::string{}, [](std::string a, auto b){ return std::move(a) + (a.empty() ? "" : ",") + std::to_string(b); });
+        // }
 
         std::cout << "Valid bases: " << valid_bases << std::endl;
 
