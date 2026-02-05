@@ -1061,6 +1061,10 @@ namespace protal {
         std::vector<uint32_t> selected_genes = SelectGenesForTaxon(taxid, taxon_name, profile_indices, loader, options, profiles);
 
         ProgressBar prog(120);
+
+        std::cout << taxid << ": " << taxon_name << " across samples " << profile_indices.size() << std::endl;
+        
+
 //        std::cout << "Process " << selected_genes.size() << std::endl;
         for (auto& geneid : selected_genes) {
 //            std::cout << "GID: " << geneid << std::endl;
@@ -1080,6 +1084,7 @@ namespace protal {
             size_t samples_with_gene = 0;
 
             for (auto i = 0; i < profile_indices.size(); i++) {
+                std::cout << "sample: " << i << std::endl;
                 auto& profile = profiles[profile_indices[i]];
 
                 auto& taxon_map = profile.GetTaxa();
