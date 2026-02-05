@@ -1185,6 +1185,12 @@ namespace protal {
                     }
                 }
             }
+            std::cout << "Samples with gene: " << samples_with_gene << std::endl;
+            std::cout << "msa size: " << msa.size() << std::endl;
+
+            for (auto item : msa) {
+                std::cout << item.size() << std::endl;
+            }
 
             if (samples_with_gene > min_samples_with_gene) {
                 previous_size = msa.front().size();
