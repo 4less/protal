@@ -815,7 +815,9 @@ namespace protal {
                 found = true;
             } else {
                 std::string alt = spec;
-                std::replace(alt.begin(), alt.end(), '_', ' ');
+                for (size_t i = 3; i < alt.size(); i++) {
+                    if (alt[i] == '_') alt[i] = ' ';
+                }
                 if (taxonomy.string_to_id.contains(alt)) {
                     taxid = taxonomy.Get(alt);
                     found = true;
