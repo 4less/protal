@@ -807,11 +807,25 @@ namespace protal {
                 invalid.emplace_back(raw_spec);
                 continue;
             }
-            if (!taxonomy.string_to_id.contains(spec)) {
+
+            uint32_t taxid = 0;
+            bool found = false;
+            if (taxonomy.string_to_id.contains(spec)) {
+                taxid = taxonomy.Get(spec);
+                found = true;
+            } else {
+                std::string alt = spec;
+                std::replace(alt.begin(), alt.end(), '_', ' ');
+                if (taxonomy.string_to_id.contains(alt)) {
+                    taxid = taxonomy.Get(alt);
+                    found = true;
+                }
+            }
+
+            if (!found) {
                 invalid.emplace_back(raw_spec);
                 continue;
             }
-            auto taxid = taxonomy.Get(spec);
             if (taxonomy.Get(taxid).rank != "species") {
                 invalid.emplace_back(raw_spec);
                 continue;
