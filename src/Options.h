@@ -71,7 +71,8 @@ namespace protal {
                 ("snp_min_cov", "Minimum coverage for calling a SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_COV)))
                 ("snp_min_phred_sum", "Minimum phred sum across all observations of allele to call SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_PHRED_SUM)))
                 ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
-                ("msa_min_hcov", "Minimum non-N/non-'-' bases required per sequence to keep it in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_HCOV)));
+                ("msa_min_hcov", "Minimum non-N/non-'-' bases required per sequence to keep it in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_HCOV)))
+                ("msa_species", "Restrict MSAs to a single species (s__Genus_species) or a comma-separated list.", cxxopts::value<std::string>()->default_value(""));
                 
         
         // Advanced / benchmarking / build
@@ -158,6 +159,7 @@ namespace protal {
         size_t m_max_out = DEFAULT_MAX_OUT;
         double m_msa_min_vcov = DEFAULT_MSA_MIN_VCOV;
         size_t m_msa_min_hcov = DEFAULT_MSA_MIN_HCOV;
+        std::vector<std::string> m_msa_species;
 
         double m_snp_min_cov = DEFAULT_MIN_SNP_COV;
         double m_snp_min_phred_sum = DEFAULT_MIN_SNP_PHRED_SUM;
@@ -205,7 +207,7 @@ namespace protal {
                 std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
                 std::string database_path, std::vector<std::string>& output_prefix_list, std::string sequence_file,
                 std::string full_sequence_file, std::string map_file, std::string strain_output_dir, std::string misc_output_dir, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
-                double msa_min_vcov, size_t msa_min_hcov, double snp_min_phred_sum, double snp_min_cov,
+                double msa_min_vcov, size_t msa_min_hcov, std::vector<std::string> msa_species, double snp_min_phred_sum, double snp_min_cov,
                 size_t x_drop, size_t max_key_ubiquity, size_t min_successful_lookups, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
                 std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
                 bool force, bool verbose, std::vector<size_t> range, std::vector<uint8_t> build_gene_mask) :
@@ -237,6 +239,7 @@ namespace protal {
                 m_max_score_ani(max_score_ani),
                 m_msa_min_vcov(msa_min_vcov),
                 m_msa_min_hcov(msa_min_hcov),
+                m_msa_species(std::move(msa_species)),
                 m_snp_min_cov(snp_min_cov),
                 m_snp_min_phred_sum(snp_min_phred_sum),
                 m_x_drop(x_drop),
@@ -320,6 +323,7 @@ namespace protal {
             result_str << "------ Strains ------" << std::string(30, '-') << '\n';
             result_str << "snp min cov:         " << std::to_string(m_snp_min_cov) << '\n';
             result_str << "snp min phred sum:   " << std::to_string(m_snp_min_phred_sum) << '\n';
+            result_str << "msa species:         " << Utils::join(m_msa_species, ",") << '\n';
             result_str << "msa min hcov:        " << std::to_string(m_msa_min_hcov) << '\n';
             result_str << "---- Dev Options ----" << std::string(30, '-') << '\n';
             result_str << "verbose:             " << (m_verbose ? "yes" : "no") << '\n';
@@ -640,6 +644,9 @@ namespace protal {
 
         auto GetMSAMinHCOV() {
             return m_msa_min_hcov;
+        }
+        const std::vector<std::string>& GetMSASpecies() const {
+            return m_msa_species;
         }
 
         auto GetSNPMinCov() {
@@ -1201,6 +1208,19 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             double msa_min_vcov = result["msa_min_vcov"].as<double>();
             size_t msa_min_hcov = result["msa_min_hcov"].as<size_t>();
             size_t max_out = result["max_out"].as<size_t>();
+            auto msa_species_arg = result["msa_species"].as<std::string>();
+            std::vector<std::string> msa_species;
+            if (!msa_species_arg.empty()) {
+                auto tokens = Utils::split(msa_species_arg, ",");
+                for (auto& token : tokens) {
+                    size_t start = 0;
+                    while (start < token.size() && std::isspace(static_cast<unsigned char>(token[start]))) start++;
+                    size_t end = token.size();
+                    while (end > start && std::isspace(static_cast<unsigned char>(token[end - 1]))) end--;
+                    auto trimmed = token.substr(start, end - start);
+                    if (!trimmed.empty()) msa_species.emplace_back(std::move(trimmed));
+                }
+            }
 
             double snp_min_cov = result["snp_min_cov"].as<double>();
             double snp_min_phred_sum = result["snp_min_phred_sum"].as<double>();
@@ -1427,6 +1447,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     max_score_ani,
                     msa_min_vcov,
                     msa_min_hcov,
+                    msa_species,
                     snp_min_cov,
                     snp_min_phred_sum,
                     x_drop,

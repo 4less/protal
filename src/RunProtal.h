@@ -791,6 +791,41 @@ namespace protal {
         return taxid_list;
     }
 
+    static std::vector<uint32_t> ResolveMSASpecies(Options& options, taxonomy::IntTaxonomy& taxonomy) {
+        const auto& msa_species = options.GetMSASpecies();
+        if (msa_species.empty()) return {};
+
+        std::vector<uint32_t> taxids;
+        taxids.reserve(msa_species.size());
+        std::vector<std::string> invalid;
+        invalid.reserve(msa_species.size());
+
+        for (const auto& spec : msa_species) {
+            if (spec.rfind("s__", 0) != 0 || spec.find('_', 3) == std::string::npos) {
+                invalid.emplace_back(spec);
+                continue;
+            }
+            if (!taxonomy.string_to_id.contains(spec)) {
+                invalid.emplace_back(spec);
+                continue;
+            }
+            auto taxid = taxonomy.Get(spec);
+            if (taxonomy.Get(taxid).rank != "species") {
+                invalid.emplace_back(spec);
+                continue;
+            }
+            taxids.emplace_back(taxid);
+        }
+
+        if (!invalid.empty()) {
+            std::cerr << "Invalid --msa_species entries (expected format s__Genus_species and present in taxonomy): ";
+            std::cerr << Utils::join(invalid, ",") << std::endl;
+            exit(2);
+        }
+
+        return taxids;
+    }
+
     static std::pair<double, size_t> GetSimilarity(uint32_t taxid, Profile& profile1, Profile& profile2, Options& options, std::optional<profiler::TaxonFilterObj> filter={}) {
         size_t min_shared_region = 1000;
         if (profile1.GetTaxa().contains(taxid) && profile2.GetTaxa().contains(taxid)) {
@@ -1265,7 +1300,7 @@ namespace protal {
         matrix_os.close();
     }
 
-    static void StrainWrapper2(Options& options, Profiles& profiles, GenomeLoader& loader, taxonomy::IntTaxonomy& taxonomy, std::optional<profiler::TaxonFilterObj> filter={}) {
+    static void StrainWrapper2(Options& options, Profiles& profiles, GenomeLoader& loader, taxonomy::IntTaxonomy& taxonomy, std::vector<uint32_t> msa_taxids = {}, std::optional<profiler::TaxonFilterObj> filter={}) {
         Benchmark bm_strain{"Strain-level MSAs"};
         bm_strain.Start();
         std::cout << "Output " << options.GetOutputDir() << std::endl;
@@ -1275,7 +1310,7 @@ namespace protal {
             exit(2);
         };
 
-        auto taxids = ExtractTaxa(profiles, filter);
+        auto taxids = msa_taxids.empty() ? ExtractTaxa(profiles, filter) : msa_taxids;
 
         auto enable_similarity_matrix = false;
 
@@ -1403,6 +1438,7 @@ namespace protal {
             Profile:
 
             db.LoadTaxonomy(options.GetInternalTaxonomyFile());
+            auto msa_taxids = ResolveMSASpecies(options, db.GetTaxonomy());
 
             Benchmark bm_profiling("Profiling");
             bm_profiling.Start();
@@ -1456,7 +1492,7 @@ namespace protal {
              * STRAIN PART -  RESOLVE MSAs BETWEEN SAMPLES
              */
             if (!options.NoStrains()) {
-                StrainWrapper2(options, profiles, db.GetGenomes(), db.GetTaxonomy(), filter);
+                StrainWrapper2(options, profiles, db.GetGenomes(), db.GetTaxonomy(), msa_taxids, filter);
             }
         }
 
