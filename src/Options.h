@@ -851,6 +851,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                             std::cerr << "Line " << line_num << ": Output directory not defined. Please define " << MAP_VAR_OUTPUT_DIR << " before the header line or provide an output directory via --outdir." << std::endl;
                             return false;
                         }
+                        output_dir = global_output_dir;
 
                         sam_output_dir = sam_output_dir.empty() ? path(global_output_dir).append(MAP_VAR_DEFAULT_SAM_OUTPUT_DIR) : path(sam_output_dir);
                         sam_output_dir = path(sam_output_dir).is_absolute() ? path(sam_output_dir) : path(global_output_dir).append(sam_output_dir);
