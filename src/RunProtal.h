@@ -1084,7 +1084,7 @@ namespace protal {
             size_t samples_with_gene = 0;
 
             for (auto i = 0; i < profile_indices.size(); i++) {
-                std::cout << "sample: " << i << std::endl;
+                std::cout << geneid << " sample: " << i << " taxon map contains: " << taxon_map.contains(taxid) << std::endl;
                 auto& profile = profiles[profile_indices[i]];
 
                 auto& taxon_map = profile.GetTaxa();
@@ -1093,6 +1093,8 @@ namespace protal {
 
                 names.emplace_back(profile.GetName());
                 auto& genes = profile.GetTaxa().at(taxid).GetGenes();
+
+                std::cout << "Genes : " << genes.size() << " Contains this one:  " << genes.contains(geneid) << std::endl;
 
                 if (!genes.contains(geneid)) {
                     items.emplace_back(OptionalMSASequenceItem{});
