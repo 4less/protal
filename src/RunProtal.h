@@ -1140,19 +1140,14 @@ namespace protal {
                 auto& profile = profiles[profile_indices[i]];
 
                 auto& taxon_map = profile.GetTaxa();
-                std::cout << geneid << " sample: " << i << " taxon map contains: " << taxon_map.contains(taxid) << std::endl;
-
                 if (!taxon_map.contains(taxid)) continue;
 
                 names.emplace_back(profile.GetName());
                 auto& genes = profile.GetTaxa().at(taxid).GetGenes();
 
-                std::cout << "Genes : " << genes.size() << " Contains this one:  " << genes.contains(geneid) << std::endl;
-
                 if (!genes.contains(geneid)) {
                     items.emplace_back(OptionalMSASequenceItem{});
                 } else {
-                    std::cout << "Add gene " << geneid << " for species " << taxon_name << std::endl;
                     samples_with_gene++;
                     auto& gene_obs = genes.at(geneid);
                     auto& strain = gene_obs.GetStrainLevel();
@@ -1185,13 +1180,6 @@ namespace protal {
                     }
                 }
             }
-            std::cout << "Samples with gene: " << samples_with_gene << " vs min " << min_samples_with_gene << std::endl;
-            std::cout << "msa size: " << msa.size() << std::endl;
-
-            for (auto item : msa) {
-                std::cout << item.size() << std::endl;
-            }
-
             if (samples_with_gene > min_samples_with_gene) {
                 previous_size = msa.front().size();
 
@@ -1210,16 +1198,7 @@ namespace protal {
                 }
 
 
-                std::cout << "MSA precheck gene " << geneid
-                          << " items=" << items.size()
-                          << " msa=" << msa.size()
-                          << " samples_with_gene=" << samples_with_gene
-                          << " prev_len=" << previous_size << std::endl;
-
                 bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum);
-                std::cout << "MSA result gene " << geneid
-                          << " ok=" << result
-                          << " new_len=" << msa.front().size() << std::endl;
 
                 if (!result) continue;
                 if (msa.front().size() > partition_start) {
@@ -1250,13 +1229,6 @@ namespace protal {
         for (auto i = 0; i < msa.size(); i++) {
             auto& row = msa[i];
 
-            size_t count_non_n = 0;
-            for (auto c : row) count_non_n += (c != 'N' && c != '-');
-            std::cout << "MSA row " << i
-                      << " len=" << row.size()
-                      << " non_N_non_-=" << count_non_n
-                      << " keep=" << (count_non_n >= min_hcov)
-                      << std::endl;
             if (!IsRowGood(row, min_hcov)) continue;
             os << ">" << names[i] << std::endl;
 
