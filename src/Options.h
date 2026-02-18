@@ -532,7 +532,7 @@ namespace protal {
             auto [sam, gzipped] = SamFile(index);
 
             if (gzip && gzipped) {
-                std::cerr << "SAM file " << sam << " is already gzipped." << std::endl;
+                // std::cerr << "SAM file " << sam << " is already gzipped." << std::endl;
                 return;
             }
             m_sam_list[index] = m_sam_list[index] + (gzip ? ".gz" : "");

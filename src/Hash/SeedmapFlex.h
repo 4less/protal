@@ -13,6 +13,7 @@
 #include <tuple>
 #include <fstream>
 #include "Utilities.h"
+#include "Constants.h"
 
 namespace protal {
     template<uint64_t taxid_bits, uint64_t geneid_bits, uint64_t genepos_bits>
@@ -85,6 +86,8 @@ namespace protal {
         }
     };
 
+    using ValueEntry = Entry<SEEDMAP_TAXID_BITS, SEEDMAP_GENEID_BITS, SEEDMAP_GENE_POS_BITS>;
+
     class SeedmapUtils {
     public:
         template<size_t bits>
@@ -143,7 +146,7 @@ namespace protal {
         size_t max_block_size = (1 << sizeof(KeyMap_t)*8);
 
         size_t values_size= 0;
-        Entry<20,20,20>* m_map = nullptr;
+        ValueEntry* m_map = nullptr;
 
         uint64_t m_found_counter = 0;
 
@@ -265,7 +268,7 @@ namespace protal {
             m_keymap = new uint8_t[keymap_size_total];
             ifs.read((char *) m_keymap, sizeof(*m_keymap) * (keymap_size_total));
 
-            m_map = new Entry<20,20,20>[values_size];
+            m_map = new ValueEntry[values_size];
             ifs.read((char *) m_map, sizeof(*m_map) * (values_size));
         }
 
@@ -283,7 +286,7 @@ namespace protal {
             m_keymap = new uint8_t[keymap_size_total];
             ifs.read((char *) m_keymap, sizeof(*m_keymap) * (keymap_size_total));
 
-            m_map = new Entry<20,20,20>[values_size];
+            m_map = new ValueEntry[values_size];
             ifs.read((char *) m_map, sizeof(*m_map) * (values_size));
         }
 
@@ -310,7 +313,7 @@ namespace protal {
             return m_keymap[KeymapIndex(key)];
         }
 
-        void Get(uint64_t key, Entry<20, 20, 20>* &start, Entry<20, 20, 20>* &end) {
+        void Get(uint64_t key, ValueEntry* &start, ValueEntry* &end) {
             if (key > m_keymask) {
                 std::cout << "Key is larger than keymask" << key << " > " << m_keymask << std::endl;
             }
@@ -396,7 +399,7 @@ namespace protal {
             }
             m_map[index].Put(taxid, geneid, genepos);
 
-            Entry<20,20,20> *begin, *end;
+            ValueEntry *begin, *end;
             Get(key, begin, end);
 
             if constexpr(false) {
@@ -482,7 +485,7 @@ namespace protal {
             m_map[index].Put(taxid, geneid, genepos);
 }
 
-            Entry<20,20,20> *begin, *end;
+            ValueEntry *begin, *end;
             Get(key, begin, end);
 
             return true;
@@ -638,7 +641,7 @@ namespace protal {
             std::cout << "total:  " << key_mem+val_mem << " GB" << std::endl;
 
 //            exit(9);
-            m_map = new Entry<20, 20, 20>[values_size];
+            m_map = new ValueEntry[values_size];
 
             for (auto i = 0; i < kmer_freq_size; i++) {
                 std::cout << i << '\t' << kmer_frequencies[i] << std::endl;

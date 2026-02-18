@@ -123,8 +123,8 @@ namespace protal {
     };
 
     struct LookupPointer {
-        Entry<20,20,20>* values_begin = nullptr;
-        Entry<20,20,20>* values_end = nullptr;
+        ValueEntry* values_begin = nullptr;
+        ValueEntry* values_end = nullptr;
         uint32_t* flex_begin = nullptr;
         uint32_t* flex_end = nullptr;
         uint32_t flex_key = 0;
@@ -146,8 +146,8 @@ namespace protal {
         std::vector<LookupPointer> m_lookups;
 //        std::shared_ptr<Seedmap> m_sm;
         Seedmap& m_sm;
-        Entry<20,20,20>* m_entry_begin = nullptr;
-        Entry<20,20,20>* m_entry_end = nullptr;
+        ValueEntry* m_entry_begin = nullptr;
+        ValueEntry* m_entry_end = nullptr;
         uint32_t* m_flex_begin = nullptr;
         uint32_t* m_flex_end = nullptr;
 
@@ -310,7 +310,7 @@ namespace protal {
             }
         }
 
-        inline void GetFlex(size_t &kmer, std::vector<Entry<20,20,20>*>& max_sim_entries, uint32_t& max_similarity) {
+        inline void GetFlex(size_t &kmer, std::vector<ValueEntry*>& max_sim_entries, uint32_t& max_similarity) {
             m_sm.Get(kmer, m_entry_begin, m_entry_end, m_flex_begin, m_flex_end);
 
             if (m_entry_begin == nullptr || m_entry_end == nullptr) {

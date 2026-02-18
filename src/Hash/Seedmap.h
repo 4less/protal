@@ -123,6 +123,8 @@ namespace protal {
         }
     };
 
+    using ValueEntry = Entry<SEEDMAP_TAXID_BITS, SEEDMAP_GENEID_BITS, SEEDMAP_GENE_POS_BITS>;
+
     class SeedmapUtils {
     public:
         template<size_t bits>
@@ -222,7 +224,7 @@ namespace protal {
          */
         size_t max_block_size = (1 << sizeof(KeyMap_t)*8); //  This is for block
         size_t values_size= 0;
-        Entry<20,20,20>* m_map = nullptr;
+        ValueEntry* m_map = nullptr;
 
         uint64_t m_found_counter = 0;
 
@@ -315,7 +317,7 @@ namespace protal {
             m_keymap = new KeyMap_t[keymap_size_total];
             ifs.read((char *) m_keymap, sizeof(*m_keymap) * (keymap_size_total));
 
-            m_map = new Entry<20,20,20>[values_size];
+            m_map = new ValueEntry[values_size];
             ifs.read((char *) m_map, sizeof(*m_map) * (values_size));
         }
 
@@ -333,7 +335,7 @@ namespace protal {
             m_keymap = new KeyMap_t[keymap_size_total];
             ifs.read((char *) m_keymap, sizeof(*m_keymap) * (keymap_size_total));
 
-            m_map = new Entry<20,20,20>[values_size];
+            m_map = new ValueEntry[values_size];
             ifs.read((char *) m_map, sizeof(*m_map) * (values_size));
         }
 
@@ -360,7 +362,7 @@ namespace protal {
             return m_keymap[KeymapIndex(key)];
         }
 
-        void Get(uint64_t key, Entry<20, 20, 20>* &start, Entry<20, 20, 20>* &end, uint32_t* &flexblock_begin, uint32_t* &flexblock_end) {
+        void Get(uint64_t key, ValueEntry* &start, ValueEntry* &end, uint32_t* &flexblock_begin, uint32_t* &flexblock_end) {
             size_t main_key = MainKey(key);
             size_t flex_key = FlexKey(key);
 
@@ -405,7 +407,7 @@ namespace protal {
             end =  m_map + key_value_end;
         }
 
-        void Get(uint64_t key, Entry<20, 20, 20>* &start, Entry<20, 20, 20>* &end) {
+        void Get(uint64_t key, ValueEntry* &start, ValueEntry* &end) {
             size_t main_key = MainKey(key);
             size_t flex_key = FlexKey(key);
 
@@ -539,7 +541,7 @@ namespace protal {
             }
             m_map[index].Put(taxid, geneid, genepos);
 
-            Entry<20,20,20> *begin, *end;
+            ValueEntry *begin, *end;
             Get(key, begin, end);
 
             if constexpr(false) {
@@ -764,7 +766,7 @@ namespace protal {
             }
 }
 
-            Entry<20,20,20> *begin, *end;
+            ValueEntry *begin, *end;
             Get(main_key, begin, end);
 
             return true;
@@ -1160,7 +1162,7 @@ namespace protal {
             values_size = global_position;
             std::cout << "ctrl_block_cell_size: " << ctrl_block_cell_size << std::endl;
 
-            m_map = new Entry<20, 20, 20>[values_size];
+            m_map = new ValueEntry[values_size];
 
             constexpr bool verbose = true;
             if constexpr(verbose) {

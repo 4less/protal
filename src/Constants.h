@@ -47,6 +47,10 @@ namespace protal {
     using TaxId = uint32_t;
     using GeneId = uint32_t;
     using GenePos = uint32_t;
+    
+    inline constexpr uint64_t SEEDMAP_TAXID_BITS = 20;
+    inline constexpr uint64_t SEEDMAP_GENEID_BITS = 20;
+    inline constexpr uint64_t SEEDMAP_GENE_POS_BITS = 20;
 
     // Pair k-mer, readpos
     using KmerElement = std::pair<size_t, size_t>;

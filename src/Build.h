@@ -58,7 +58,7 @@ namespace protal::build {
             KmerLookupSM lookup(lookup_global);
 
             LookupList seeds;
-            std::vector<Entry<20,20,20>*> max_sim_entries;
+            std::vector<ValueEntry*> max_sim_entries;
             uint32_t max_sim = 0;
             uint32_t best_possible_sim = putter.GetMap().m_flex_k;
 
@@ -275,7 +275,7 @@ namespace protal::build {
         KmerLookupSM lookup(lookup_global);
 
         LookupList seeds;
-        std::vector<Entry<20,20,20>*> max_sim_entries;
+        std::vector<ValueEntry*> max_sim_entries;
         uint32_t max_sim = 0;
         uint32_t best_possible_sim = putter.GetMap().m_flex_k;
 
