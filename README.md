@@ -1,9 +1,9 @@
 # Protal
 
-Protal is a reference-based taxonomic profiler for bacterial communities and uses paired-end short reads from shotgun metagenomic sequencing as an input. The index is prebuilt and covers the whole taxonomic space from GTDB version r207. The index will soon be made available for download.
+Protal is a reference-based taxonomic profiler for bacterial communities and uses paired-end short reads from shotgun metagenomic sequencing as an input. The index is prebuilt and covers the whole taxonomic space from GTDB version r214. The index is available for download under https://protal.earlham.ac.uk/main.php?site=downloads
 
 # Installation
-Protal is in the final steps of development and will then be made available via conda. In the meantime, you can use a local build process via conda as described below.
+Protal is in the final steps of development and is also available via conda. In the meantime, you can use a local build process via conda as described below.
 
 ## Requirements?
 - git
