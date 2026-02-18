@@ -38,9 +38,17 @@ message("${gzstream_sources}")
 add_library(gzstream_lib
         ${gzstream_sources})
 
+add_library(gzstream_lib_static STATIC
+        ${gzstream_sources})
+
 set_target_properties(gzstream_lib PROPERTIES LINKER_LANGUAGE CXX)
+set_target_properties(gzstream_lib_static PROPERTIES LINKER_LANGUAGE CXX)
 
 target_link_directories(gzstream_lib
+        PUBLIC
+        ${PROJECT_SOURCE_DIR})
+
+target_link_directories(gzstream_lib_static
         PUBLIC
         ${PROJECT_SOURCE_DIR})
 
@@ -48,6 +56,14 @@ target_include_directories(gzstream_lib
         PUBLIC
         ${PROJECT_SOURCE_DIR}/)
 
+target_include_directories(gzstream_lib_static
+        PUBLIC
+        ${PROJECT_SOURCE_DIR}/)
+
 target_link_libraries(gzstream_lib
         PUBLIC
         ZLIB::ZLIB)
+
+target_link_libraries(gzstream_lib_static
+        PUBLIC
+        z)

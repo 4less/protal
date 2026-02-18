@@ -35,7 +35,7 @@ message("CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 #set(CMAKE_PREFIX_PATH "/usr/users/QIB_fr017/fritsche/miniconda3/envs/gcconda/" ${CMAKE_PREFIX_PATH})
 
 # This creates the target and must be specified before using target_include etc
-add_library(protal_lib
+set(PROTAL_LIB_SOURCES
         RunProtal.h
         Options.h
         Build.h
@@ -109,7 +109,13 @@ add_library(protal_lib
         RandomForest/CommunityProfileDesigner.cpp
         RandomForest/ArtIlluminaWrapper.h
         RandomForest/ArtIlluminaWrapper.cpp
-        )
+)
+
+add_library(protal_lib
+        ${PROTAL_LIB_SOURCES})
+
+add_library(protal_lib_static STATIC
+        ${PROTAL_LIB_SOURCES})
 
 target_include_directories(protal_lib
         PUBLIC
@@ -126,8 +132,24 @@ target_include_directories(protal_lib
         Taxonomy
         SNPs)
 
+target_include_directories(protal_lib_static
+        PUBLIC
+        ../lib
+        IO
+        Hash
+        Core
+        VarkitInterface
+        Alignment
+        Utilities
+        Profiling
+        SequenceUtils
+        RandomForest
+        Taxonomy
+        SNPs)
+
 
 set_target_properties(protal_lib PROPERTIES LINKER_LANGUAGE CXX)
+set_target_properties(protal_lib_static PROPERTIES LINKER_LANGUAGE CXX)
 
 target_link_directories(protal_lib
         PUBLIC
@@ -140,6 +162,22 @@ target_link_directories(protal_lib
         ../Utilities
         ../Profiling
         # ../Profiler
+        ../SequenceUtils
+        ../Taxonomy
+        ../SNPs
+        ../cPMML
+)
+
+target_link_directories(protal_lib_static
+        PUBLIC
+        ../IO
+        ../lib
+        ../Hash
+        ../Core
+        ../VarkitInterface
+        ../Alignment
+        ../Utilities
+        ../Profiling
         ../SequenceUtils
         ../Taxonomy
         ../SNPs
@@ -166,6 +204,8 @@ find_package(ZLIB REQUIRED)
 
 target_include_directories(protal_lib PUBLIC ../lib/robin)
 target_include_directories(protal_lib PUBLIC ../lib/tsl)
+target_include_directories(protal_lib_static PUBLIC ../lib/robin)
+target_include_directories(protal_lib_static PUBLIC ../lib/tsl)
 
 # Add-Subdirectory with ${CMAKE_CURRENT_SOURCE_DIR}/
 
@@ -175,6 +215,7 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/../lib/gzstream gzstream)
 add_subdirectory(${PROJECT_SOURCE_DIR}/../lib/cPMML cPMML)
 
 target_link_libraries(protal_lib PRIVATE isa_baseline)
+target_link_libraries(protal_lib_static PRIVATE isa_baseline)
 
 # Create an external library target
 #add_library(cPMML STATIC IMPORTED)
@@ -225,6 +266,15 @@ target_link_libraries(protal_lib
         wfa_lib
         gzstream_lib
         ZLIB::ZLIB
+)
+
+target_link_libraries(protal_lib_static
+        LINK_PUBLIC
+        cPMML
+        stdc++fs
+        wfa_lib
+        gzstream_lib_static
+        z
 )
 
 message("CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")

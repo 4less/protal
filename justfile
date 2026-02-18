@@ -19,5 +19,10 @@ simulate:
     cmake -S . -B cmake-build-baseline -DCMAKE_BUILD_TYPE=Release
     cmake --build cmake-build-baseline --target simulate_metagenomes -- -j$(nproc)
 
-# Build both
-build-all: clear baseline avx2 simulate
+# Static baseline build (protal_static target)
+static:
+    cmake -S . -B cmake-build-static -DCMAKE_BUILD_TYPE=Release
+    cmake --build cmake-build-static --target protal_static -- -j$(nproc)
+
+# Build all targets, baseline avx2 static and simulate
+build-all: clear baseline avx2 static simulate

@@ -92,6 +92,12 @@ add_executable(protal
         protal_config.h.in)
 target_compile_options(protal PRIVATE ${PROTAL_COMMON_COMPILE_OPTIONS})
 
+add_executable(protal_static
+        src/main.cpp
+        protal_config.h.in)
+target_compile_options(protal_static PRIVATE ${PROTAL_COMMON_COMPILE_OPTIONS})
+target_link_options(protal_static PRIVATE -static -static-libgcc -static-libstdc++)
+
 add_executable(protal_avx2
         src/main.cpp
         protal_config.h.in)
@@ -104,6 +110,7 @@ target_compile_options(simulate_metagenomes PRIVATE ${PROTAL_COMMON_COMPILE_OPTI
 
 # Link to cmake file in src
 target_link_libraries(protal PRIVATE protal_lib dl z isa_baseline)
+target_link_libraries(protal_static PRIVATE protal_lib_static dl z isa_baseline)
 target_link_libraries(protal_avx2 PRIVATE protal_lib dl z isa_avx2)
 target_link_libraries(simulate_metagenomes PRIVATE protal_lib dl z isa_baseline)
 
