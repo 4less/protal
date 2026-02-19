@@ -1265,8 +1265,14 @@ namespace protal {
 
                 std::string gene_covs_str = "";
                 std::string gene_cov_ratios_str = "";
-                std::vector<size_t> gene_covs(120, 0);
-                std::vector<double> gene_cov_ratios(120, 0.0);
+
+                size_t max_gene_id = 0;
+                for (auto& [key, _] : m_taxa) {
+                    auto const& genes = m_genome_loader.GetGenome(key).GetGeneList();
+                    max_gene_id = std::max(max_gene_id, genes.size());
+                }
+                std::vector<size_t> gene_covs(max_gene_id + 1, 0);
+                std::vector<double> gene_cov_ratios(max_gene_id + 1, 0.0);
 
 
 

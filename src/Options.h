@@ -81,7 +81,7 @@ namespace protal {
                 ("build", "Build index from reference file with header format ()")
                 ("full_reference", "All marker genomes (not only representative ones) to check unique k-mers during build process", cxxopts::value<std::string>()->default_value(""))
                 ("reference", "Set of reference sequences to build the internal alignment database from", cxxopts::value<std::string>()->default_value(""))
-                ("build_gene_subset", "Newline-delimited gene ids (1-120) to include during build (subset of marker genes)", cxxopts::value<std::string>()->default_value(""))
+                ("build_gene_subset", "Newline-delimited gene ids (>=1) to include during build (subset of marker genes)", cxxopts::value<std::string>()->default_value(""))
                 ("preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
 
                 ("profile_truth", "Provide truth file and annotate profile taxa with TP/FP. Format is list of integers (internal ids)", cxxopts::value<std::string>()->default_value(""))
@@ -1264,7 +1264,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     exit(9);
                 }
 
-                build_gene_mask.assign(121, 0);
+                build_gene_mask.assign(1, 0);
                 auto trim = [](std::string &s) {
                     size_t start = 0;
                     while (start < s.size() && std::isspace(static_cast<unsigned char>(s[start]))) start++;
@@ -1281,9 +1281,12 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                         exit(9);
                     }
                     size_t gene_id = std::stoul(line);
-                    if (gene_id < 1 || gene_id > 120) {
-                        std::cerr << "Gene id out of range (1-120): " << gene_id << std::endl;
+                    if (gene_id < 1) {
+                        std::cerr << "Gene id out of range (>=1): " << gene_id << std::endl;
                         exit(9);
+                    }
+                    if (gene_id >= build_gene_mask.size()) {
+                        build_gene_mask.resize(gene_id + 1, 0);
                     }
                     build_gene_mask[gene_id] = 1;
                 }

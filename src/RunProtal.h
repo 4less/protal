@@ -1113,7 +1113,7 @@ namespace protal {
 //        std::cout << "MULTIALLELIC: " << taxid << " " << taxon_name << std::endl;
         std::vector<uint32_t> selected_genes = SelectGenesForTaxon(taxid, taxon_name, profile_indices, loader, options, profiles);
 
-        ProgressBar prog(120);
+        ProgressBar prog(selected_genes.size());
 
         std::cout << taxid << ": " << taxon_name << " across samples " << profile_indices.size() << std::endl;
         

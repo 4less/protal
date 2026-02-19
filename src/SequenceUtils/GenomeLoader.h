@@ -124,7 +124,7 @@ namespace protal {
         using GeneList = std::vector<Gene>;
 
     private:
-        using GeneID = uint16_t;
+        using GeneID = uint32_t;
         GeneList m_genes;
         GenomeKey m_key;
         tsl::sparse_set<GeneID> m_hittable_genes;
@@ -199,8 +199,19 @@ namespace protal {
 
         std::vector<uint32_t> GetHittableGenes() {
             std::vector<uint32_t> genes;
-            for (auto i = 1; i <= 120; i++) {
-                if (IsGeneHittable(i)) genes.emplace_back(i);
+            if (m_hittable_genes.empty()) {
+                genes.reserve(m_genes.size());
+                for (auto const& gene : m_genes) {
+                    if (gene.IsSet()) {
+                        genes.emplace_back(gene.GetId());
+                    }
+                }
+            } else {
+                genes.reserve(m_hittable_genes.size());
+                for (auto const& gene_id : m_hittable_genes) {
+                    genes.emplace_back(gene_id);
+                }
+                std::sort(genes.begin(), genes.end());
             }
             return genes;
         }
