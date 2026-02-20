@@ -716,12 +716,70 @@ namespace protal {
                 return (1 - pow((double) (marker_genes_count - 1)/marker_genes_count, mapped_reads)) * marker_genes_count;
             }
 
+            static double ExpectedGenesUniqueWeighted(Taxon const& taxon) {
+                auto const& genome = taxon.GetGenome();
+                auto genes = genome.GetGeneList();
+
+                std::vector<double> weights;
+                weights.reserve(genes.size());
+
+                for (auto const& gene : genes) {
+                    if (!gene.IsSet()) continue;
+                    if (!genome.IsGeneHittable(gene.GetId())) continue;
+
+                    auto [short_unique, long_unique, long_super_unique, total_kmers] = gene.GetUniqueKmerCounts();
+                    (void) short_unique;
+                    (void) long_super_unique;
+                    (void) total_kmers;
+
+                    // Use only reference long-unique k-mer counts as weight.
+                    auto weight = static_cast<double>(long_unique);
+                    if (weight > 0.0) {
+                        weights.emplace_back(weight);
+                    }
+                }
+
+                if (weights.empty()) {
+                    return ExpectedGenes(taxon.GetGenomeGeneNumber(), taxon.LongUniques());
+                }
+
+                auto mapped_unique_hits = taxon.LongUniques();
+                auto total_weight = std::accumulate(weights.begin(), weights.end(), 0.0);
+                if (total_weight <= 0.0) {
+                    return ExpectedGenes(taxon.GetGenomeGeneNumber(), mapped_unique_hits);
+                }
+
+                double expected = 0.0;
+                for (auto weight : weights) {
+                    auto p = weight / total_weight;
+                    expected += 1.0 - std::pow(1.0 - p, static_cast<double>(mapped_unique_hits));
+                }
+                return expected;
+            }
+
             static double ExpectedGenePresence(Taxon const& taxon) {
                 return ExpectedGenes(taxon.GetGenomeGeneNumber(), taxon.TotalHits());
             }
 
             static double ExpectedGenePresenceRatio(Taxon taxon) {
                 return static_cast<double>(taxon.PresentGenes()) / ExpectedGenes(taxon.GetGenomeGeneNumber(), taxon.TotalHits());
+            }
+
+            static double ExpectedGenePresenceUniqueWeighted(Taxon const& taxon) {
+                return ExpectedGenesUniqueWeighted(taxon);
+            }
+
+            static size_t PresentGenesUniqueWeighted(Taxon const& taxon) {
+                auto const& genes = taxon.GetGenes();
+                return std::count_if(genes.begin(), genes.end(), [](auto const& pair) {
+                    return pair.second.LongUniques() > 0;
+                });
+            }
+
+            static double ExpectedGenePresenceRatioUniqueWeighted(Taxon const& taxon) {
+                auto expected = ExpectedGenePresenceUniqueWeighted(taxon);
+                if (expected <= 0.0) return 0.0;
+                return static_cast<double>(PresentGenesUniqueWeighted(taxon)) / expected;
             }
 
             bool Formula1(Taxon const& taxon) const {
@@ -1042,6 +1100,8 @@ namespace protal {
                 os << "mean_ani" << '\t';
                 os << "expected_gene_presence" << '\t';
                 os << "expected_gene_presence_ratio" << '\t';
+                os << "expected_gene_presence_unique_weighted" << '\t';
+                os << "expected_gene_presence_ratio_unique_weighted" << '\t';
                 os << "uniqueness" << '\t';
                 os << "mean_mapq" << '\t';
                 os << "variance1" << '\t';
@@ -1124,6 +1184,8 @@ namespace protal {
                     os << taxon.GetMeanANI() << "\t"; // mean_ani
                     os << TaxonFilter::ExpectedGenePresence(taxon) << '\t'; // expected_gene_presence
                     os << TaxonFilter::ExpectedGenePresenceRatio(taxon) << '\t'; // expected_gene_presence_ratio
+                    os << TaxonFilter::ExpectedGenePresenceUniqueWeighted(taxon) << '\t'; // expected_gene_presence_unique_weighted
+                    os << TaxonFilter::ExpectedGenePresenceRatioUniqueWeighted(taxon) << '\t'; // expected_gene_presence_ratio_unique_weighted
                     os << taxon.Uniqueness() << '\t'; //10 uniqueness
                     os << taxon.GetMeanMAPQ() << '\t'; // mean_mapq
                     os << taxon.GetGeneVariance(1) << '\t'; // variance1
