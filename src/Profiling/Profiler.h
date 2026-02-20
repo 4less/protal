@@ -1094,6 +1094,7 @@ namespace protal {
                 os << "truth" << '\t'; 
                 os << "prediction" << '\t';
                 os << "taxon" << '\t';
+                os << "taxon_name" << '\t';
                 os << "present_genes" << '\t';
                 os << "total_hits" << '\t';
                 os << "unique_hits" << '\t';
@@ -1178,6 +1179,7 @@ namespace protal {
                     os << positive << "\t"; // truth
                     os << prediction << "\t"; // prediction
                     os << key << "\t"; // taxon
+                    os << taxon.GetName() << "\t"; // taxon_name
                     os << taxon.PresentGenes() << "\t"; // present genes
                     os << taxon.TotalHits() << "\t"; // total_hits
                     os << taxon.UniqueHits() << "\t"; // unique_hits
