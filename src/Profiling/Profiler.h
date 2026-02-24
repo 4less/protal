@@ -903,6 +903,8 @@ namespace protal {
                 m_sample["mean_ani"] = std::to_string(taxon.GetMeanANI());
                 m_sample["expected_gene_presence"] = std::to_string(TaxonFilter::ExpectedGenePresence(taxon));
                 m_sample["expected_gene_presence_ratio"] = std::to_string(TaxonFilter::ExpectedGenePresenceRatio(taxon));
+                m_sample["expected_gene_presence_unique_weighted"] = std::to_string(TaxonFilter::ExpectedGenePresenceUniqueWeighted(taxon));
+                m_sample["expected_gene_presence_ratio_unique_weighted"] = std::to_string(TaxonFilter::ExpectedGenePresenceRatioUniqueWeighted(taxon));
                 m_sample["uniqueness"] = std::to_string(taxon.Uniqueness());
                 m_sample["mean_mapq"] = std::to_string(taxon.GetMeanMAPQ());
 
