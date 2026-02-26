@@ -2,8 +2,10 @@
 #include "CommunityProfileDesigner.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <numeric>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <unordered_map>
@@ -43,6 +45,71 @@ static bool has_rank_prefix(const std::string& token) {
         default:
             return false;
     }
+}
+
+static bool has_species_request_prefix(const std::string& token) {
+    if (token.size() < 3 || token[1] != '_' || token[2] != '_') {
+        return false;
+    }
+    switch (token[0]) {
+        case 'p':
+        case 'c':
+        case 'o':
+        case 'f':
+        case 'g':
+        case 's':
+        case 'd':
+            return true;
+        default:
+            return false;
+    }
+}
+
+static std::optional<std::string> swap_primary_species_separator(const std::string& token) {
+    for (std::size_t i = 0; i + 1 < token.size(); ++i) {
+        if (token[i] != '_' && token[i] != ' ') {
+            continue;
+        }
+        if (!std::islower(static_cast<unsigned char>(token[i + 1]))) {
+            continue;
+        }
+        std::string swapped = token;
+        swapped[i] = token[i] == '_' ? ' ' : '_';
+        return swapped;
+    }
+    return std::nullopt;
+}
+
+static std::vector<std::string> build_species_query_variants(const std::string& requested) {
+    std::vector<std::string> variants;
+    variants.push_back(requested);
+    if (has_species_request_prefix(requested) && requested.size() > 3) {
+        variants.push_back(requested.substr(3));
+    }
+
+    const std::size_t seed_count = variants.size();
+    for (std::size_t i = 0; i < seed_count; ++i) {
+        auto swapped = swap_primary_species_separator(variants[i]);
+        if (!swapped.has_value()) {
+            continue;
+        }
+        if (std::find(variants.begin(), variants.end(), *swapped) == variants.end()) {
+            variants.push_back(std::move(*swapped));
+        }
+    }
+    return variants;
+}
+
+static std::optional<std::string> resolve_requested_species(
+    const std::string& requested,
+    const std::unordered_map<std::string, std::vector<GenomeRecord>>& grouped) {
+    const auto variants = build_species_query_variants(requested);
+    for (const auto& variant : variants) {
+        if (grouped.find(variant) != grouped.end()) {
+            return variant;
+        }
+    }
+    return std::nullopt;
 }
 
 static std::string strip_rank_prefix(const std::string& token) {
@@ -251,10 +318,14 @@ std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
     std::unordered_set<std::string> include_species_set;
     include_species_set.reserve(options.include_species.size());
     for (const auto& spec : options.include_species) {
-        if (!include_species_set.insert(spec).second) {
-            continue;  // ignore duplicates
+        auto resolved = resolve_requested_species(spec, grouped);
+        if (!resolved.has_value()) {
+            throw std::runtime_error("Requested species not found: " + spec);
         }
-        auto it = grouped.find(spec);
+        if (!include_species_set.insert(*resolved).second) {
+            continue;  // ignore duplicates (including alias duplicates)
+        }
+        auto it = grouped.find(*resolved);
         if (it == grouped.end() || it->second.empty()) {
             throw std::runtime_error("Requested species not found: " + spec);
         }
@@ -262,9 +333,9 @@ std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
         if (strains.empty()) {
             continue;
         }
-        selected_species.emplace_back(spec, std::move(strains));
-        selected_set.insert(spec);
-        reduce_genus_quota(spec);
+        selected_species.emplace_back(*resolved, std::move(strains));
+        selected_set.insert(*resolved);
+        reduce_genus_quota(*resolved);
     }
 
     std::size_t requested_total = include_species_set.size();
