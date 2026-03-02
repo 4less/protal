@@ -210,7 +210,7 @@ namespace protal {
 //        size_t ctrl_block_frequency_bitshift = 4;
 
         // Bytespace a controlblock takes up
-        size_t ctrl_block_byte_size = 4; // Byte
+        size_t ctrl_block_byte_size = 8; // Byte
         size_t ctrl_block_cell_size = ctrl_block_byte_size/sizeof(KeyMap_t); // Byte
         size_t ctrl_block_byte_size_shift = log2(ctrl_block_cell_size);
 //        size_t ctrl_block_byte_size_shift = 2;
@@ -372,8 +372,8 @@ namespace protal {
             uint64_t block_start_idx = ControlBlockIndex(main_key);
             uint64_t block_end_idx = block_start_idx + m_keys_per_ctrl_block + ctrl_block_cell_size;
 
-            uint64_t block_value_start_idx = *((uint32_t *) (m_keymap + block_start_idx));
-            uint64_t block_value_end_idx = *((uint32_t *) (m_keymap + block_end_idx));
+            uint64_t block_value_start_idx = *((uint64_t *) (m_keymap + block_start_idx));
+            uint64_t block_value_end_idx = *((uint64_t *) (m_keymap + block_end_idx));
             uint64_t block_value_size = block_value_end_idx - block_value_start_idx;
 
             if (!block_value_size) {
@@ -417,8 +417,8 @@ namespace protal {
             uint64_t block_start_idx = ControlBlockIndex(main_key);
             uint64_t block_end_idx = block_start_idx + m_keys_per_ctrl_block + ctrl_block_cell_size;
 
-            uint64_t block_value_start_idx = *((uint32_t *) (m_keymap + block_start_idx));
-            uint64_t block_value_end_idx = *((uint32_t *) (m_keymap + block_end_idx));
+            uint64_t block_value_start_idx = *((uint64_t *) (m_keymap + block_start_idx));
+            uint64_t block_value_end_idx = *((uint64_t *) (m_keymap + block_end_idx));
             uint64_t block_value_size = block_value_end_idx - block_value_start_idx;
 
             if (!block_value_size) {
@@ -498,8 +498,8 @@ namespace protal {
             uint64_t block_start_idx = ControlBlockIndex(key);
             uint64_t block_end_idx = block_start_idx + m_keys_per_ctrl_block + ctrl_block_cell_size;
 
-            uint64_t block_value_start_idx = *((uint32_t*) (m_keymap + block_start_idx ) );
-            uint64_t block_value_end_idx = *((uint32_t*) (m_keymap + block_end_idx) );
+            uint64_t block_value_start_idx = *((uint64_t*) (m_keymap + block_start_idx ) );
+            uint64_t block_value_end_idx = *((uint64_t*) (m_keymap + block_end_idx) );
             uint64_t block_value_size = block_value_end_idx - block_value_start_idx;
 
             if (!block_value_size) {
@@ -611,8 +611,8 @@ namespace protal {
             uint64_t block_start_idx = ControlBlockIndex(main_key);
             uint64_t block_end_idx = block_start_idx + m_keys_per_ctrl_block + ctrl_block_cell_size;
 
-            uint64_t block_value_start_idx = *((uint32_t*) (m_keymap + block_start_idx ) );
-            uint64_t block_value_end_idx = *((uint32_t*) (m_keymap + block_end_idx) );
+            uint64_t block_value_start_idx = *((uint64_t*) (m_keymap + block_start_idx ) );
+            uint64_t block_value_end_idx = *((uint64_t*) (m_keymap + block_end_idx) );
             uint64_t block_value_size = block_value_end_idx - block_value_start_idx;
 
             if (!block_value_size) {
@@ -838,7 +838,7 @@ namespace protal {
             });
         }
 
-        void BuildValuePointersBlockThirdIteration(subkey* subkey, uint64_t block_start_index, uint32_t& global_position) {
+        void BuildValuePointersBlockThirdIteration(subkey* subkey, uint64_t block_start_index, uint64_t& global_position) {
             uint64_t local_position = 0;
             for (auto key_pos = 0; key_pos < m_keys_per_ctrl_block; key_pos++) {
                 m_keymap[block_start_index + key_pos] = local_position;
@@ -850,17 +850,17 @@ namespace protal {
             }
         }
 
-        void BuildValuePointersBlock(uint64_t block, uint32_t& global_position,
+        void BuildValuePointersBlock(uint64_t block, uint64_t& global_position,
                                      size_t& count_failed_demand, size_t& count_total_stored, size_t& count_total_demand,
                                      int* kmer_frequencies, uint64_t& max_keyblock_size, subkey* subkey) {
 
-            uint32_t* control_ptr = nullptr;
+            uint64_t* control_ptr = nullptr;
             auto block_index = block * (m_keys_per_ctrl_block + ctrl_block_cell_size);
             auto block_start_index = block_index + ctrl_block_cell_size;
 
             uint64_t total_count = 0;
 
-            control_ptr = (uint32_t*) (m_keymap + block_index);
+            control_ptr = (uint64_t*) (m_keymap + block_index);
             *control_ptr = global_position;
 
 
@@ -895,8 +895,8 @@ namespace protal {
             size_t non_uniques = 0;
             for (size_t key = 0; key < keymap_max; key += m_keys_per_ctrl_block) {
                 auto ctrl_block_keys_index = ControlBlockIndex(key);
-                auto ctrl_block_values_begin = *((uint32_t*)(m_keymap + ctrl_block_keys_index));
-                auto ctrl_block_values_end = *((uint32_t*)(m_keymap + ctrl_block_keys_index + m_keys_per_ctrl_block + ctrl_block_cell_size));
+                auto ctrl_block_values_begin = *((uint64_t*)(m_keymap + ctrl_block_keys_index));
+                auto ctrl_block_values_end = *((uint64_t*)(m_keymap + ctrl_block_keys_index + m_keys_per_ctrl_block + ctrl_block_cell_size));
                 auto ctrl_block_values_size = ctrl_block_values_end - ctrl_block_values_begin;
 
                 if (!silence_zero_keys)
@@ -1036,8 +1036,8 @@ namespace protal {
             size_t non_uniques = 0;
             for (size_t key = 0; key < keymap_max; key += m_keys_per_ctrl_block) {
                 auto ctrl_block_keys_index = ControlBlockIndex(key);
-                auto ctrl_block_values_begin = *((uint32_t*)(m_keymap + ctrl_block_keys_index));
-                auto ctrl_block_values_end = *((uint32_t*)(m_keymap + ctrl_block_keys_index + m_keys_per_ctrl_block + ctrl_block_cell_size));
+                auto ctrl_block_values_begin = *((uint64_t*)(m_keymap + ctrl_block_keys_index));
+                auto ctrl_block_values_end = *((uint64_t*)(m_keymap + ctrl_block_keys_index + m_keys_per_ctrl_block + ctrl_block_cell_size));
                 auto ctrl_block_values_size = ctrl_block_values_end - ctrl_block_values_begin;
 
                 if (!silence_zero_keys)
@@ -1133,9 +1133,9 @@ namespace protal {
 
         void BuildValuePointers() {
             uint32_t control_idx = 0;
-            uint32_t* control_ptr = (uint32_t*) m_keymap;
+            uint64_t* control_ptr = (uint64_t*) m_keymap;
 
-            uint32_t global_position = 0;
+            uint64_t global_position = 0;
             uint64_t num_ctrl_blocks = keymap_size >> ctrl_block_frequency_bitshift;
             std::cout << "number ctrl blocks: " << num_ctrl_blocks << std::endl;
             uint64_t max_keyblock_size = max_key_ubiquity*2;
@@ -1157,7 +1157,7 @@ namespace protal {
             }
 
             // set last control pointer
-            control_ptr = (uint32_t*) (m_keymap + keymap_size_total - ctrl_block_cell_size);
+            control_ptr = (uint64_t*) (m_keymap + keymap_size_total - ctrl_block_cell_size);
             *control_ptr = global_position;
             values_size = global_position;
             std::cout << "ctrl_block_cell_size: " << ctrl_block_cell_size << std::endl;
@@ -1195,8 +1195,8 @@ namespace protal {
             size_t non_empty_block_count = 0;
             for (auto key = 0; key < keymap_max; key++) {
                 auto ctrl_block = ControlBlockIndex(key);
-                auto value_block_idx_start = *((uint32_t*) (m_keymap + ctrl_block));
-                auto value_block_idx_end = *((uint32_t*) (m_keymap + ctrl_block + m_keys_per_ctrl_block + ctrl_block_cell_size));
+                auto value_block_idx_start = *((uint64_t*) (m_keymap + ctrl_block));
+                auto value_block_idx_end = *((uint64_t*) (m_keymap + ctrl_block + m_keys_per_ctrl_block + ctrl_block_cell_size));
                 auto value_block_size = value_block_idx_end - value_block_idx_start;
 
                 std::sort(m_map+value_block_idx_start,m_map+value_block_idx_end);
@@ -1235,8 +1235,8 @@ namespace protal {
         void PrintBlock(size_t key) {
             std::cout << "Print block key: " << KmerUtils::ToString(key, m_main_bits) << std::endl;
             auto ctrl_block_keys_index = ControlBlockIndex(key);
-            auto ctrl_block_values_begin = *((uint32_t*)(m_keymap + ctrl_block_keys_index));
-            auto ctrl_block_values_end = *((uint32_t*)(m_keymap + ctrl_block_keys_index + m_keys_per_ctrl_block + ctrl_block_cell_size));
+            auto ctrl_block_values_begin = *((uint64_t*)(m_keymap + ctrl_block_keys_index));
+            auto ctrl_block_values_end = *((uint64_t*)(m_keymap + ctrl_block_keys_index + m_keys_per_ctrl_block + ctrl_block_cell_size));
             auto ctrl_block_values_size = ctrl_block_values_end - ctrl_block_values_begin;
 
             std::cout << "\n#######################################\n## KEY ARRAY ###########################~\n" << std::endl;
