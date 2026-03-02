@@ -14,6 +14,7 @@
 #include "Utilities.h"
 #include <bit>
 #include <bits/stdc++.h>
+#include "protal_config.h"
 
 namespace protal {
     template<uint64_t taxid_bits, uint64_t geneid_bits, uint64_t genepos_bits>
@@ -170,6 +171,14 @@ namespace protal {
 
     class Seedmap {
     public:
+        static constexpr uint64_t kFileMagic = 0x505258534545444dllu;
+        static constexpr uint32_t kIndexVersionMajor = protal_VERSION_MAJOR;
+        static constexpr uint32_t kIndexVersionMinor = protal_VERSION_MINOR;
+        static constexpr uint32_t kIndexVersionPatch = protal_VERSION_PATCH;
+        static constexpr uint32_t kOldestCompatibleIndexVersionMajor = 0;
+        static constexpr uint32_t kOldestCompatibleIndexVersionMinor = 3;
+        static constexpr uint32_t kOldestCompatibleIndexVersionPatch = 0;
+
         // If a 15-mer has more than 8 locations, use flexi-k approach
         size_t m_exact_k = 15;
         size_t m_main_bits = m_exact_k * 2;
@@ -271,11 +280,80 @@ namespace protal {
             return (x & 1llu) ? (x >> 1) + 1 : (x >> 1);
         }
 
+        void SaveHeader(std::ostream& ofs) {
+            const uint64_t file_magic = kFileMagic;
+            const uint32_t version_major = kIndexVersionMajor;
+            const uint32_t version_minor = kIndexVersionMinor;
+            const uint32_t version_patch = kIndexVersionPatch;
+            ofs.write((char *) &file_magic, sizeof(file_magic));
+            ofs.write((char *) &version_major, sizeof(version_major));
+            ofs.write((char *) &version_minor, sizeof(version_minor));
+            ofs.write((char *) &version_patch, sizeof(version_patch));
+        }
+
+        void LoadHeader(std::istream& ifs) {
+            uint64_t file_magic = 0;
+            uint32_t version_major = 0;
+            uint32_t version_minor = 0;
+            uint32_t version_patch = 0;
+
+            ifs.read((char *) &file_magic, sizeof(file_magic));
+            ifs.read((char *) &version_major, sizeof(version_major));
+            ifs.read((char *) &version_minor, sizeof(version_minor));
+            ifs.read((char *) &version_patch, sizeof(version_patch));
+
+            if (!ifs) {
+                std::cerr << "Failed to read index header from index.prx" << std::endl;
+                exit(8);
+            }
+
+            if (file_magic != kFileMagic) {
+                std::cerr << "Unsupported index.prx format: missing or invalid file header. "
+                          << "This binary expects indices written by protal version "
+                          << kOldestCompatibleIndexVersionMajor << "."
+                          << kOldestCompatibleIndexVersionMinor << "."
+                          << kOldestCompatibleIndexVersionPatch
+                          << " or newer" << std::endl;
+                exit(8);
+            }
+
+            const bool too_old =
+                    version_major < kOldestCompatibleIndexVersionMajor ||
+                    (version_major == kOldestCompatibleIndexVersionMajor &&
+                     version_minor < kOldestCompatibleIndexVersionMinor) ||
+                    (version_major == kOldestCompatibleIndexVersionMajor &&
+                     version_minor == kOldestCompatibleIndexVersionMinor &&
+                     version_patch < kOldestCompatibleIndexVersionPatch);
+
+            const bool too_new =
+                    version_major > kIndexVersionMajor ||
+                    (version_major == kIndexVersionMajor &&
+                     version_minor > kIndexVersionMinor) ||
+                    (version_major == kIndexVersionMajor &&
+                     version_minor == kIndexVersionMinor &&
+                     version_patch > kIndexVersionPatch);
+
+            if (too_old || too_new) {
+                std::cerr << "Unsupported index.prx version "
+                          << version_major << "." << version_minor << "." << version_patch
+                          << ". This binary supports indices written by protal versions "
+                          << kOldestCompatibleIndexVersionMajor << "."
+                          << kOldestCompatibleIndexVersionMinor << "."
+                          << kOldestCompatibleIndexVersionPatch
+                          << " to "
+                          << kIndexVersionMajor << "."
+                          << kIndexVersionMinor << "."
+                          << kIndexVersionPatch << std::endl;
+                exit(8);
+            }
+        }
+
         void Save(std::string file) {
 
 //            SortForKeys();
 
             std::ofstream ofs(file, std::ios::binary);
+            SaveHeader(ofs);
             ofs.write((char *) &keymap_size, sizeof(keymap_size));
             ofs.write((char *) &keymap_size_total, sizeof(keymap_size_total));
             ofs.write((char *) &ctrl_block_byte_size, sizeof(ctrl_block_byte_size));
@@ -293,6 +371,7 @@ namespace protal {
         void Save(std::ostream& ofs) {
 //            SortForKeys();
 
+            SaveHeader(ofs);
             ofs.write((char *) &keymap_size, sizeof(keymap_size));
             ofs.write((char *) &keymap_size_total, sizeof(keymap_size_total));
             ofs.write((char *) &ctrl_block_byte_size, sizeof(ctrl_block_byte_size));
@@ -306,6 +385,7 @@ namespace protal {
         }
 
         void Load(std::istream &ifs) {
+            LoadHeader(ifs);
             ifs.read((char *) &keymap_size, sizeof(keymap_size));
             ifs.read((char *) &keymap_size_total, sizeof(keymap_size_total));
             ifs.read((char *) &ctrl_block_byte_size, sizeof(ctrl_block_byte_size));
@@ -325,6 +405,7 @@ namespace protal {
 
             std::ifstream ifs(file, std::ios::binary);
 
+            LoadHeader(ifs);
             ifs.read((char *) &keymap_size, sizeof(keymap_size));
             ifs.read((char *) &keymap_size_total, sizeof(keymap_size_total));
             ifs.read((char *) &ctrl_block_byte_size, sizeof(ctrl_block_byte_size));
