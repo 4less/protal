@@ -677,6 +677,11 @@ std::string protal::taxonomy::IntTaxonomy::LineageStr(int t, const std::vector<s
         auto node = map.at(nid);
 
         auto it = std::find(ranks.begin(), ranks.end(), node.rank);
+        if (it == ranks.end() && node.rank == "superkingdom") {
+            it = std::find(ranks.begin(), ranks.end(), "domain");
+        } else if (it == ranks.end() && node.rank == "domain") {
+            it = std::find(ranks.begin(), ranks.end(), "superkingdom");
+        }
         if (it != ranks.end()) {
             int index = it - ranks.begin();
             result[index] = node.scientific_name;
@@ -690,7 +695,7 @@ std::string protal::taxonomy::IntTaxonomy::LineageStr(int t, const std::vector<s
     }
 
 //    return lineage;
-    return Utils::join(result, "|");
+    return Utils::join(result, divider);
 }
 
 std::string protal::taxonomy::IntTaxonomy::LineageExternalIds(int t, const std::vector<std::string> ranks, std::string divider)  {

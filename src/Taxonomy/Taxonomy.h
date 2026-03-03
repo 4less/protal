@@ -221,7 +221,7 @@ namespace protal::taxonomy {
 
         std::string LineageExternal(int t, std::string divider=";");
 
-        std::string LineageStr(int t, const std::vector<std::string> ranks={ "phylum", "class", "order", "family", "genus", "species" }, std::string divider=";");
+        std::string LineageStr(int t, const std::vector<std::string> ranks={ "domain", "phylum", "class", "order", "family", "genus", "species" }, std::string divider=";");
 
         std::string LineageExternalIds(int t, const std::vector<std::string> ranks, std::string divider);
 

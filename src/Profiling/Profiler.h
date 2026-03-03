@@ -1401,13 +1401,13 @@ namespace protal {
                     auto node = taxonomy.Get(key);
 
                     if (prediction) {
-                        os_filtered << node.rep_genome << '\t' << "d__Bacteria|" << taxonomy.LineageStr(key) << '\t' << taxon.GetAbundance(total_vcov) << std::endl;
+                        os_filtered << node.rep_genome << '\t' << taxonomy.LineageStr(key) << '\t' << taxon.GetAbundance(total_vcov) << std::endl;
                     }
 
 
                     // Print all outputs
                     if (os_total) {
-                        *os_total << (prediction ? "1" : "0") << "\t" << node.rep_genome << '\t' << "d__Bacteria|" << taxonomy.LineageStr(key) << '\t' << (prediction ? taxon.GetAbundance(total_vcov) : 0);
+                        *os_total << (prediction ? "1" : "0") << "\t" << node.rep_genome << '\t' << taxonomy.LineageStr(key) << '\t' << (prediction ? taxon.GetAbundance(total_vcov) : 0);
                         *os_total << '\t' << taxon.VCovStdDev();
                         *os_total << '\t' << taxon.GetGeneVariance();
                         *os_total << '\t' << taxon.GetGeneVariance(5);
