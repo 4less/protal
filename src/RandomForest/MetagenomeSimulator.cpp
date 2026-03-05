@@ -287,6 +287,47 @@ std::unordered_map<std::string, std::size_t> parse_genus_selection(const std::st
     return genus_counts;
 }
 
+std::unordered_map<std::string, std::size_t> parse_taxon_selection(const std::string& text) {
+    std::unordered_map<std::string, std::size_t> taxon_counts;
+    auto trim = [](std::string s) {
+        s.erase(s.begin(),
+                std::find_if(s.begin(), s.end(), [](unsigned char c) { return !std::isspace(c); }));
+        s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char c) { return !std::isspace(c); }).base(), s.end());
+        return s;
+    };
+
+    std::size_t start = 0;
+    while (start < text.size()) {
+        auto end = text.find(',', start);
+        if (end == std::string::npos) {
+            end = text.size();
+        }
+        std::string token = trim(text.substr(start, end - start));
+        if (!token.empty()) {
+            auto sep = token.find(':');
+            if (sep == std::string::npos) {
+                throw std::runtime_error("Invalid --taxon entry (expected taxon:count): " + token);
+            }
+            std::string taxon = trim(token.substr(0, sep));
+            std::string count_str = trim(token.substr(sep + 1));
+            if (taxon.empty() || count_str.empty()) {
+                throw std::runtime_error("Invalid --taxon entry (missing taxon or count): " + token);
+            }
+            std::size_t count = 0;
+            try {
+                count = static_cast<std::size_t>(std::stoull(count_str));
+            } catch (const std::exception&) {
+                throw std::runtime_error("Invalid --taxon count for entry: " + token);
+            }
+            if (count > 0) {
+                taxon_counts[taxon] += count;
+            }
+        }
+        start = end + 1;
+    }
+    return taxon_counts;
+}
+
 void write_sample_manifest(const SampleOutput& sample, const fs::path& manifest_path) {
     if (!manifest_path.parent_path().empty()) {
         fs::create_directories(manifest_path.parent_path());

@@ -272,11 +272,35 @@ std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
     auto grouped = group_by_species();
     std::unordered_map<std::string, std::vector<std::string>> genus_to_species;
     std::unordered_map<std::string, std::string> species_to_genus;
+    std::unordered_map<std::string, std::vector<std::string>> taxon_to_species;
+    std::unordered_map<std::string, std::unordered_set<std::string>> species_to_taxa;
     for (const auto& [spec, genomes] : grouped) {
         const std::string genus =
             genomes.empty() ? std::string{"unknown_genus"} : extract_genus(genomes.front().taxonomy);
         species_to_genus.emplace(spec, genus);
         genus_to_species[genus].push_back(spec);
+        if (!genomes.empty()) {
+            auto tokens = split_taxonomy(genomes.front().taxonomy);
+            if (has_mixed_rank_prefixes(tokens)) {
+                throw std::runtime_error("GTDB taxonomy lineage is invalid (mixed prefix usage): " +
+                                         genomes.front().taxonomy);
+            }
+            const bool ordered_prefixes = has_ordered_rank_prefixes(tokens);
+            for (const auto& token : tokens) {
+                if (token.empty()) {
+                    continue;
+                }
+                taxon_to_species[token].push_back(spec);
+                species_to_taxa[spec].insert(token);
+                if (ordered_prefixes) {
+                    const std::string stripped = strip_rank_prefix(token);
+                    if (!stripped.empty()) {
+                        taxon_to_species[stripped].push_back(spec);
+                        species_to_taxa[spec].insert(stripped);
+                    }
+                }
+            }
+        }
     }
 
     std::vector<std::pair<std::string, std::vector<GenomeRecord>>> selected_species;
@@ -305,12 +329,21 @@ std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
     };
 
     auto genus_remaining = options.genus_species_counts;
-    auto reduce_genus_quota = [&](const std::string& species) {
+    auto taxon_remaining = options.taxon_species_counts;
+    auto reduce_requested_quotas = [&](const std::string& species) {
         auto it_genus = species_to_genus.find(species);
         if (it_genus != species_to_genus.end()) {
             auto it_quota = genus_remaining.find(it_genus->second);
             if (it_quota != genus_remaining.end() && it_quota->second > 0) {
                 --it_quota->second;
+            }
+        }
+        auto it_taxa = species_to_taxa.find(species);
+        if (it_taxa != species_to_taxa.end()) {
+            for (auto& [taxon, remaining] : taxon_remaining) {
+                if (remaining > 0 && it_taxa->second.count(taxon) > 0) {
+                    --remaining;
+                }
             }
         }
     };
@@ -335,15 +368,18 @@ std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
         }
         selected_species.emplace_back(*resolved, std::move(strains));
         selected_set.insert(*resolved);
-        reduce_genus_quota(*resolved);
+        reduce_requested_quotas(*resolved);
     }
 
     std::size_t requested_total = include_species_set.size();
     for (const auto& [_, remaining] : genus_remaining) {
         requested_total += remaining;
     }
+    for (const auto& [_, remaining] : taxon_remaining) {
+        requested_total += remaining;
+    }
     if (requested_total > options.species_per_sample) {
-        throw std::runtime_error("Requested species/genus counts exceed species-per-sample");
+        throw std::runtime_error("Requested species/genus/taxon counts exceed species-per-sample");
     }
 
     std::vector<std::pair<std::string, std::size_t>> genus_requests(
@@ -368,7 +404,33 @@ std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
             if (strains.empty()) continue;
             selected_species.emplace_back(species, std::move(strains));
             selected_set.insert(species);
-            --remaining;
+            reduce_requested_quotas(species);
+        }
+    }
+
+    std::vector<std::pair<std::string, std::size_t>> taxon_requests(
+        taxon_remaining.begin(), taxon_remaining.end());
+    std::shuffle(taxon_requests.begin(), taxon_requests.end(), rng);
+    for (auto& [taxon, remaining] : taxon_requests) {
+        if (remaining == 0 || selected_species.size() >= options.species_per_sample) {
+            continue;
+        }
+        auto it = taxon_to_species.find(taxon);
+        if (it == taxon_to_species.end()) {
+            continue;
+        }
+        auto candidates = it->second;
+        std::shuffle(candidates.begin(), candidates.end(), rng);
+        for (const auto& species : candidates) {
+            if (remaining == 0 || selected_species.size() >= options.species_per_sample) break;
+            if (selected_set.count(species) > 0) continue;
+            const auto& genomes = grouped.at(species);
+            if (genomes.empty()) continue;
+            auto strains = pick_strains(genomes);
+            if (strains.empty()) continue;
+            selected_species.emplace_back(species, std::move(strains));
+            selected_set.insert(species);
+            reduce_requested_quotas(species);
         }
     }
 

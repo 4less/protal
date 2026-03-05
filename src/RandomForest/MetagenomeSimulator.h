@@ -19,6 +19,7 @@ std::vector<GenomeRecord> read_genome_table(const std::filesystem::path& tsv_pat
 std::vector<double> parse_strain_probabilities(const std::string& text);
 std::vector<std::string> parse_species_list(const std::string& text);
 std::unordered_map<std::string, std::size_t> parse_genus_selection(const std::string& text);
+std::unordered_map<std::string, std::size_t> parse_taxon_selection(const std::string& text);
 void write_combined_manifest(const std::vector<SampleOutput>& samples, const std::filesystem::path& manifest_path);
 void write_sample_manifest(const SampleOutput& sample, const std::filesystem::path& manifest_path);
 void write_abundance_matrix(const std::vector<SampleOutput>& samples, const std::filesystem::path& matrix_path);

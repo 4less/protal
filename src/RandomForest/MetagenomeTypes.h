@@ -43,6 +43,7 @@ struct ProfileDesignOptions {
     std::vector<std::string> include_species;  // species that must be present in each sample
     std::unordered_map<std::string, std::size_t> genus_species_counts;  // requested species counts per genus
     std::vector<double> strain_probabilities;  // probabilities for adding 2nd, 3rd, ... strain of a species
+    std::unordered_map<std::string, std::size_t> taxon_species_counts;  // requested species counts per taxon token
 };
 
 struct ArtIlluminaOptions {
