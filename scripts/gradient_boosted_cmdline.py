@@ -178,9 +178,12 @@ def save_pmml(
     label_col: str,
     pmml_path: str,
 ) -> bool:
+    import traceback
     try:
         from sklearn2pmml import PMMLPipeline, sklearn2pmml
-    except Exception:
+    except Exception as exc:
+        print(f"sklearn2pmml import failed: {exc}")
+        traceback.print_exc()
         return False
 
     pipeline = PMMLPipeline([("classifier", model)])
@@ -189,6 +192,7 @@ def save_pmml(
         sklearn2pmml(pipeline, pmml_path, with_repr=True)
     except Exception as exc:
         print(f"PMML export failed: {exc}")
+        traceback.print_exc()
         return False
     if not normalize_pmml_double_casts(pmml_path):
         print("PMML cleanup skipped (no double() casts detected).")
