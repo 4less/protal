@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, precision_recall_curve, average_precision_score
 from sklearn.model_selection import GridSearchCV
 
 TRUE_LABEL = "TRUE"
@@ -113,6 +113,12 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int)
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--reference-pmml")
+    parser.add_argument(
+        "--probability",
+        action="store_true",
+        help="Output prediction probabilities (0–1) instead of TRUE/FALSE labels, "
+             "and save a precision-recall curve plot.",
+    )
     return parser.parse_args(argv)
 
 
@@ -235,6 +241,44 @@ def strip_pmml_namespaces(root: ET.Element) -> None:
             del root.attrib[attr]
 
 
+def plot_pr_curve(
+    model: RandomForestClassifier,
+    test_data: pd.DataFrame,
+    label_col: str,
+    output_path: str,
+) -> None:
+    true_idx = list(model.classes_).index(TRUE_LABEL)
+    scores = model.predict_proba(test_data.drop(columns=[label_col]))[:, true_idx]
+    y_true = (test_data[label_col] == TRUE_LABEL).astype(int)
+    prec, rec, thresholds = precision_recall_curve(y_true, scores)
+    ap = average_precision_score(y_true, scores)
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+    # Left: precision-recall curve
+    axes[0].plot(rec, prec, lw=2, label=f"AP = {ap:.3f}")
+    axes[0].set_xlabel("Recall")
+    axes[0].set_ylabel("Precision")
+    axes[0].set_title("Precision-Recall Curve")
+    axes[0].set_xlim([0, 1])
+    axes[0].set_ylim([0, 1])
+    axes[0].legend()
+
+    # Right: precision and recall vs threshold
+    axes[1].plot(thresholds, prec[:-1], lw=2, label="Precision")
+    axes[1].plot(thresholds, rec[:-1], lw=2, label="Recall")
+    axes[1].set_xlabel("Decision threshold")
+    axes[1].set_ylabel("Score")
+    axes[1].set_title("Precision / Recall vs Threshold")
+    axes[1].set_xlim([0, 1])
+    axes[1].set_ylim([0, 1])
+    axes[1].legend()
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+
+
 def main() -> int:
     opts = parse_args()
     rng = np.random.RandomState(opts.seed) if opts.seed is not None else np.random
@@ -321,6 +365,7 @@ def main() -> int:
     varimp_path = f"{prefix}.varimp.tsv"
     rds_path = f"{prefix}.rds"
     varimp_png = f"{prefix}.varimp.png"
+    pr_curve_png = f"{prefix}.pr_curve.png"
 
     pmml_saved = save_pmml(rf, train_data, "truth", pmml_path)
 
@@ -364,6 +409,12 @@ def main() -> int:
     print(f"Saved varimp: {varimp_path}")
     print(f"Saved varimp plot: {varimp_png}")
     print(f"Saved model (joblib): {rds_path}")
+
+    if opts.probability:
+        plot_pr_curve(rf, test_data, "truth", pr_curve_png)
+        print(f"Saved PR curve: {pr_curve_png}")
+        print("Probability mode: use model.predict_proba(X)[:, 1] for float scores (0–1).")
+
     return 0
 
 
