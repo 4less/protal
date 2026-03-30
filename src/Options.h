@@ -85,6 +85,7 @@ namespace protal {
                 ("preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
 
                 ("profile_truth", "Provide truth file and annotate profile taxa with TP/FP. Format is list of integers (internal ids)", cxxopts::value<std::string>()->default_value(""))
+                ("knob", "Prediction threshold: taxa with RF probability >= knob are reported as detected (default 0.5)", cxxopts::value<double>()->default_value("0.5"))
                 ("benchmark_alignment", "Benchmark alignment part of protal based on true taxonomic id and gene id supplied in the read header. Header must fulfill the formatting >taxid_geneid... with the regex: >[0-9]+_[0-9]+([^0-9]+.*)*")
                 ("benchmark_alignment_output", "Benchmark alignment output. Output is appended to the file.", cxxopts::value<std::string>());
 
@@ -145,6 +146,7 @@ namespace protal {
         std::vector<size_t> m_range;
 
         std::string m_profile_truth;
+        double m_knob = 0.5;
 
         size_t m_threads = DEFAULT_THREADS;
 
@@ -348,6 +350,10 @@ namespace protal {
 
         std::string& ProfileTruthFile() {
             return m_profile_truth;
+        }
+
+        double GetKnob() const {
+            return m_knob;
         }
 
         bool PreloadGenomes() const {
@@ -1467,6 +1473,8 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     range,
                     build_gene_mask);
 
+
+            options.m_knob = result["knob"].as<double>();
 
             if (!options.PrepareAndCheckValidity()) {
                 std::cerr << "Exit Program" << std::endl;

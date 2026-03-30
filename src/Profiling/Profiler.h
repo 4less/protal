@@ -845,24 +845,27 @@ namespace protal {
 
         class TaxonFilterForest {
             cpmml::Model m_model{};
+            double m_knob = 0.5;
 
             mutable std::unordered_map<std::string, std::string> m_sample;
 
 
         public:
 
-            TaxonFilterForest(const std::string& path) : m_model(path) {}
+            TaxonFilterForest(const std::string& path, double knob = 0.5) : m_model(path), m_knob(knob) {}
 
             TaxonFilterForest(const TaxonFilterForest& other) :
-                    m_model(other.m_model), m_sample() {
+                    m_model(other.m_model), m_knob(other.m_knob), m_sample() {
             }
 
             TaxonFilterForest(const TaxonFilterForest&& other) :
                     m_model(other.m_model),
+                    m_knob(other.m_knob),
                     m_sample(other.m_sample) {
             }
 
-            bool Pass(Taxon const& taxon) const {
+            // Returns the model's probability for TRUE (0–1).
+            double Score(Taxon const& taxon) const {
                 auto a = taxon.GetAlleles();
                 auto af = taxon.GetAlleles(2, 60);
 
@@ -928,7 +931,7 @@ namespace protal {
                 m_sample["lsu_genome"] = std::to_string(lsu);
                 m_sample["total_genome"] = std::to_string(all); // 33 total genome
 
-                // genome wide unique rates 
+                // genome wide unique rates
                 m_sample["su_rate"] = std::to_string(su == 0 ? 0 : lu/static_cast<double>(all));
                 m_sample["lu_rate"] = std::to_string(lu == 0 ? 0 : lu/static_cast<double>(all));
                 m_sample["lsu_rate"] = std::to_string(lsu == 0 ? 0 : lsu/static_cast<double>(all));
@@ -948,9 +951,13 @@ namespace protal {
                 m_sample["lsu_per_read"] = std::to_string(taxon.LongSuperUniques() == 0 ? 0 : taxon.LongSuperUniques()/static_cast<double>(taxon.TotalHits()));
                 m_sample["lu_per_read"] = std::to_string(taxon.LongUniques() == 0 ? 0 : taxon.LongUniques()/static_cast<double>(taxon.TotalHits()));
 
-                
-                auto prediction_str = m_model.predict(m_sample);
-                return prediction_str == "TRUE";
+                auto dist = m_model.score(m_sample).distribution();
+                auto it = dist.find("TRUE");
+                return it != dist.end() ? it->second : 0.0;
+            }
+
+            bool Pass(Taxon const& taxon) const {
+                return Score(taxon) >= m_knob;
             }
         };
 
@@ -1164,7 +1171,7 @@ namespace protal {
 
                 for (auto& [key, taxon] : m_taxa) {
                     bool positive = set.contains(key);
-                    bool prediction = filter.Pass(taxon);
+                    double prediction = filter.Score(taxon);
                     // std::cout << positive << "\t" << key << "\t" << taxon.GetName() << std::endl;
 
 //                    if (!positive && !prediction) continue;
