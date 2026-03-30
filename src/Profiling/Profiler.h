@@ -24,6 +24,7 @@
 #include "Benchmark.h"
 #include <string>
 #include <ranges>
+#include <cmath>
 
 namespace protal {
     bool IsDigit(std::string &test) {
@@ -953,7 +954,12 @@ namespace protal {
 
                 auto dist = m_model.score(m_sample).distribution();
                 auto it = dist.find("TRUE");
-                return it != dist.end() ? it->second : 0.0;
+                if (it != dist.end() && std::isfinite(it->second)) {
+                    return it->second;
+                }
+                // Fallback: model lacks probability support (no ScoreDistributions or
+                // all record counts are zero). Treat predict() output as hard 0/1.
+                return m_model.predict(m_sample) == "TRUE" ? 1.0 : 0.0;
             }
 
             bool Pass(Taxon const& taxon) const {
