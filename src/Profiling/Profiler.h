@@ -965,6 +965,8 @@ namespace protal {
             bool Pass(Taxon const& taxon) const {
                 return Score(taxon) >= m_knob;
             }
+
+            double GetKnob() const { return m_knob; }
         };
 
         class MicrobialProfile {
@@ -1097,7 +1099,7 @@ namespace protal {
 //                std::cout << "Truth: ________________" << std::endl;
 
 // c(
-//     "dataset", "truth", "prediction", "taxon", "present_genes", "total_hits", "unique_hits", "mean_ani",
+//     "dataset", "truth", "prediction", "probability", "taxon", "present_genes", "total_hits", "unique_hits", "mean_ani",
 //     "expected_gene_presence", "expected_gene_presence_ratio", "uniqueness", "mean_mapq", "variance1", "variance2",
 //     "A0", "A1", "A2", "A3", "A4", "AF0", "AF1", "AF2", "AF3", "AF4", "stddev", "hittable", "lu", "lu_genes",
 //     "lsu", "lsu_genes", "su_genome", "lu_genome", "lsu_genome", "total_genome", "su_rate", "lu_rate", "lsu_rate",
@@ -1106,8 +1108,9 @@ namespace protal {
 //   )
 
                 // Header
-                os << "truth" << '\t'; 
+                os << "truth" << '\t';
                 os << "prediction" << '\t';
+                os << "probability" << '\t';
                 os << "taxon" << '\t';
                 os << "taxon_name" << '\t';
                 os << "present_genes" << '\t';
@@ -1177,7 +1180,8 @@ namespace protal {
 
                 for (auto& [key, taxon] : m_taxa) {
                     bool positive = set.contains(key);
-                    double prediction = filter.Score(taxon);
+                    double probability = filter.Score(taxon);
+                    bool prediction = probability >= filter.GetKnob();
                     // std::cout << positive << "\t" << key << "\t" << taxon.GetName() << std::endl;
 
 //                    if (!positive && !prediction) continue;
@@ -1192,7 +1196,8 @@ namespace protal {
 
 
                     os << positive << "\t"; // truth
-                    os << prediction << "\t"; // prediction
+                    os << prediction << "\t"; // prediction (0/1 based on knob)
+                    os << probability << "\t"; // probability (raw model score 0-1)
                     os << key << "\t"; // taxon
                     os << taxonomy.Get(key).scientific_name << "\t"; // taxon_name
                     os << taxon.PresentGenes() << "\t"; // present genes
@@ -1274,7 +1279,7 @@ namespace protal {
             }
 
             void WriteGeneProfile(taxonomy::IntTaxonomy& taxonomy, TaxonFilterObj const& filter, std::ostream* os) {
-                *os << "Truth\tPredicted\tTaxID\tLineage\tTaxVCOV\tTaxaxAbundance\tGeneID\tGeneRefLength\t"
+                *os << "Truth\tPredicted\tProbability\tTaxID\tLineage\tTaxVCOV\tTaxaxAbundance\tGeneID\tGeneRefLength\t"
                     << "TotalReads\tTotalMappedLength\tMAPQ\tUniqueMers\tUniqueTwoMers\tUniqueTwoMersReads\tUniqueTwoMerReads\tANI\t"
                     << "VCov\tVCovExp\tHCovExp\tHCovObs\tHCovObsRel\tConsistency\n";
 
@@ -1294,7 +1299,8 @@ namespace protal {
                 for (auto& [tax_id, _] : m_taxa) {
                     // this is necessary as taxon cannot be constant
                     auto& taxon = m_taxa.at(tax_id);
-                    bool prediction = filter.Pass(taxon);
+                    double probability = filter.Score(taxon);
+                    bool prediction = probability >= filter.GetKnob();
 
                     auto predicted_vcov = taxon.VerticalCoverage();
                     auto predicted_abundance = predicted_vcov / total_vcov;
@@ -1311,8 +1317,9 @@ namespace protal {
 
 
                         auto name = taxonomy.Get(tax_id).scientific_name;
-                        *os 
+                        *os
                             << prediction << '\t'
+                            << probability << '\t'
                             << tax_id << '\t'
                             << taxonomy.LineageStr(tax_id) << '\t'
                             << predicted_vcov << '\t'
@@ -1368,7 +1375,8 @@ namespace protal {
                 for (auto& [key, _] : m_taxa) {
                     // this is necessary as taxon cannot be constant
                     auto& taxon = m_taxa.at(key);
-                    bool prediction = filter.Pass(taxon);
+                    double probability = filter.Score(taxon);
+                    bool prediction = probability >= filter.GetKnob();
                     one_pass |= prediction;
 
                     gene_covs_str.clear();
@@ -1420,7 +1428,7 @@ namespace protal {
 
                     // Print all outputs
                     if (os_total) {
-                        *os_total << (prediction ? "1" : "0") << "\t" << node.rep_genome << '\t' << taxonomy.LineageStr(key) << '\t' << (prediction ? taxon.GetAbundance(total_vcov) : 0);
+                        *os_total << (prediction ? "1" : "0") << "\t" << probability << "\t" << node.rep_genome << '\t' << taxonomy.LineageStr(key) << '\t' << (prediction ? taxon.GetAbundance(total_vcov) : 0);
                         *os_total << '\t' << taxon.VCovStdDev();
                         *os_total << '\t' << taxon.GetGeneVariance();
                         *os_total << '\t' << taxon.GetGeneVariance(5);

@@ -312,6 +312,7 @@ def main() -> int:
                 "truth_raw",
                 "taxon",
                 "prediction",
+                "probability",
                 "dataset",
             }
         ]
