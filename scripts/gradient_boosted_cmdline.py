@@ -142,7 +142,10 @@ def load_truth_data(path: str) -> pd.DataFrame:
     except Exception as exc:
         raise RuntimeError(f"Failed to read truth file: {exc}") from exc
     for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="ignore")
+        try:
+            df[col] = pd.to_numeric(df[col])
+        except (ValueError, TypeError):
+            pass
     df["dataset"] = "dataset"
     df["truth_raw"] = _as_bool_series(df["truth"])
     if "prediction" in df.columns:
