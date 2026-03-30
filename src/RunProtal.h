@@ -498,7 +498,7 @@ namespace protal {
 
             if (truth.has_value()) {
                 std::string truth_output = options.ProfileFile(i) + ".truth_annotated";
-                profile.AnnotateWithTruth(truth.value(), filter, truth_output);
+                profile.AnnotateWithTruth(truth.value(), filter, truth_output, taxonomy);
                 std::cout << "Write truth to: " << truth_output << std::endl;
 
                 auto filtered = profile.GetTaxa() | std::views::filter([&filter](auto a) { return filter.Pass(a.second); });

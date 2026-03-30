@@ -287,7 +287,7 @@ def main() -> int:
         feature_cols = [
             col
             for col in data.columns
-            if col not in {"total_hits", "truth", "truth_raw", "taxon", "prediction", "dataset"}
+            if col not in {"total_hits", "truth", "truth_raw", "taxon", "taxon_name", "prediction", "dataset"}
         ]
 
     if not feature_cols:

@@ -1085,7 +1085,7 @@ namespace protal {
                 for (auto& [id, _] : m_taxa) m_taxa.at(id).ClearSams();
             }
 
-            void AnnotateWithTruth(TruthSet const& set, TaxonFilterObj& filter, std::string& output) {
+            void AnnotateWithTruth(TruthSet const& set, TaxonFilterObj& filter, std::string& output, taxonomy::IntTaxonomy& taxonomy) {
                 std::ofstream os(output, std::ios::out);
 
 //                std::cout << "Truth: ________________" << std::endl;
@@ -1188,7 +1188,7 @@ namespace protal {
                     os << positive << "\t"; // truth
                     os << prediction << "\t"; // prediction
                     os << key << "\t"; // taxon
-                    os << taxon.GetName() << "\t"; // taxon_name
+                    os << taxonomy.Get(key).scientific_name << "\t"; // taxon_name
                     os << taxon.PresentGenes() << "\t"; // present genes
                     os << taxon.TotalHits() << "\t"; // total_hits
                     os << taxon.UniqueHits() << "\t"; // unique_hits
