@@ -415,6 +415,26 @@ def main() -> int:
         print(f"Saved PR curve: {pr_curve_png}")
         print("Probability mode: use model.predict_proba(X)[:, 1] for float scores (0–1).")
 
+        threshold_path = f"{prefix}.thresholds.tsv"
+        true_idx = list(rf.classes_).index(TRUE_LABEL)
+        scores = rf.predict_proba(test_data.drop(columns=["truth"]))[:, true_idx]
+        y_true = (test_data["truth"] == TRUE_LABEL).astype(int).to_numpy()
+        thresholds = np.arange(0.0, 1.001, 0.001)
+        rows = []
+        for t in thresholds:
+            pred = (scores >= t).astype(int)
+            tp = int(((pred == 1) & (y_true == 1)).sum())
+            fp = int(((pred == 1) & (y_true == 0)).sum())
+            fn = int(((pred == 0) & (y_true == 1)).sum())
+            prec_t = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            sens_t = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            denom = 2 * tp + fp + fn
+            f1_t = (2 * tp) / denom if denom > 0 else 0.0
+            rows.append({"threshold": round(t, 3), "precision": prec_t, "sensitivity": sens_t, "f1": f1_t})
+        thresh_df = pd.DataFrame(rows)
+        thresh_df.to_csv(threshold_path, sep="\t", index=False, float_format="%.6f")
+        print(f"Saved threshold table: {threshold_path}")
+
     return 0
 
 
