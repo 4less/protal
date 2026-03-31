@@ -50,10 +50,7 @@ namespace protal {
                 ("o,outdir", "Overwrites #OUTDIR in map and needs to be defined if #OUTDIR is not defined in the map. If not otherwise specified in the map file, sam files, profiles, msas, and other miscellaneous files will be stored in the subfolders to this directory 'alignments', 'profiles', 'strains', and 'misc'.", cxxopts::value<std::string>())
                 
                 ("map", "For larger datasets you can define parameters -1, -2, --prefix and -o in a tsv-file.", cxxopts::value<std::string>()->default_value(""))
-                ("map_range", "If you specified a map file with --map you can also pass a range to protal to run protal only on a subset. The first entry is 1, the end is inclusive. e.g.: 1-10. If the end open or larger than the number of entries in the map file, the last entry in the map file is selected as end.", cxxopts::value<std::string>()->default_value(""))
-
-                ("no_profile", "Do NOT perform taxonomic profiling, only output alignments.")
-                ("no_strains", "Stay on species level. Do not output SNPs or MSAs. Default is on.");
+                ("map_range", "If you specified a map file with --map you can also pass a range to protal to run protal only on a subset. The first entry is 1, the end is inclusive. e.g.: 1-10. If the end open or larger than the number of entries in the map file, the last entry in the map file is selected as end.", cxxopts::value<std::string>()->default_value(""));
 
         // Alignment / algorithm options
         options.add_options("Alignment")
@@ -66,8 +63,16 @@ namespace protal {
                 ("x,x_drop", "Value determines when to cut of branches in the aligment process that are unpromising. [ Default: " + std::to_string(DEFAULT_X_DROP) + "]", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_X_DROP)))
                 ("e,output_top", "After alignment, alignments are sorted by score. <output_top> specifies how many alignments should be reported starting with the highest scoring alignment.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_OUTPUT_TOP)));
 
+        // Profiling options
+        options.add_options("Profiling")
+                ("no_profile", "Do NOT perform taxonomic profiling, only output alignments.")
+                ("knob", "Prediction threshold: taxa with RF probability >= knob are reported as detected. Higher improves precision, lower improves sensitivity. Values between 0.4 and 0.6 should not affect F1-score by a large margin, but just slightly shift focus from sensitivity to precision.", cxxopts::value<double>()->default_value("0.5"))
+                ("model", "PMML model file. If no extension and not a path, searches for <name>.xml in the database directory. Default: model.xml in database directory.", cxxopts::value<std::string>()->default_value(""))
+                ("profile_dir", "Override profile output directory. Takes precedence over the directory specified in the map file.", cxxopts::value<std::string>()->default_value(""));
+
         // Strain / SNP options
         options.add_options("Strains")
+                ("no_strains", "Stay on species level. Do not output SNPs or MSAs. Default is on.")
                 ("snp_min_cov", "Minimum coverage for calling a SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_COV)))
                 ("snp_min_phred_sum", "Minimum phred sum across all observations of allele to call SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_PHRED_SUM)))
                 ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
@@ -85,7 +90,6 @@ namespace protal {
                 ("preload_genomes_off", "Do not preload complete reference library (reference.fna and reference.map in protal index folder) and instead do dynamic loading. This usually decreases performance but saves memory.")
 
                 ("profile_truth", "Provide truth file and annotate profile taxa with TP/FP. Format is list of integers (internal ids)", cxxopts::value<std::string>()->default_value(""))
-                ("knob", "Prediction threshold: taxa with RF probability >= knob are reported as detected (default 0.5)", cxxopts::value<double>()->default_value("0.5"))
                 ("benchmark_alignment", "Benchmark alignment part of protal based on true taxonomic id and gene id supplied in the read header. Header must fulfill the formatting >taxid_geneid... with the regex: >[0-9]+_[0-9]+([^0-9]+.*)*")
                 ("benchmark_alignment_output", "Benchmark alignment output. Output is appended to the file.", cxxopts::value<std::string>());
 
@@ -146,6 +150,7 @@ namespace protal {
         std::vector<size_t> m_range;
 
         std::string m_profile_truth;
+        std::string m_model;
         double m_knob = 0.5;
 
         size_t m_threads = DEFAULT_THREADS;
@@ -354,6 +359,19 @@ namespace protal {
 
         double GetKnob() const {
             return m_knob;
+        }
+
+        std::string GetModelPath() const {
+            if (m_model.empty()) {
+                return m_database_path + "/model.xml";
+            }
+            std::filesystem::path p(m_model);
+            bool has_extension = !p.extension().empty();
+            bool is_path = p.is_absolute() || m_model.find('/') != std::string::npos || m_model.find('\\') != std::string::npos;
+            if (has_extension || is_path) {
+                return m_model;
+            }
+            return m_database_path + "/" + m_model + ".xml";
         }
 
         bool PreloadGenomes() const {
@@ -694,7 +712,7 @@ namespace protal {
         void PrintHelp(bool show_dev=false) {
             // print groups in desired order, skip groups that start with '_' (hidden)
             auto opt = CxxOptions();
-            std::vector<std::string> groups = { "I/O", "Strains", "General" };
+            std::vector<std::string> groups = { "I/O", "Profiling", "Strains", "General" };
 
             if (show_dev) {
                 groups.push_back("Alignment");
@@ -1406,6 +1424,13 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                 }
             }
 
+            auto profile_dir_override = result["profile_dir"].as<std::string>();
+            if (!profile_dir_override.empty()) {
+                for (auto& profile : profile_list) {
+                    profile = (std::filesystem::path(profile_dir_override) / std::filesystem::path(profile).filename()).string();
+                }
+            }
+
             auto benchmark_alignment_output_file = result.count("benchmark_alignment_output") ? result["benchmark_alignment_output"].as<std::string>() : "";
 
             std::string db_path;
@@ -1475,6 +1500,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
 
             options.m_knob = result["knob"].as<double>();
+            options.m_model = result["model"].as<std::string>();
 
             if (!options.PrepareAndCheckValidity()) {
                 std::cerr << "Exit Program" << std::endl;

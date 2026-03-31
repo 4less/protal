@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(protal VERSION 0.5.0)
+project(protal VERSION 0.5.1)
 
 message("CONDA_PREFIX: $ENV{CONDA_PREFIX}")
 message("PATH: $ENV{PATH}")

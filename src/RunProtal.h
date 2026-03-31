@@ -385,7 +385,7 @@ namespace protal {
         using TaxonFilterObj = profiler::TaxonFilterObj;
 //        TaxonFilterObj filter(min_ani, min_gene_presence, min_total_hits, min_mean_mapq);
 
-        std::string model_path = options.GetIndexFolder() + "/random_forest.xml";
+        std::string model_path = options.GetModelPath();
         TaxonFilterObj filter(model_path, options.GetKnob());
 
         // ProgressBar prog;
@@ -1469,7 +1469,7 @@ namespace protal {
 
 //            profiler::TaxonFilter filter(min_ani, min_gene_presence, min_total_hits, min_mean_mapq);
 
-            std::string model = options.GetIndexFolder() + "/random_forest.xml";
+            std::string model = options.GetModelPath();
             // std::cout << "Model: " << model << std::endl;
 
             profiler::TaxonFilterObj filter(model, options.GetKnob());
