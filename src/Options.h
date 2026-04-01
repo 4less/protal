@@ -363,7 +363,15 @@ namespace protal {
 
         std::string GetModelPath() const {
             if (m_model.empty()) {
-                return m_database_path + "/model.xml";
+                std::string default_path = m_database_path + "/model.xml";
+                if (!std::filesystem::exists(default_path)) {
+                    std::string fallback_path = m_database_path + "/random_forest.xml";
+                    if (std::filesystem::exists(fallback_path)) {
+                        std::cerr << "model.xml not found, falling back to random_forest.xml" << std::endl;
+                        return fallback_path;
+                    }
+                }
+                return default_path;
             }
             std::filesystem::path p(m_model);
             bool has_extension = !p.extension().empty();
