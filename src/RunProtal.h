@@ -1103,6 +1103,9 @@ namespace protal {
 
         MSAVector msa{ profile_indices.size(), std::vector<char>() };
 
+        // Per-sample accumulated SNP-retention statistics across all genes
+        protal::MSAStats sample_stats(profile_indices.size());
+
         auto& genome = loader.GetGenome(taxid);
         if (!genome.IsLoaded()) genome.LoadGenomeOMP();
         std::vector<std::string> names;
@@ -1198,9 +1201,14 @@ namespace protal {
                 }
 
 
-                bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum);
+                protal::MSAStats gene_stats(items.size());
+                bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum, &gene_stats);
 
                 if (!result) continue;
+
+                for (size_t si = 0; si < gene_stats.size(); si++) {
+                    sample_stats[si] += gene_stats[si];
+                }
                 if (msa.front().size() > partition_start) {
                     if (partitions.size() > 0) {
                         partitions.back() += std::to_string(previous_size-1);
@@ -1251,6 +1259,50 @@ namespace protal {
         auto processed_msa = protal::ProcessMSA(msa, options.GetMSAMinVCOV());
 
         // std::cout << "Trimmed size: " << processed_msa.front().size() << " with minvcov: " << options.GetMSAMinVCOV() << std::endl;
+
+        // Compute per-sample positions dropped by the vertical coverage filter.
+        // A position is removed when fewer than (vcov * num_samples) samples have a valid base there.
+        {
+            auto info_vector = GetInformationVector(msa);
+            double vcov_threshold = msa.size() * options.GetMSAMinVCOV();
+            for (size_t pos = 0; pos < info_vector.size(); pos++) {
+                if (static_cast<double>(info_vector[pos]) <= vcov_threshold) {
+                    for (size_t si = 0; si < msa.size(); si++) {
+                        char c = msa[si][pos];
+                        if (c != 'N' && c != '-') {
+                            sample_stats[si].valid_positions_removed_by_vcov++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Write per-sample SNP-retention statistics TSV.
+        // Columns: sample | snps_retained | insertions_retained | deletions_retained |
+        //          variants_filtered_qual_sum | variants_filtered_obs_cov |
+        //          positions_ref | positions_below_min_cov | positions_no_coverage |
+        //          valid_positions_removed_by_vcov
+        {
+            std::ofstream os_stats(options.GetMSAStatsOutput(taxon_name), std::ios::out);
+            os_stats << "sample\tsnps_retained\tinsertions_retained\tdeletions_retained"
+                     << "\tvariants_filtered_qual_sum\tvariants_filtered_obs_cov"
+                     << "\tpositions_ref\tpositions_below_min_cov\tpositions_no_coverage"
+                     << "\tvalid_positions_removed_by_vcov\n";
+            for (size_t si = 0; si < sample_stats.size(); si++) {
+                auto const& s = sample_stats[si];
+                os_stats << names[si]                         << '\t'
+                         << s.snps_retained                   << '\t'
+                         << s.insertions_retained             << '\t'
+                         << s.deletions_retained              << '\t'
+                         << s.variants_filtered_qual_sum      << '\t'
+                         << s.variants_filtered_obs_cov       << '\t'
+                         << s.positions_ref                   << '\t'
+                         << s.positions_below_min_cov         << '\t'
+                         << s.positions_no_coverage           << '\t'
+                         << s.valid_positions_removed_by_vcov << '\n';
+            }
+            os_stats.close();
+        }
 
         os = std::ofstream(options.GetMSAProcessedOutput(taxon_name), std::ios::out);
 

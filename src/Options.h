@@ -630,6 +630,10 @@ namespace protal {
             return m_strain_output_dir + '/' + species_name + ".partition.txt";
         }
 
+        std::string GetMSAStatsOutput(std::string species_name) const {
+            return m_strain_output_dir + '/' + species_name + ".snp_stats.tsv";
+        }
+
         std::string GetBenchmarkAlignmentOutputFile() const {
             return m_benchmark_alignment_output;
         }
