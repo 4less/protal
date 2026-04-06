@@ -276,9 +276,79 @@ namespace protal {
         // Filled externally after ProcessMSA (vertical coverage filter)
         size_t valid_positions_removed_by_vcov = 0; ///< Positions with valid (non-N, non-gap) bases dropped by vcov filter
 
+        size_t TotalPass() const {
+            return snps_retained + insertions_retained + deletions_retained;
+        }
+
+        size_t TotalFiltered() const {
+            return variants_filtered_qual_sum + variants_filtered_obs_cov;
+        }
+
         size_t TotalVariantPositions() const {
-            return snps_retained + insertions_retained + deletions_retained
-                   + variants_filtered_qual_sum + variants_filtered_obs_cov;
+            return TotalPass() + TotalFiltered();
+        }
+
+        // All reference positions visited for this sample (covered + uncovered).
+        size_t TotalPositions() const {
+            return positions_ref + TotalVariantPositions()
+                   + positions_below_min_cov + positions_no_coverage;
+        }
+
+        // Percentage helpers — return 0 when denominator is zero.
+        double PctPass() const {
+            auto d = TotalVariantPositions();
+            return d > 0 ? 100.0 * TotalPass() / d : 0.0;
+        }
+
+        double PctFiltered() const {
+            auto d = TotalVariantPositions();
+            return d > 0 ? 100.0 * TotalFiltered() / d : 0.0;
+        }
+
+        double PctFilteredQualSum() const {
+            auto d = TotalVariantPositions();
+            return d > 0 ? 100.0 * variants_filtered_qual_sum / d : 0.0;
+        }
+
+        double PctFilteredObsCov() const {
+            auto d = TotalVariantPositions();
+            return d > 0 ? 100.0 * variants_filtered_obs_cov / d : 0.0;
+        }
+
+        double PctSnpsRetained() const {
+            auto d = TotalVariantPositions();
+            return d > 0 ? 100.0 * snps_retained / d : 0.0;
+        }
+
+        double PctInsertionsRetained() const {
+            auto d = TotalVariantPositions();
+            return d > 0 ? 100.0 * insertions_retained / d : 0.0;
+        }
+
+        double PctDeletionsRetained() const {
+            auto d = TotalVariantPositions();
+            return d > 0 ? 100.0 * deletions_retained / d : 0.0;
+        }
+
+        double PctPositionsRef() const {
+            auto d = TotalPositions();
+            return d > 0 ? 100.0 * positions_ref / d : 0.0;
+        }
+
+        double PctPositionsBelowMinCov() const {
+            auto d = TotalPositions();
+            return d > 0 ? 100.0 * positions_below_min_cov / d : 0.0;
+        }
+
+        double PctPositionsNoCoverage() const {
+            auto d = TotalPositions();
+            return d > 0 ? 100.0 * positions_no_coverage / d : 0.0;
+        }
+
+        double PctValidRemovedByVcov() const {
+            // Denominator: all positions that had a valid (non-N, non-gap) base before vcov filter.
+            auto valid_before = TotalPass() + positions_ref;
+            return valid_before > 0 ? 100.0 * valid_positions_removed_by_vcov / valid_before : 0.0;
         }
 
         MSASampleStats& operator+=(MSASampleStats const& o) {

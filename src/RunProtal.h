@@ -17,6 +17,7 @@
 #include "protal_config.h"
 #include "Compressor.h"
 
+#include <iomanip>
 #include <ranges>
 
 // #include "Profiler/ReadFilter.h"
@@ -1278,28 +1279,49 @@ namespace protal {
         }
 
         // Write per-sample SNP-retention statistics TSV.
-        // Columns: sample | snps_retained | insertions_retained | deletions_retained |
-        //          variants_filtered_qual_sum | variants_filtered_obs_cov |
-        //          positions_ref | positions_below_min_cov | positions_no_coverage |
-        //          valid_positions_removed_by_vcov
         {
             std::ofstream os_stats(options.GetMSAStatsOutput(taxon_name), std::ios::out);
-            os_stats << "sample\tsnps_retained\tinsertions_retained\tdeletions_retained"
-                     << "\tvariants_filtered_qual_sum\tvariants_filtered_obs_cov"
-                     << "\tpositions_ref\tpositions_below_min_cov\tpositions_no_coverage"
-                     << "\tvalid_positions_removed_by_vcov\n";
+            os_stats << "sample"
+                     // --- totals ---
+                     << "\ttotal_variant_positions"
+                     << "\ttotal_pass_snps"
+                     << "\ttotal_filtered_snps"
+                     // --- per-type pass counts + % of total_variant_positions ---
+                     << "\tsnps_retained\tsnps_retained_pct"
+                     << "\tinsertions_retained\tinsertions_retained_pct"
+                     << "\tdeletions_retained\tdeletions_retained_pct"
+                     // --- filter breakdown + % of total_variant_positions ---
+                     << "\tvariants_filtered_qual_sum\tvariants_filtered_qual_sum_pct"
+                     << "\tvariants_filtered_obs_cov\tvariants_filtered_obs_cov_pct"
+                     // --- pass/filter summary percentages ---
+                     << "\ttotal_pass_pct\ttotal_filtered_pct"
+                     // --- position-level counts + % of total_positions ---
+                     << "\tpositions_ref\tpositions_ref_pct"
+                     << "\tpositions_below_min_cov\tpositions_below_min_cov_pct"
+                     << "\tpositions_no_coverage\tpositions_no_coverage_pct"
+                     // --- vertical coverage filter ---
+                     << "\tvalid_positions_removed_by_vcov\tvalid_positions_removed_by_vcov_pct"
+                     << '\n';
+
+            os_stats << std::fixed << std::setprecision(2);
             for (size_t si = 0; si < sample_stats.size(); si++) {
                 auto const& s = sample_stats[si];
-                os_stats << names[si]                         << '\t'
-                         << s.snps_retained                   << '\t'
-                         << s.insertions_retained             << '\t'
-                         << s.deletions_retained              << '\t'
-                         << s.variants_filtered_qual_sum      << '\t'
-                         << s.variants_filtered_obs_cov       << '\t'
-                         << s.positions_ref                   << '\t'
-                         << s.positions_below_min_cov         << '\t'
-                         << s.positions_no_coverage           << '\t'
-                         << s.valid_positions_removed_by_vcov << '\n';
+                os_stats << names[si]
+                         << '\t' << s.TotalVariantPositions()
+                         << '\t' << s.TotalPass()
+                         << '\t' << s.TotalFiltered()
+                         << '\t' << s.snps_retained              << '\t' << s.PctSnpsRetained()
+                         << '\t' << s.insertions_retained        << '\t' << s.PctInsertionsRetained()
+                         << '\t' << s.deletions_retained         << '\t' << s.PctDeletionsRetained()
+                         << '\t' << s.variants_filtered_qual_sum << '\t' << s.PctFilteredQualSum()
+                         << '\t' << s.variants_filtered_obs_cov  << '\t' << s.PctFilteredObsCov()
+                         << '\t' << s.PctPass()
+                         << '\t' << s.PctFiltered()
+                         << '\t' << s.positions_ref              << '\t' << s.PctPositionsRef()
+                         << '\t' << s.positions_below_min_cov    << '\t' << s.PctPositionsBelowMinCov()
+                         << '\t' << s.positions_no_coverage      << '\t' << s.PctPositionsNoCoverage()
+                         << '\t' << s.valid_positions_removed_by_vcov << '\t' << s.PctValidRemovedByVcov()
+                         << '\n';
             }
             os_stats.close();
         }
