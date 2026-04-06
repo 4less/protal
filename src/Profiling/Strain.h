@@ -506,7 +506,7 @@ namespace protal {
         return has_variant;
     }
 
-    static bool MSA(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum, MSAStats* stats = nullptr) {
+    static bool MSA(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum, MSAStats* stats = nullptr, MSARow* ref_row = nullptr) {
         if (msa.size() != items.size()) {
             std::cerr << msa.size() << " != " << items.size() << " <- items" << std::endl;
             std::cerr << "Msa object must be of the same length as items" << std::endl;
@@ -589,7 +589,12 @@ namespace protal {
                 }
             }
 
-
+            // Reference row: gaps for any insertion slots, then the reference base itself.
+            // Deletions in samples leave the reference base intact; no pause_timer needed.
+            if (ref_row) {
+                AddInsertionGap(*ref_row, max_ins);
+                ref_row->emplace_back(ref);
+            }
 
             bool current_had_indel = false;
             bool bad = false;

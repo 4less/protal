@@ -1103,6 +1103,7 @@ namespace protal {
         if (profile_indices.empty()) return;
 
         MSAVector msa{ profile_indices.size(), std::vector<char>() };
+        protal::MSARow ref_msa_row;
 
         // Per-sample accumulated SNP-retention statistics across all genes
         protal::MSAStats sample_stats(profile_indices.size());
@@ -1203,7 +1204,7 @@ namespace protal {
 
 
                 protal::MSAStats gene_stats(items.size());
-                bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum, &gene_stats);
+                bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum, &gene_stats, &ref_msa_row);
 
                 if (!result) continue;
 
@@ -1225,6 +1226,11 @@ namespace protal {
                 }
             }
         }
+
+        // Prepend reference sequence as the first row so it is always present in both outputs.
+        msa.insert(msa.begin(), std::move(ref_msa_row));
+        names.insert(names.begin(), taxon_name + "_reference");
+        sample_stats.insert(sample_stats.begin(), protal::MSASampleStats{});
 
         bool any_good = std::any_of(msa.begin(), msa.end(), [min_hcov](MSARow const& row){
             return IsRowGood(row, min_hcov);
