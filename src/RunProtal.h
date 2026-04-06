@@ -373,57 +373,50 @@ namespace protal {
         if (!db.IsTaxonomyLoaded()) db.LoadTaxonomy(options.GetInternalTaxonomyFile());
         auto& taxonomy = db.GetTaxonomy();
 
-        std::vector<profiler::MicrobialProfile> profiles;
-
-
         // These values do not matter anymore when a RandomForest is applied
         double min_ani = 0.95;
         double min_gene_presence = 0.50; //previously 0.5
         size_t min_total_hits = 60; //previously 70
         size_t min_mean_mapq = 10;
-        
-        
+
+
         using TaxonFilterObj = profiler::TaxonFilterObj;
 //        TaxonFilterObj filter(min_ani, min_gene_presence, min_total_hits, min_mean_mapq);
 
         std::string model_path = options.GetModelPath();
         TaxonFilterObj filter(model_path, options.GetKnob());
 
-        // ProgressBar prog;
-        // prog.Reset(options.GetFileCount());
+        auto range = options.GetRange();
 
-        omp_set_num_threads(1);
-        // omp_set_num_threads(options.GetThreads());
+        // Pre-size so each thread writes to its own index slot — no emplace_back races.
+        // MicrobialProfile holds a reference member so it is not assignable; use optional to allow
+        // in-place construction per slot without requiring assignment.
+        std::vector<std::optional<profiler::MicrobialProfile>> profile_slots(range.size());
 
+        omp_set_num_threads(options.GetThreads());
 
-
-        #pragma omp parallel for firstprivate(filter) shared(options, cout, taxonomy, profiles, genomes, std::cerr)//, bm_read_alignments, bm_profile)
-        for (auto i : options.GetRange()) {
+        #pragma omp parallel for firstprivate(filter) shared(options, cout, taxonomy, profile_slots, genomes, std::cerr)//, bm_read_alignments, bm_profile)
+        for (int idx = 0; idx < static_cast<int>(range.size()); idx++) {
+            auto i = range[idx];
 
             if (options.Verbose()) {
                 auto [sam, gzipped] = options.SamFile(i);
                 #pragma omp critical(print)
-                std::cerr << omp_get_thread_num() << " File " << i << " of " << options.GetRange().size() << ":\n\t" << sam << (gzipped ? " (gzipped)" : "") << std::endl;
+                std::cerr << omp_get_thread_num() << " File " << i << " of " << range.size() << ":\n\t" << sam << (gzipped ? " (gzipped)" : "") << std::endl;
             }
 
             auto [sam, gzipped] = options.SamFile(i);
             auto sample_name = options.GetSampleId(i);
-            
-            if (!Utils::exists(sam)) {
-                std::cerr << "Sam file does not exist for sample " << options.GetSampleId(i) << " (" << i << ")" << std::endl;
-                auto profile = profiler::MicrobialProfile{genomes};
 
-                #pragma omp critical(add_profile)
-                profiles.emplace_back(profile);
-                std::cerr << sam << std::endl;
+            if (!Utils::exists(sam)) {
+                #pragma omp critical(print)
+                std::cerr << "Sam file does not exist for sample " << options.GetSampleId(i) << " (" << i << "): " << sam << std::endl;
+                profile_slots[idx].emplace(genomes);
                 continue;
             }
 
             Benchmark bm_read_alignments{ "Load read alignments" };
             Benchmark bm_profile{ "Profile sample" };
-
-            // #pragma omp critical(progress)
-            // prog.UpdateAdd(1);
 
             profiler::Profiler profiler(genomes);
             profiler.SetNoStrain(options.NoStrains());
@@ -447,12 +440,10 @@ namespace protal {
 #pragma omp critical(load_sam)
             profiler.FromSam(sam);
 
-            // std::cout << "Thread " << omp_get_thread_num() << " after Load" << std::endl;
-
             if (!profiler.HasReads()) {
-                std::cerr << "Empty sam file" << std::endl;
-                #pragma omp critical(add_profile)
-                profiles.emplace_back(profiler::MicrobialProfile{genomes});
+                #pragma omp critical(print)
+                std::cerr << "Empty sam file: " << sam << std::endl;
+                profile_slots[idx].emplace(genomes);
                 continue;
             }
 
@@ -520,13 +511,14 @@ namespace protal {
             if (options.Verbose()) {
                 std::cout << "Write profile to: \n" << options.ProfileFile(i) << std::endl;
             }
-            auto dir = std::filesystem::path(options.ProfileFile(i)).parent_path();
-            if (!std::filesystem::exists(dir)) {
-                std::cout << options.ProfileFile(i) << std::endl;
-                std::cout << "Dir does not exist: " << dir << std::endl;
-                if (!std::filesystem::create_directories(dir.string())) {
-                    std::cout << "Cannot create directories for this path " << options.ProfileFile(i) << std::endl;
-                    exit(2);
+            {
+                auto dir = std::filesystem::path(options.ProfileFile(i)).parent_path();
+#pragma omp critical(create_dir)
+                if (!std::filesystem::exists(dir)) {
+                    if (!std::filesystem::create_directories(dir.string())) {
+                        std::cerr << "Cannot create directories for path " << options.ProfileFile(i) << std::endl;
+                        exit(2);
+                    }
                 }
             }
 
@@ -544,8 +536,14 @@ namespace protal {
 
             profile.SetName(options.GetSampleId(i));
 
-#pragma omp critical(add_profiles)
-            profiles.emplace_back(profile);
+            // Each thread writes to its own pre-allocated slot — no lock needed.
+            profile_slots[idx].emplace(std::move(profile));
+        }
+
+        std::vector<profiler::MicrobialProfile> profiles;
+        profiles.reserve(profile_slots.size());
+        for (auto& slot : profile_slots) {
+            if (slot.has_value()) profiles.emplace_back(std::move(slot.value()));
         }
         return profiles;
     }
