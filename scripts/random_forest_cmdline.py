@@ -314,6 +314,7 @@ def main() -> int:
                 "prediction",
                 "probability",
                 "dataset",
+				"taxon_name"
             }
         ]
 
