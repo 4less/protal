@@ -375,8 +375,9 @@ namespace protal {
             }
             std::filesystem::path p(m_model);
             bool has_extension = !p.extension().empty();
+            bool exist = std::filesystem::exists(p);
             bool is_path = p.is_absolute() || m_model.find('/') != std::string::npos || m_model.find('\\') != std::string::npos;
-            if (has_extension || is_path) {
+            if ((has_extension || is_path) & exist) {
                 return m_model;
             }
             return m_database_path + "/" + m_model + ".xml";
