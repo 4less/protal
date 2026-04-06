@@ -248,11 +248,35 @@ def strip_pmml_namespaces(root: ET.Element) -> None:
             del root.attrib[attr]
 
 
+def find_best_threshold(
+    model: RandomForestClassifier,
+    test_data: pd.DataFrame,
+    label_col: str,
+) -> Tuple[float, float, float, float]:
+    """Return (threshold, precision, recall, f1) that maximises F1 on test_data."""
+    true_idx = list(model.classes_).index(TRUE_LABEL)
+    scores = model.predict_proba(test_data.drop(columns=[label_col]))[:, true_idx]
+    y_true = (test_data[label_col] == TRUE_LABEL).astype(int)
+    prec, rec, thresholds = precision_recall_curve(y_true, scores)
+    # precision_recall_curve appends a final point at recall=0 with no matching threshold.
+    prec_t, rec_t = prec[:-1], rec[:-1]
+    denom = prec_t + rec_t
+    f1_scores = np.where(denom > 0, 2 * prec_t * rec_t / denom, 0.0)
+    best_idx = int(np.argmax(f1_scores))
+    return (
+        float(thresholds[best_idx]),
+        float(prec_t[best_idx]),
+        float(rec_t[best_idx]),
+        float(f1_scores[best_idx]),
+    )
+
+
 def plot_pr_curve(
     model: RandomForestClassifier,
     test_data: pd.DataFrame,
     label_col: str,
     output_path: str,
+    best_threshold: Optional[float] = None,
 ) -> None:
     true_idx = list(model.classes_).index(TRUE_LABEL)
     scores = model.predict_proba(test_data.drop(columns=[label_col]))[:, true_idx]
@@ -260,10 +284,23 @@ def plot_pr_curve(
     prec, rec, thresholds = precision_recall_curve(y_true, scores)
     ap = average_precision_score(y_true, scores)
 
+    # Identify the plot point corresponding to best_threshold (if provided).
+    best_prec = best_rec = None
+    if best_threshold is not None:
+        prec_t, rec_t = prec[:-1], rec[:-1]
+        diffs = np.abs(thresholds - best_threshold)
+        bi = int(np.argmin(diffs))
+        best_prec, best_rec = float(prec_t[bi]), float(rec_t[bi])
+
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
     # Left: precision-recall curve
     axes[0].plot(rec, prec, lw=2, label=f"AP = {ap:.3f}")
+    if best_prec is not None:
+        axes[0].scatter(
+            [best_rec], [best_prec], s=80, zorder=5,
+            label=f"best t={best_threshold:.3f}",
+        )
     axes[0].set_xlabel("Recall")
     axes[0].set_ylabel("Precision")
     axes[0].set_title("Precision-Recall Curve")
@@ -274,6 +311,9 @@ def plot_pr_curve(
     # Right: precision and recall vs threshold
     axes[1].plot(thresholds, prec[:-1], lw=2, label="Precision")
     axes[1].plot(thresholds, rec[:-1], lw=2, label="Recall")
+    if best_threshold is not None:
+        axes[1].axvline(best_threshold, color="grey", linestyle="--", lw=1.5,
+                        label=f"best t={best_threshold:.3f}")
     axes[1].set_xlabel("Decision threshold")
     axes[1].set_ylabel("Score")
     axes[1].set_title("Precision / Recall vs Threshold")
@@ -420,7 +460,22 @@ def main() -> int:
     print(f"Saved model (joblib): {rds_path}")
 
     if opts.probability:
-        plot_pr_curve(rf, test_data, "truth", pr_curve_png)
+        best_t, best_p, best_r, best_f = find_best_threshold(rf, test_data, "truth")
+        print(
+            f"Best threshold (max F1 on test set): {best_t:.4f}  "
+            f"prec={best_p:.4f}  recall={best_r:.4f}  f1={best_f:.4f}"
+        )
+
+        best_thresh_path = f"{prefix}.best_threshold.tsv"
+        pd.DataFrame([{
+            "threshold": best_t,
+            "precision": best_p,
+            "recall": best_r,
+            "f1": best_f,
+        }]).to_csv(best_thresh_path, sep="\t", index=False, float_format="%.6f")
+        print(f"Saved best threshold: {best_thresh_path}")
+
+        plot_pr_curve(rf, test_data, "truth", pr_curve_png, best_threshold=best_t)
         print(f"Saved PR curve: {pr_curve_png}")
         print("Probability mode: use model.predict_proba(X)[:, 1] for float scores (0–1).")
 
