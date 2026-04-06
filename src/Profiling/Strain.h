@@ -258,6 +258,44 @@ namespace protal {
     using OptionalVariant = std::optional<Variant>;
     using OptionalVariantBin = std::optional<VariantBin>;
 
+    // Per-sample statistics on SNP/variant retention during MSA construction.
+    // One entry per sample (aligned with MSASequenceItems indices).
+    struct MSASampleStats {
+        // Variant outcomes at positions where a variant was called
+        size_t snps_retained = 0;              ///< Variant passed all filters and is a SNP
+        size_t insertions_retained = 0;        ///< Variant passed all filters and is an insertion
+        size_t deletions_retained = 0;         ///< Variant passed all filters and is a deletion
+        size_t variants_filtered_qual_sum = 0; ///< Variant failed minimum quality sum filter (min_qual_sum)
+        size_t variants_filtered_obs_cov = 0;  ///< Variant failed minimum observation count filter (min_var_cov=3)
+
+        // Position-level outcomes (one count per reference position, excluding deletion continuations)
+        size_t positions_ref = 0;              ///< Covered >=min_cov, no variant called → reference base used
+        size_t positions_below_min_cov = 0;    ///< Coverage present but below min_cov threshold → gap
+        size_t positions_no_coverage = 0;      ///< No coverage or sample absent → gap
+
+        // Filled externally after ProcessMSA (vertical coverage filter)
+        size_t valid_positions_removed_by_vcov = 0; ///< Positions with valid (non-N, non-gap) bases dropped by vcov filter
+
+        size_t TotalVariantPositions() const {
+            return snps_retained + insertions_retained + deletions_retained
+                   + variants_filtered_qual_sum + variants_filtered_obs_cov;
+        }
+
+        MSASampleStats& operator+=(MSASampleStats const& o) {
+            snps_retained              += o.snps_retained;
+            insertions_retained        += o.insertions_retained;
+            deletions_retained         += o.deletions_retained;
+            variants_filtered_qual_sum += o.variants_filtered_qual_sum;
+            variants_filtered_obs_cov  += o.variants_filtered_obs_cov;
+            positions_ref              += o.positions_ref;
+            positions_below_min_cov    += o.positions_below_min_cov;
+            positions_no_coverage      += o.positions_no_coverage;
+            valid_positions_removed_by_vcov += o.valid_positions_removed_by_vcov;
+            return *this;
+        }
+    };
+    using MSAStats = std::vector<MSASampleStats>;
+
     static auto FindUnequalIndex(std::vector<OptionalVariant> const& column, std::vector<bool> const& column_pass) {
         auto count = std::count_if(column.begin(), column.end(), [](OptionalVariant const& v) { return v.has_value(); });
         if (count <= 1) return -1;
@@ -398,7 +436,7 @@ namespace protal {
         return has_variant;
     }
 
-    static bool MSA(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum) {
+    static bool MSA(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum, MSAStats* stats = nullptr) {
         if (msa.size() != items.size()) {
             std::cerr << msa.size() << " != " << items.size() << " <- items" << std::endl;
             std::cerr << "Msa object must be of the same length as items" << std::endl;
@@ -527,6 +565,14 @@ namespace protal {
                 const char REFERENCE_NO_PASS = 'N';
 
                 if (!items[i].has_value() || (rpos < cov.size() && cov[rpos] < min_cov) || rpos >= cov.size()) {
+                    if (stats) {
+                        auto& s = (*stats)[i];
+                        // Distinguish: no data/beyond range vs. coverage present but below threshold
+                        if (!items[i].has_value() || rpos >= cov.size() || cov[rpos] == 0)
+                            s.positions_no_coverage++;
+                        else
+                            s.positions_below_min_cov++;
+                    }
                     for (auto j = max_ins; j > 0; j--) msa_row.emplace_back(LACKING_COVERAGE); // changed from '-'
                     msa_row.emplace_back(LACKING_COVERAGE);
                     outs[i] += "A";
@@ -538,6 +584,7 @@ namespace protal {
                     if (!var.has_value()) {
                         // NO VARIANT: ---------------------------------------------------------------------------------
                         outs[i] += "C";
+                        if (stats) (*stats)[i].positions_ref++;
                         for (auto j = max_ins; j > 0; j--) msa_row.emplace_back('-');
                         // Is it really appropriate to incorporate the reference position here?
                         // Problem is, if var has no value, column_pass is never set to true.
@@ -551,17 +598,26 @@ namespace protal {
                             outs[i] += "E";
                             // NO PASS: IGNORE COLUMN ------------------------------------------------------------------
                             // Variant does not pass - add 'N' for ambiguous base.
+                            // Track which filter(s) caused the rejection (min_var_cov matches VariantPass default).
+                            if (stats) {
+                                constexpr size_t min_var_cov = 3;
+                                auto& s = (*stats)[i];
+                                if (var->QualitySum() < min_qual_sum) s.variants_filtered_qual_sum++;
+                                if (var->Observations() < min_var_cov) s.variants_filtered_obs_cov++;
+                            }
                             AddInsertionGap(msa_row, max_ins);
                             msa_row.emplace_back(VARIANT_NO_PASS);
                         } else if (var->IsSNP()) {
                             // PASS: SNP -------------------------------------------------------------------------------
                             outs[i] += "F";
+                            if (stats) (*stats)[i].snps_retained++;
                             // Variant passes and is SNP
                             AddInsertionGap(msa_row, max_ins);
                             msa_row.emplace_back(var->GetVariant());
                         } else if (var->IsINS()) {
                             // PASS: INSERTION -------------------------------------------------------------------------
                             outs[i] += "G";
+                            if (stats) (*stats)[i].insertions_retained++;
                             // Variant passes and is Insertion
                             had_indel = true;
                             current_had_indel=true;
@@ -571,6 +627,7 @@ namespace protal {
                         } else {
                             // PASS: DELETION --------------------------------------------------------------------------
                             outs[i] += "H";
+                            if (stats) (*stats)[i].deletions_retained++;
                             // Variant passes and is Deletion
                             had_indel = true;
                             current_had_indel=true;
