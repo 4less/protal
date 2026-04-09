@@ -259,10 +259,11 @@ namespace protal {
         };
 
         Gene& GetGeneOMP(GeneKey key) {
+            if (!m_is_loaded) {
 #pragma omp critical(genome_loader)
-            {
-                if (!IsLoaded()) {
-                    LoadGenome();
+                if (!m_is_loaded) {
+                    std::for_each(m_genes.begin(), m_genes.end(), [](Gene &gene) { gene.Load(); });
+                    m_is_loaded = true;
                 }
             }
             return m_genes.at(GeneKeyToIndex(key));
