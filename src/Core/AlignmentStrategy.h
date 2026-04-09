@@ -471,9 +471,7 @@ namespace protal {
 //            std::string reference_view(const_cast<char *>(gene.Sequence().c_str() + m_alignment_orientation.reference_start),
 //                                       m_alignment_orientation.reference_len);
 
-            std::string query_view(read);
             std::string reference_str = gene.Sequence().substr(m_alignment_orientation.reference_start, m_alignment_orientation.reference_len);
-            std::string reference_view = gene.Sequence().substr(m_alignment_orientation.reference_start, m_alignment_orientation.reference_len);
 
 
             bm_alignment.Start();
