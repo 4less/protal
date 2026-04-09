@@ -558,13 +558,6 @@ namespace protal {
         }
 
         void ExtendAnchor(ChainAlignmentAnchor& anchor, std::string const& query) {
-            bool faulty = CheckSeedsInAnchor(anchor, query);
-
-//            if (faulty) {
-//                std::cerr << "Faulty___________" << anchor.chain.size() << std::endl;
-//                std::cerr << anchor.ToString() << std::endl;
-//            }
-
             auto& genome = m_genome_loader.GetGenome(anchor.taxid);
             auto& gene = genome.GetGeneOMP(anchor.geneid);
 
@@ -574,8 +567,8 @@ namespace protal {
             for (auto i = 0; i < anchor.chain.size(); i++) {
                 auto& seed = anchor.chain[i];
 
-                auto seed_q = query.substr(seed.readpos, seed.length);
-                auto seed_r = gene.Sequence().substr(seed.genepos, seed.length);
+                std::string_view seed_q(query.c_str() + seed.readpos, seed.length);
+                std::string_view seed_r(gene.Sequence().c_str() + seed.genepos, seed.length);
                 bool validseed = IdenticalIgnoreAmbig(seed_q, seed_r);
 
                 if (!validseed) {
