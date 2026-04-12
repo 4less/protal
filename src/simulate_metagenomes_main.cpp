@@ -140,6 +140,7 @@ struct CliOptions {
     bool plot_png{false};
     bool test_mode{false};
     bool keep_tmp{false};
+    bool pick_random_demand_if_fail{false};
     int threads{1};
     std::string pigz_path{"pigz"};
     std::optional<fs::path> protal_metafile_output_dir;
@@ -177,6 +178,8 @@ void print_usage() {
               << "  --threads <int>                 Threads for ART/pigz (default: 1)\n"
               << "  --pigz-path <path>              Path to pigz (default: pigz)\n"
               << "  --protal_metafile <path>        Write a Protal meta file (output_dir/protal.meta) but set OUTPUT_DIR to <path>\n"
+              << "  --pick-random-demand-if-fail    If --genus/--taxon demand more species than available, cap\n"
+              << "                                  and fill remaining slots randomly instead of failing\n"
               << "  --plot-png                      Generate barplot PNG of species abundances\n"
               << "  --help                          Show this message\n";
 }
@@ -265,6 +268,8 @@ bool parse_cli(int argc, char** argv, CliOptions& opts, std::string& err) {
             opts.test_mode = true;
         } else if (arg == "--keep-tmp") {
             opts.keep_tmp = true;
+        } else if (arg == "--pick-random-demand-if-fail") {
+            opts.pick_random_demand_if_fail = true;
         } else {
             err = "Unknown argument: " + arg;
             return false;
@@ -318,6 +323,7 @@ int main(int argc, char** argv) {
         profile.genus_species_counts = protal::sim::parse_genus_selection(cli.genus_counts);
         profile.taxon_species_counts = protal::sim::parse_taxon_selection(cli.taxon_counts);
         profile.total_read_pairs = cli.total_read_pairs;
+        profile.pick_random_demand_if_fail = cli.pick_random_demand_if_fail;
 
         std::uint64_t seed = cli.seed ? *cli.seed : std::random_device{}();
         cli.art.threads = std::max(1, cli.threads);
