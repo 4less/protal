@@ -376,6 +376,7 @@ def main() -> int:
             n_jobs=opts.threads,
             random_state=opts.seed,
             max_leaf_nodes=opts.maxnodes if opts.maxnodes > 0 else None,
+            class_weight="balanced",
         )
         grid_search = GridSearchCV(
             estimator=base_model,
@@ -406,6 +407,7 @@ def main() -> int:
         n_jobs=opts.threads,
         random_state=opts.seed,
         max_leaf_nodes=opts.maxnodes if opts.maxnodes > 0 else None,
+        class_weight="balanced",
     )
     rf.fit(train_data.drop(columns=["truth"]), train_data["truth"])
 
