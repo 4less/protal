@@ -9,6 +9,7 @@
 #include <random>
 #include <stdexcept>
 #include <unordered_map>
+#include <iostream>
 #include <unordered_set>
 
 namespace protal::sim {
