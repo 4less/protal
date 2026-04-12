@@ -44,6 +44,7 @@ struct ProfileDesignOptions {
     std::unordered_map<std::string, std::size_t> genus_species_counts;  // requested species counts per genus
     std::vector<double> strain_probabilities;  // probabilities for adding 2nd, 3rd, ... strain of a species
     std::unordered_map<std::string, std::size_t> taxon_species_counts;  // requested species counts per taxon token
+    bool pick_random_demand_if_fail{false};  // if true, cap genus/taxon demands to species_per_sample instead of failing
 };
 
 struct ArtIlluminaOptions {

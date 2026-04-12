@@ -379,7 +379,25 @@ std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
         requested_total += remaining;
     }
     if (requested_total > options.species_per_sample) {
-        throw std::runtime_error("Requested species/genus/taxon counts exceed species-per-sample");
+        if (!options.pick_random_demand_if_fail) {
+            throw std::runtime_error("Requested species/genus/taxon counts exceed species-per-sample");
+        }
+        std::cerr << "[WARNING] Requested species/genus/taxon counts (" << requested_total
+                  << ") exceed species-per-sample (" << options.species_per_sample
+                  << "). Capping demands to fit (--pick-random-demand-if-fail).\n";
+        std::size_t budget = options.species_per_sample > include_species_set.size()
+                                 ? options.species_per_sample - include_species_set.size()
+                                 : 0;
+        for (auto& [_, remaining] : genus_remaining) {
+            std::size_t take = std::min(remaining, budget);
+            budget -= take;
+            remaining = take;
+        }
+        for (auto& [_, remaining] : taxon_remaining) {
+            std::size_t take = std::min(remaining, budget);
+            budget -= take;
+            remaining = take;
+        }
     }
 
     std::vector<std::pair<std::string, std::size_t>> genus_requests(
