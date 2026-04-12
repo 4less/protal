@@ -376,7 +376,7 @@ def main() -> int:
             n_jobs=opts.threads,
             random_state=opts.seed,
             max_leaf_nodes=opts.maxnodes if opts.maxnodes > 0 else None,
-            class_weight="balanced",
+            class_weight="balanced_subsample",
         )
         grid_search = GridSearchCV(
             estimator=base_model,
