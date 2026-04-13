@@ -373,7 +373,7 @@ def main() -> int:
         grid = {"max_features": list(range(max_features_start, max_features_end + 1))}
         base_model = RandomForestClassifier(
             n_estimators=opts.ntree,
-            n_jobs=opts.threads,
+            n_jobs=1,  # 1 here avoids nested parallelism; GridSearchCV handles outer parallelism
             random_state=opts.seed,
             max_leaf_nodes=opts.maxnodes if opts.maxnodes > 0 else None,
             class_weight="balanced_subsample",
@@ -396,10 +396,14 @@ def main() -> int:
 
     train_df = data[["truth"] + chosen_cols]
     n = len(train_df)
-    test_size = max(1, int(math.floor(opts.test_fraction * n)))
-    idx = rng.choice(n, size=test_size, replace=False)
-    test_data = train_df.iloc[idx]
-    train_data = train_df.drop(train_df.index[idx])
+    test_size = int(math.floor(opts.test_fraction * n))
+    if test_size > 0:
+        idx = rng.choice(n, size=test_size, replace=False)
+        test_data = train_df.iloc[idx]
+        train_data = train_df.drop(train_df.index[idx])
+    else:
+        test_data = train_df
+        train_data = train_df
 
     print("Train forest")
     rf = RandomForestClassifier(
@@ -436,20 +440,28 @@ def main() -> int:
     joblib.dump(rf, rds_path)
 
     eval_test, eval_train = evaluate_split(rf, test_data, train_data)
-    print(
-        f"Split: train={len(train_data)} test={len(test_data)} "
-        f"(test fraction={opts.test_fraction:.3f})"
-    )
-    print(
-        f"Train   sens={eval_train['sensitivity']:.4f} "
-        f"prec={eval_train['precision']:.4f} "
-        f"f1={eval_train['f1']:.4f}"
-    )
-    print(
-        f"Test    sens={eval_test['sensitivity']:.4f} "
-        f"prec={eval_test['precision']:.4f} "
-        f"f1={eval_test['f1']:.4f}"
-    )
+    if test_size > 0:
+        print(
+            f"Split: train={len(train_data)} test={len(test_data)} "
+            f"(test fraction={opts.test_fraction:.3f})"
+        )
+        print(
+            f"Train   sens={eval_train['sensitivity']:.4f} "
+            f"prec={eval_train['precision']:.4f} "
+            f"f1={eval_train['f1']:.4f}"
+        )
+        print(
+            f"Test    sens={eval_test['sensitivity']:.4f} "
+            f"prec={eval_test['precision']:.4f} "
+            f"f1={eval_test['f1']:.4f}"
+        )
+    else:
+        print(f"Split: train={len(train_data)} test=0 (no hold-out; metrics evaluated on training data)")
+        print(
+            f"Train   sens={eval_train['sensitivity']:.4f} "
+            f"prec={eval_train['precision']:.4f} "
+            f"f1={eval_train['f1']:.4f}"
+        )
     if opts.reference_pmml:
         print(f"Chosen features (reference PMML): {chosen_mtry}")
     else:
@@ -462,9 +474,10 @@ def main() -> int:
     print(f"Saved model (joblib): {rds_path}")
 
     if opts.probability:
+        eval_label = "training data" if test_size == 0 else "test set"
         best_t, best_p, best_r, best_f = find_best_threshold(rf, test_data, "truth")
         print(
-            f"Best threshold (max F1 on test set): {best_t:.4f}  "
+            f"Best threshold (max F1 on {eval_label}): {best_t:.4f}  "
             f"prec={best_p:.4f}  recall={best_r:.4f}  f1={best_f:.4f}"
         )
 
@@ -478,7 +491,7 @@ def main() -> int:
         print(f"Saved best threshold: {best_thresh_path}")
 
         plot_pr_curve(rf, test_data, "truth", pr_curve_png, best_threshold=best_t)
-        print(f"Saved PR curve: {pr_curve_png}")
+        print(f"Saved PR curve ({eval_label}): {pr_curve_png}")
         print("Probability mode: use model.predict_proba(X)[:, 1] for float scores (0–1).")
 
         threshold_path = f"{prefix}.thresholds.tsv"
