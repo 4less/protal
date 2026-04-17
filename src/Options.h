@@ -77,7 +77,9 @@ namespace protal {
                 ("snp_min_phred_sum", "Minimum phred sum across all observations of allele to call SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_PHRED_SUM)))
                 ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
                 ("msa_min_hcov", "Minimum non-N/non-'-' bases required per sequence to keep it in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_HCOV)))
-                ("msa_species", "Restrict MSAs to a single species (s__Genus_species) or a comma-separated list.", cxxopts::value<std::string>()->default_value(""));
+                ("msa_species", "Restrict MSAs to a single species (s__Genus_species) or a comma-separated list.", cxxopts::value<std::string>()->default_value(""))
+                ("multi_allelic_mean_genecol_threshold", "Remove entire gene columns from MSA where mean MRate2 across all samples exceeds this threshold.", cxxopts::value<double>()->default_value("0.0"))
+                ("multi_allelic_mean_pergene_threshold", "In per-gene filtered MSA, replace a sample's gene columns with '-' where that sample's MRate2 exceeds this threshold.", cxxopts::value<double>()->default_value("0.0"));
                 
         
         // Advanced / benchmarking / build
@@ -152,6 +154,8 @@ namespace protal {
         std::string m_profile_truth;
         std::string m_model;
         double m_knob = 0.5;
+        double m_multi_allelic_mean_genecol_threshold = 0.0;
+        double m_multi_allelic_mean_pergene_threshold = 0.0;
 
         size_t m_threads = DEFAULT_THREADS;
 
@@ -641,6 +645,26 @@ namespace protal {
 
         std::string GetMSAStatsOutput(std::string species_name) const {
             return m_strain_output_dir + '/' + species_name + ".snp_stats.tsv";
+        }
+
+        std::string GetMSAGeneColFilteredOutput(std::string species_name) const {
+            return m_strain_output_dir + '/' + species_name + ".genecol_filtered.msa.fna";
+        }
+
+        std::string GetMSAGeneColFilteredPartitionOutput(std::string species_name) const {
+            return m_strain_output_dir + '/' + species_name + ".genecol_filtered.partition.txt";
+        }
+
+        std::string GetMSAPerGeneFilteredOutput(std::string species_name) const {
+            return m_strain_output_dir + '/' + species_name + ".pergene_filtered.msa.fna";
+        }
+
+        double GetMultiAllelicMeanGeneColThreshold() const {
+            return m_multi_allelic_mean_genecol_threshold;
+        }
+
+        double GetMultiAllelicMeanPerGeneThreshold() const {
+            return m_multi_allelic_mean_pergene_threshold;
         }
 
         std::string GetBenchmarkAlignmentOutputFile() const {
@@ -1514,6 +1538,8 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
             options.m_knob = result["knob"].as<double>();
             options.m_model = result["model"].as<std::string>();
+            options.m_multi_allelic_mean_genecol_threshold = result["multi_allelic_mean_genecol_threshold"].as<double>();
+            options.m_multi_allelic_mean_pergene_threshold = result["multi_allelic_mean_pergene_threshold"].as<double>();
 
             if (!options.PrepareAndCheckValidity()) {
                 std::cerr << "Exit Program" << std::endl;

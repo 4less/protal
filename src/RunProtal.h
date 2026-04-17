@@ -1113,6 +1113,11 @@ namespace protal {
         size_t partition_start = 0;
         size_t previous_size = 0;
 
+        std::vector<std::pair<size_t,size_t>> gene_cols;
+        std::vector<std::vector<double>> gene_mrate2s;
+        std::vector<uint32_t> gene_col_ids;
+        std::vector<double> current_gene_mrate2;
+
 //        std::cout << "MULTIALLELIC: " << taxid << " " << taxon_name << std::endl;
         std::vector<uint32_t> selected_genes = SelectGenesForTaxon(taxid, taxon_name, profile_indices, loader, options, profiles);
 
@@ -1139,6 +1144,8 @@ namespace protal {
             // Check if
             size_t samples_with_gene = 0;
 
+            current_gene_mrate2.assign(profile_indices.size(), 0.0);
+
             for (auto i = 0; i < profile_indices.size(); i++) {
                 auto& profile = profiles[profile_indices[i]];
 
@@ -1158,15 +1165,16 @@ namespace protal {
                     auto& region = strain.GetSequenceRangeHandler();
                     items.emplace_back( OptionalMSASequenceItem { { std::move(snps), region } } );
 
+                    auto ac = gene_obs.AlleleSNPCounts(min_cov, min_qual_sum);
+                    region.CalculateCoverageVector();
+                    auto tmp_vec = region.CalculateCoverageVector2();
+                    auto counts_vcov1 = std::count_if(tmp_vec.begin(), tmp_vec.end(), [](auto val){ return(val >= 1);});
+                    auto counts_vcov2 = std::count_if(tmp_vec.begin(), tmp_vec.end(), [](auto val){ return(val >= 2);});
+                    current_gene_mrate2[i] = (counts_vcov2 > 0 ? ac.Multi()/static_cast<double>(counts_vcov2) : 0.0);
+
                     if (os_meta) {
 #pragma omp critical(metaout)
                         {
-                            auto ac = gene_obs.AlleleSNPCounts(min_cov, min_qual_sum);
-
-                            region.CalculateCoverageVector();
-                            auto tmp_vec = region.CalculateCoverageVector2();
-                            auto counts_vcov1 = std::count_if(tmp_vec.begin(), tmp_vec.end(), [](auto val){ return(val >= 1);});
-                            auto counts_vcov2 = std::count_if(tmp_vec.begin(), tmp_vec.end(), [](auto val){ return(val >= 2);});
                             *os_meta << profile.GetName() << '\t';
                             *os_meta << geneid << '\t';
                             *os_meta << gene_obs.VerticalCoverage() << '\t';
@@ -1212,6 +1220,7 @@ namespace protal {
                 if (msa.front().size() > partition_start) {
                     if (partitions.size() > 0) {
                         partitions.back() += std::to_string(previous_size-1);
+                        gene_cols.back().second = previous_size - 1;
                     }
 
                     size_t partition_end = msa.front().size();
@@ -1220,6 +1229,9 @@ namespace protal {
                     partition += std::to_string(partition_start) + '-';
 //                    partition += std::to_string(partition_end-1);
                     partitions.emplace_back(partition);
+                    gene_cols.push_back({partition_start, 0});
+                    gene_mrate2s.push_back(current_gene_mrate2);
+                    gene_col_ids.push_back(geneid);
                     partition_start = msa.front().size();
                 }
             }
@@ -1251,7 +1263,8 @@ namespace protal {
         os.close();
         // std::cout << " Saved MSA to " << options.GetMSAOutput(taxon_name);
 
-        partitions.back() += std::to_string(msa.front().size());
+        partitions.back() += std::to_string(msa.front().size()-1);
+        if (!gene_cols.empty()) gene_cols.back().second = msa.front().size() - 1;
 
         std::ofstream os_part(options.GetMSAPartitionOutput(taxon_name), std::ios::out);
         for (auto i = 0; i < partitions.size(); i++) {
@@ -1260,6 +1273,75 @@ namespace protal {
         os_part.close();
 
         // std::cout << " Saved Partitions " << std::endl;
+
+        // --- Filtered MSA outputs ---
+        if (!gene_cols.empty()) {
+            double genecol_thresh = options.GetMultiAllelicMeanGeneColThreshold();
+            double pergene_thresh = options.GetMultiAllelicMeanPerGeneThreshold();
+            size_t total_cols = msa[0].size();
+
+            // Compute per-gene mean MRate2 and determine which genes pass the genecol filter
+            std::vector<bool> gene_pass(gene_cols.size(), true);
+            for (size_t g = 0; g < gene_cols.size(); g++) {
+                double mean_mrate2 = 0.0;
+                for (double v : gene_mrate2s[g]) mean_mrate2 += v;
+                mean_mrate2 /= static_cast<double>(gene_mrate2s[g].size());
+                if (mean_mrate2 > genecol_thresh) gene_pass[g] = false;
+            }
+
+            // Build column-inclusion mask for genecol filter
+            std::vector<bool> col_include(total_cols, true);
+            for (size_t g = 0; g < gene_cols.size(); g++) {
+                if (!gene_pass[g]) {
+                    for (size_t c = gene_cols[g].first; c <= gene_cols[g].second; c++)
+                        col_include[c] = false;
+                }
+            }
+
+            // Write genecol filtered MSA (entire gene columns removed)
+            {
+                std::ofstream os_gc(options.GetMSAGeneColFilteredOutput(taxon_name), std::ios::out);
+                for (size_t ri = 0; ri < msa.size(); ri++) {
+                    if (!IsRowGood(msa[ri], min_hcov)) continue;
+                    os_gc << '>' << names[ri] << '\n';
+                    for (size_t ci = 0; ci < total_cols; ci++)
+                        if (col_include[ci]) os_gc << msa[ri][ci];
+                    os_gc << '\n';
+                }
+            }
+
+            // Write genecol filtered partition with recalculated coordinates
+            {
+                std::ofstream os_gc_part(options.GetMSAGeneColFilteredPartitionOutput(taxon_name), std::ios::out);
+                size_t new_start = 0;
+                for (size_t g = 0; g < gene_cols.size(); g++) {
+                    if (!gene_pass[g]) continue;
+                    size_t gene_len = gene_cols[g].second - gene_cols[g].first + 1;
+                    size_t new_end = new_start + gene_len - 1;
+                    os_gc_part << "DNA, gene" << gene_col_ids[g] << " = " << new_start << '-' << new_end << '\n';
+                    new_start = new_end + 1;
+                }
+            }
+
+            // Write pergene filtered MSA (per-sample gene columns replaced with '-' where MRate2 > threshold)
+            {
+                MSAVector msa_pg = msa;
+                for (size_t g = 0; g < gene_cols.size(); g++) {
+                    for (size_t si = 0; si < gene_mrate2s[g].size(); si++) {
+                        if (gene_mrate2s[g][si] > pergene_thresh) {
+                            for (size_t ci = gene_cols[g].first; ci <= gene_cols[g].second; ci++)
+                                msa_pg[si + 1][ci] = '-';
+                        }
+                    }
+                }
+                std::ofstream os_pg(options.GetMSAPerGeneFilteredOutput(taxon_name), std::ios::out);
+                for (size_t ri = 0; ri < msa_pg.size(); ri++) {
+                    if (!IsRowGood(msa_pg[ri], min_hcov)) continue;
+                    os_pg << '>' << names[ri] << '\n';
+                    os_pg << std::string(msa_pg[ri].begin(), msa_pg[ri].end()) << '\n';
+                }
+            }
+        }
 
         auto processed_msa = protal::ProcessMSA(msa, options.GetMSAMinVCOV());
 
