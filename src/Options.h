@@ -109,6 +109,71 @@ namespace protal {
         return options;
     }
 
+    struct OptionsData {
+        // flags
+        bool build = false;
+        bool no_profile = false;
+        bool preload_genomes = false;
+        bool benchmark_alignment = false;
+        bool show_help = false;
+        bool show_help_dev = false;
+        bool show_map_help = false;
+        bool show_version = false;
+        bool no_strains = false;
+        bool fastalign = false;
+        bool profile_only = false;
+        bool force = false;
+        bool verbose = false;
+        bool mapq_debug_out = false;
+
+        // build
+        std::vector<uint8_t> build_gene_mask;
+
+        // paths
+        std::string sequence_file;
+        std::string full_sequence_file;
+        std::string database_path;
+        std::string output_dir;
+        std::string strain_output_dir;
+        std::string misc_output_dir;
+        std::string map_file;
+        std::string benchmark_alignment_output;
+
+        // sample lists
+        std::vector<std::string> first_list;
+        std::vector<std::string> second_list;
+        std::vector<std::string> prefix_list;
+        std::vector<std::string> samplename_list;
+        std::vector<std::string> sam_list;
+        std::vector<std::string> profile_list;
+        std::vector<std::string> profile_truth_list;
+        std::vector<size_t> range;
+
+        // profiling
+        std::string profile_truth;
+        std::string model;
+        double knob = 0.5;
+
+        // alignment
+        size_t threads = DEFAULT_THREADS;
+        size_t align_top = DEFAULT_ALIGN_TOP;
+        double max_score_ani = DEFAULT_MAX_SCORE_ANI;
+        size_t x_drop = DEFAULT_X_DROP;
+        size_t max_key_ubiquity = DEFAULT_MAX_KEY_UBIQUITY;
+        size_t max_seed_size = DEFAULT_MAX_SEED_SIZE;
+        size_t min_successful_lookups = DEFAULT_MIN_SUCCESSFUL_LOOKUPS;
+        size_t max_out = DEFAULT_MAX_OUT;
+
+        // strains / MSA
+        double msa_min_vcov = DEFAULT_MSA_MIN_VCOV;
+        size_t msa_min_hcov = DEFAULT_MSA_MIN_HCOV;
+        std::vector<std::string> msa_species;
+        double snp_min_cov = DEFAULT_MIN_SNP_COV;
+        double snp_min_phred_sum = DEFAULT_MIN_SNP_PHRED_SUM;
+        double multi_allelic_mean_genecol_threshold = 0.0;
+        double multi_allelic_mean_pergene_threshold = 0.0;
+    };
+
     class Options {
     private:
         bool m_build = false;
@@ -126,7 +191,7 @@ namespace protal {
         bool m_profile_only = false;
         bool m_force = false;
         bool m_verbose = false;
-        
+
         bool m_mapq_debug_out = false;
 
         size_t m_current_index = 0;
@@ -211,88 +276,70 @@ namespace protal {
 
         const size_t MAP_SAMPLE_ID_COL = 0;
 
-        Options(bool show_help, bool show_map_help, bool show_version, bool show_help_dev) : m_show_help(show_help), m_show_map_help(show_map_help), m_show_version(show_version), m_show_help_dev(show_help_dev) {}
+        Options(bool show_help, bool show_map_help, bool show_version, bool show_help_dev) :
+                m_show_help(show_help), m_show_map_help(show_map_help),
+                m_show_version(show_version), m_show_help_dev(show_help_dev) {}
 
-        Options(bool build, bool no_profile, bool profile_only, bool no_strains, bool preload_genomes, bool benchmark_alignment,
-                std::string benchmark_alignment_output, bool show_help, bool show_help_dev, bool show_map_help, bool show_version, bool mapq_debug_output,
-                std::vector<std::string>& first_list, std::vector<std::string>& second_list, std::vector<std::string>& samplename_list,
-                std::string database_path, std::vector<std::string>& output_prefix_list, std::string sequence_file,
-                std::string full_sequence_file, std::string map_file, std::string strain_output_dir, std::string misc_output_dir, std::string& output_dir, size_t threads, size_t align_top, size_t max_out, double max_score_ani,
-                double msa_min_vcov, size_t msa_min_hcov, std::vector<std::string> msa_species, double snp_min_phred_sum, double snp_min_cov,
-                size_t x_drop, size_t max_key_ubiquity, size_t min_successful_lookups, size_t max_seed_size, bool fastalign, std::vector<std::string>& sam_file_list,
-                std::vector<std::string>& profile_file_list, std::vector<std::string>& profile_truth_list, std::string profile_truth,
-                bool force, bool verbose, std::vector<size_t> range, std::vector<uint8_t> build_gene_mask) :
-                m_build(build),
-                m_no_profile(no_profile),
-                m_profile_only(profile_only),
-                m_no_strains(no_strains),
-                m_preload_genomes(preload_genomes),
-                m_show_help(show_help),
-                m_show_help_dev(show_help_dev),
-                m_show_map_help(show_map_help),
-                m_show_version(show_version),
-                m_first_list(std::move(first_list)),
-                m_second_list(std::move(second_list)),
-                m_database_path(std::move(database_path)),
-                m_prefix_list(std::move(output_prefix_list)),
-                m_strain_output_dir(strain_output_dir),
-                m_misc_output_dir(misc_output_dir),
-                m_output_dir(output_dir),
-                m_sam_list(sam_file_list),
-                m_profile_list(profile_file_list),
-                m_profile_truth_list(profile_truth_list),
-                m_sequence_file(std::move(sequence_file)),
-                m_full_sequence_file(std::move(full_sequence_file)),
-                m_map_file(std::move(map_file)),
-                m_threads(threads),
-                m_align_top(align_top),
-                m_max_out(max_out),
-                m_max_score_ani(max_score_ani),
-                m_msa_min_vcov(msa_min_vcov),
-                m_msa_min_hcov(msa_min_hcov),
-                m_msa_species(std::move(msa_species)),
-                m_snp_min_cov(snp_min_cov),
-                m_snp_min_phred_sum(snp_min_phred_sum),
-                m_x_drop(x_drop),
-                m_max_key_ubiquity(max_key_ubiquity),
-                m_max_seed_size(max_seed_size),
-                m_min_successful_lookups(min_successful_lookups),
-                m_fastalign(fastalign),
-                m_profile_truth(std::move(profile_truth)),
-                m_benchmark_alignment(benchmark_alignment),
-                m_benchmark_alignment_output(benchmark_alignment_output),
-                m_mapq_debug_out(mapq_debug_output),
-                m_force(force),
-                m_verbose(verbose),
-                m_range(range),
-                m_build_gene_mask(std::move(build_gene_mask)) {
-            if (samplename_list.empty()) {
+        explicit Options(OptionsData d) :
+                m_build(d.build),
+                m_no_profile(d.no_profile),
+                m_profile_only(d.profile_only),
+                m_no_strains(d.no_strains),
+                m_preload_genomes(d.preload_genomes),
+                m_show_help(d.show_help),
+                m_show_help_dev(d.show_help_dev),
+                m_show_map_help(d.show_map_help),
+                m_show_version(d.show_version),
+                m_benchmark_alignment(d.benchmark_alignment),
+                m_benchmark_alignment_output(std::move(d.benchmark_alignment_output)),
+                m_mapq_debug_out(d.mapq_debug_out),
+                m_fastalign(d.fastalign),
+                m_force(d.force),
+                m_verbose(d.verbose),
+                m_build_gene_mask(std::move(d.build_gene_mask)),
+                m_sequence_file(std::move(d.sequence_file)),
+                m_full_sequence_file(std::move(d.full_sequence_file)),
+                m_database_path(std::move(d.database_path)),
+                m_output_dir(std::move(d.output_dir)),
+                m_strain_output_dir(std::move(d.strain_output_dir)),
+                m_misc_output_dir(std::move(d.misc_output_dir)),
+                m_map_file(std::move(d.map_file)),
+                m_first_list(std::move(d.first_list)),
+                m_second_list(std::move(d.second_list)),
+                m_prefix_list(std::move(d.prefix_list)),
+                m_sam_list(std::move(d.sam_list)),
+                m_profile_list(std::move(d.profile_list)),
+                m_profile_truth_list(std::move(d.profile_truth_list)),
+                m_range(std::move(d.range)),
+                m_profile_truth(std::move(d.profile_truth)),
+                m_model(std::move(d.model)),
+                m_knob(d.knob),
+                m_multi_allelic_mean_genecol_threshold(d.multi_allelic_mean_genecol_threshold),
+                m_multi_allelic_mean_pergene_threshold(d.multi_allelic_mean_pergene_threshold),
+                m_threads(d.threads),
+                m_align_top(d.align_top),
+                m_max_score_ani(d.max_score_ani),
+                m_x_drop(d.x_drop),
+                m_max_key_ubiquity(d.max_key_ubiquity),
+                m_max_seed_size(d.max_seed_size),
+                m_min_successful_lookups(d.min_successful_lookups),
+                m_max_out(d.max_out),
+                m_msa_min_vcov(d.msa_min_vcov),
+                m_msa_min_hcov(d.msa_min_hcov),
+                m_msa_species(std::move(d.msa_species)),
+                m_snp_min_cov(d.snp_min_cov),
+                m_snp_min_phred_sum(d.snp_min_phred_sum) {
+            if (d.samplename_list.empty()) {
                 m_sampleid_list = m_prefix_list;
             } else {
-                m_sampleid_list = samplename_list;
+                m_sampleid_list = std::move(d.samplename_list);
             }
-
             if (m_profile_list.empty()) {
-                for (auto i = 0; i < m_prefix_list.size(); i++) {
-                    auto& prefix = m_prefix_list[i];
+                for (auto& prefix : m_prefix_list) {
                     m_profile_list.emplace_back(prefix + ".profile");
                     std::cout << m_profile_list.size() << " " << prefix + ".profile" << std::endl;
                 }
             }
-
-//            if (m_sam_list.empty() && !m_prefix_list.empty()) {
-//                for (auto i = 0; i < m_sam_list.size(); i++) {
-//                    m_sam_list[i].
-//                }
-//                m_sam_file = m_output_prefix + ".sam";
-//            }
-//            if (!output_prefix.empty()) return;
-//
-//            if (!m_sam_file.empty()) {
-//                if (m_sam_file.ends_with(".sam")) {
-//                    m_output_prefix = m_sam_file.substr(0, m_sam_file.length() - 4);
-//                }
-//            }
         };
 
         std::string ToString() const {
@@ -1488,58 +1535,58 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                 std::iota(range.begin(), range.end(), 0);
             }
 
-            auto options = Options(
-                    build,
-                    no_profile,
-                    profile_only,
-                    no_strains,
-                    !preload_genomes_off,
-                    benchmark_alignment,
-                    benchmark_alignment_output_file,
-                    show_help,
-                    show_help_dev,
-                    show_map_help,
-                    show_version,
-                    mapq_debug_output,
-                    first_list,
-                    second_list,
-                    samplenames_list,
-                    db_path,
-                    prefix_list,
-                    reference,
-                    full_reference,
-                    map_file,
-                    strain_output_dir,
-                    misc_output_dir,
-                    output_dir,
-                    threads,
-                    align_top,
-                    max_out,
-                    max_score_ani,
-                    msa_min_vcov,
-                    msa_min_hcov,
-                    msa_species,
-                    snp_min_phred_sum,
-                    snp_min_cov,
-                    x_drop,
-                    max_key_ubiquity,
-                    min_successful_lookups,
-                    max_seed_size,
-                    fastalign,
-                    sam_list,
-                    profile_list,
-                    profile_truth_list,
-                    profile_truth,
-                    force,
-                    verbose,
-                    range,
-                    build_gene_mask);
+            OptionsData d;
+            d.build                    = build;
+            d.no_profile               = no_profile;
+            d.profile_only             = profile_only;
+            d.no_strains               = no_strains;
+            d.preload_genomes          = !preload_genomes_off;
+            d.benchmark_alignment      = benchmark_alignment;
+            d.benchmark_alignment_output = benchmark_alignment_output_file;
+            d.show_help                = show_help;
+            d.show_help_dev            = show_help_dev;
+            d.show_map_help            = show_map_help;
+            d.show_version             = show_version;
+            d.mapq_debug_out           = mapq_debug_output;
+            d.first_list               = std::move(first_list);
+            d.second_list              = std::move(second_list);
+            d.samplename_list          = std::move(samplenames_list);
+            d.database_path            = db_path;
+            d.prefix_list              = std::move(prefix_list);
+            d.sequence_file            = reference;
+            d.full_sequence_file       = full_reference;
+            d.map_file                 = map_file;
+            d.strain_output_dir        = strain_output_dir;
+            d.misc_output_dir          = misc_output_dir;
+            d.output_dir               = output_dir;
+            d.threads                  = threads;
+            d.align_top                = align_top;
+            d.max_out                  = max_out;
+            d.max_score_ani            = max_score_ani;
+            d.msa_min_vcov             = msa_min_vcov;
+            d.msa_min_hcov             = msa_min_hcov;
+            d.msa_species              = std::move(msa_species);
+            d.snp_min_phred_sum        = snp_min_phred_sum;
+            d.snp_min_cov              = snp_min_cov;
+            d.x_drop                   = x_drop;
+            d.max_key_ubiquity         = max_key_ubiquity;
+            d.min_successful_lookups   = min_successful_lookups;
+            d.max_seed_size            = max_seed_size;
+            d.fastalign                = fastalign;
+            d.sam_list                 = std::move(sam_list);
+            d.profile_list             = std::move(profile_list);
+            d.profile_truth_list       = std::move(profile_truth_list);
+            d.profile_truth            = profile_truth;
+            d.force                    = force;
+            d.verbose                  = verbose;
+            d.range                    = std::move(range);
+            d.build_gene_mask          = std::move(build_gene_mask);
+            d.knob                     = result["knob"].as<double>();
+            d.model                    = result["model"].as<std::string>();
+            d.multi_allelic_mean_genecol_threshold = result["multi_allelic_mean_genecol_threshold"].as<double>();
+            d.multi_allelic_mean_pergene_threshold = result["multi_allelic_mean_pergene_threshold"].as<double>();
 
-
-            options.m_knob = result["knob"].as<double>();
-            options.m_model = result["model"].as<std::string>();
-            options.m_multi_allelic_mean_genecol_threshold = result["multi_allelic_mean_genecol_threshold"].as<double>();
-            options.m_multi_allelic_mean_pergene_threshold = result["multi_allelic_mean_pergene_threshold"].as<double>();
+            auto options = Options(std::move(d));
 
             if (!options.PrepareAndCheckValidity()) {
                 std::cerr << "Exit Program" << std::endl;
