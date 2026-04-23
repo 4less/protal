@@ -1172,6 +1172,31 @@ namespace protal {
                     auto counts_vcov2 = std::count_if(tmp_vec.begin(), tmp_vec.end(), [](auto val){ return(val >= 2);});
                     current_gene_mrate2[i] = (counts_vcov2 > 0 ? ac.Multi()/static_cast<double>(counts_vcov2) : 0.0);
 
+                    double median_vcov = 0.0;
+                    double mean_vcov_nonzero = 0.0;
+                    double median_vcov_nonzero = 0.0;
+                    double hcov = static_cast<double>(counts_vcov1) / static_cast<double>(gene_obs.m_gene_length);
+                    if (os_meta) {
+                        auto sorted_cov = tmp_vec;
+                        sorted_cov.resize(gene_obs.m_gene_length, 0);
+                        std::sort(sorted_cov.begin(), sorted_cov.end());
+                        size_t n = sorted_cov.size();
+                        median_vcov = n % 2 == 1 ?
+                            static_cast<double>(sorted_cov[n/2]) :
+                            (static_cast<double>(sorted_cov[n/2 - 1]) + static_cast<double>(sorted_cov[n/2])) / 2.0;
+
+                        auto nonzero_begin = std::lower_bound(sorted_cov.begin(), sorted_cov.end(), 1);
+                        size_t nz = std::distance(nonzero_begin, sorted_cov.end());
+                        if (nz > 0) {
+                            double sum = std::accumulate(nonzero_begin, sorted_cov.end(), 0.0);
+                            mean_vcov_nonzero = sum / nz;
+                            size_t mid = nz / 2;
+                            median_vcov_nonzero = nz % 2 == 1 ?
+                                static_cast<double>(*(nonzero_begin + mid)) :
+                                (static_cast<double>(*(nonzero_begin + mid - 1)) + static_cast<double>(*(nonzero_begin + mid))) / 2.0;
+                        }
+                    }
+
                     if (os_meta) {
 #pragma omp critical(metaout)
                         {
@@ -1185,7 +1210,12 @@ namespace protal {
                             *os_meta << (counts_vcov1 > 0 ? ac.Multi()/static_cast<double>(counts_vcov1) : 0) << '\t';
                             *os_meta << (counts_vcov1 > 0 ? ac.Filtered()/static_cast<double>(counts_vcov1) : 0) << '\t';
                             *os_meta << (counts_vcov2 > 0 ? ac.Multi()/static_cast<double>(counts_vcov2) : 0) << '\t';
-                            *os_meta << (counts_vcov2 > 0 ? ac.Filtered()/static_cast<double>(counts_vcov2) : 0);
+                            *os_meta << (counts_vcov2 > 0 ? ac.Filtered()/static_cast<double>(counts_vcov2) : 0) << '\t';
+                            *os_meta << median_vcov << '\t';
+                            *os_meta << hcov << '\t';
+                            *os_meta << gene_obs.m_gene_length << '\t';
+                            *os_meta << mean_vcov_nonzero << '\t';
+                            *os_meta << median_vcov_nonzero;
                             *os_meta << std::endl;
                         }
                     }
