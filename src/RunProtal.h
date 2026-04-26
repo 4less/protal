@@ -1531,6 +1531,7 @@ namespace protal {
             }
 
             std::ofstream os_meta(options.GetSpeciesMetaOutput(name));
+            os_meta << "sample\tgene_id\tvertical_coverage\tcounts_vcov1\tcounts_vcov2\tmulti_allelic\tfiltered\tmulti_rate_vcov1\tfiltered_rate_vcov1\tmulti_rate_vcov2\tfiltered_rate_vcov2\tmedian_vcov\thcov\tgene_length\tmean_vcov_nonzero\tmedian_vcov_nonzero\n";
             GetMSAForTaxon(taxid, name, loader, options, profiles, &os_meta);
             os_meta.close();
 //            Utils::Input();

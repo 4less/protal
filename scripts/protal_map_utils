@@ -277,17 +277,18 @@ def get_relevant_indices(path_list: List[str]) -> List[int]:
     return relevant_indices
 
 
-def generate_sample_name(read1: str, read2: str, indices: List[int]) -> str:
+def generate_sample_name(read1: str, read2: str, indices: List[int], id_from_folder: bool) -> str:
     r1 = read1.split("/")[:-1]
-    r2 = read2.split("/")[:-1]
     r1_base = omit_extension(os.path.basename(read1))
     r2_base = omit_extension(os.path.basename(read2))
+    base = remove_pair(r1_base, r2_base)
+    if not id_from_folder:
+        return base
     prefix = "_".join([r1[i] for i in indices if i < len(r1)])
-    sample_name = prefix + ("_" if prefix else "") + remove_pair(r1_base, r2_base)
-    return sample_name
+    return prefix + ("_" if prefix else "") + base
 
 
-def generate_samples_from_reads(read_files: List[str], gzip_sam: bool) -> List[Dict[str, str]]:
+def generate_samples_from_reads(read_files: List[str], gzip_sam: bool, id_from_folder: bool) -> List[Dict[str, str]]:
     read_files = sorted(read_files)
     indices = get_relevant_indices(read_files)
     samples: List[Dict[str, str]] = []
@@ -298,7 +299,7 @@ def generate_samples_from_reads(read_files: List[str], gzip_sam: bool) -> List[D
         first = omit_extension(os.path.basename(first_path))
         potential_second = omit_extension(os.path.basename(potential_second_path))
         if is_pair(first, potential_second):
-            sample_name = generate_sample_name(first_path, potential_second_path, indices)
+            sample_name = generate_sample_name(first_path, potential_second_path, indices, id_from_folder)
             sam_name = f"{sample_name}.sam.gz" if gzip_sam else f"{sample_name}.sam"
             samples.append(
                 {
@@ -313,10 +314,23 @@ def generate_samples_from_reads(read_files: List[str], gzip_sam: bool) -> List[D
             i += 2
             continue
         i += 1
+
+    if not id_from_folder:
+        seen: Dict[str, str] = {}
+        for sample in samples:
+            sid = sample[MAP_SAMPLEID]
+            if sid in seen:
+                raise ValueError(
+                    f"Duplicate sample id '{sid}' from filenames alone "
+                    f"('{seen[sid]}' and '{sample[MAP_FIRST_READ]}'). "
+                    f"Use --id-from-folder to include folder components in the id."
+                )
+            seen[sid] = sample[MAP_FIRST_READ]
+
     return samples
 
 
-def generate_map(input_dirs: List[str], output_dir: str, gzip_sam: bool) -> None:
+def generate_map(input_dirs: List[str], output_dir: Optional[str], gzip_sam: bool, id_from_folder: bool) -> None:
     input_dirs_abs = [os.path.abspath(d) for d in input_dirs]
     input_dir = common_path(input_dirs_abs)
     if not input_dir:
@@ -331,7 +345,7 @@ def generate_map(input_dirs: List[str], output_dir: str, gzip_sam: bool) -> None
         for path in all_reads
         if os.path.normpath(path).startswith(input_dir)
     ]
-    samples = generate_samples_from_reads(reads_rel, gzip_sam)
+    samples = generate_samples_from_reads(reads_rel, gzip_sam, id_from_folder)
 
     seen_sample_ids: Dict[str, str] = {}
     seen_files: Dict[str, str] = {}
@@ -362,14 +376,15 @@ def generate_map(input_dirs: List[str], output_dir: str, gzip_sam: bool) -> None
     ]
     rows = [[sample.get(col, "") for col in header_cols] for sample in samples]
 
-    var_lines = [
-        (MAP_VAR_INPUT_DIR, input_dir),
-        (MAP_VAR_OUTPUT_DIR, os.path.abspath(output_dir)),
-        (MAP_VAR_SAM_OUTPUT_DIR, MAP_VAR_DEFAULT_SAM_OUTPUT_DIR),
-        (MAP_VAR_PROFILE_OUTPUT_DIR, MAP_VAR_DEFAULT_PROFILE_OUTPUT_DIR),
-        (MAP_VAR_STRAIN_OUTPUT_DIR, MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR),
-        (MAP_VAR_MISC_OUTPUT_DIR, MAP_VAR_DEFAULT_MISC_OUTPUT_DIR),
-    ]
+    var_lines = [(MAP_VAR_INPUT_DIR, input_dir)]
+    if output_dir:
+        var_lines += [
+            (MAP_VAR_OUTPUT_DIR, os.path.abspath(output_dir)),
+            (MAP_VAR_SAM_OUTPUT_DIR, MAP_VAR_DEFAULT_SAM_OUTPUT_DIR),
+            (MAP_VAR_PROFILE_OUTPUT_DIR, MAP_VAR_DEFAULT_PROFILE_OUTPUT_DIR),
+            (MAP_VAR_STRAIN_OUTPUT_DIR, MAP_VAR_DEFAULT_STRAIN_OUTPUT_DIR),
+            (MAP_VAR_MISC_OUTPUT_DIR, MAP_VAR_DEFAULT_MISC_OUTPUT_DIR),
+        ]
     merged = MapFile(
         path="",
         vars={k: v for k, v in var_lines},
@@ -579,8 +594,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     generate = sub.add_parser("generate")
     generate.add_argument("--input", required=True, nargs="+")
-    generate.add_argument("--out", required=True)
+    generate.add_argument("--out", default=None)
     generate.add_argument("--nogzip", action="store_true")
+    generate.add_argument("--id-from-folder", action="store_true")
 
     merge = sub.add_parser("merge")
     merge.add_argument("--map", required=True, action="append", nargs="+")
@@ -602,7 +618,7 @@ def main() -> int:
             flatten_map(args.map, args.out)
             return 0
         if args.command == "generate":
-            generate_map(args.input, args.out, not args.nogzip)
+            generate_map(args.input, args.out, not args.nogzip, args.id_from_folder)
             return 0
         if args.command == "merge":
             maps = [item for group in args.map for item in group]
