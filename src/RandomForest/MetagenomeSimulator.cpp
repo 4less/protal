@@ -336,12 +336,12 @@ void write_sample_manifest(const SampleOutput& sample, const fs::path& manifest_
     if (!out) {
         throw std::runtime_error("Unable to write manifest: " + manifest_path.string());
     }
-    out << "sample\tgenome\tspecies\ttaxonomy\tgenome_length\tread_pairs\trelative_abundance\tfastq_r1\tfastq_r2\n";
+    out << "sample\tgenome\tspecies\ttaxonomy\tgenome_length\tread_pairs\tvertical_coverage\trelative_abundance\tfastq_r1\tfastq_r2\n";
     for (const auto& assignment : sample.assignments) {
         out << sample.sample_name << '\t' << assignment.genome.name << '\t' << assignment.species << '\t'
             << assignment.genome.taxonomy << '\t' << assignment.genome_length << '\t' << assignment.read_pairs << '\t'
-            << assignment.relative_abundance << '\t' << sample.read1_path.string() << '\t' << sample.read2_path.string()
-            << '\n';
+            << assignment.vertical_coverage << '\t' << assignment.relative_abundance << '\t'
+            << sample.read1_path.string() << '\t' << sample.read2_path.string() << '\n';
     }
 }
 
@@ -353,13 +353,13 @@ void write_combined_manifest(const std::vector<SampleOutput>& samples, const fs:
     if (!out) {
         throw std::runtime_error("Unable to write manifest: " + manifest_path.string());
     }
-    out << "sample\tgenome\tspecies\ttaxonomy\tgenome_length\tread_pairs\trelative_abundance\tfastq_r1\tfastq_r2\n";
+    out << "sample\tgenome\tspecies\ttaxonomy\tgenome_length\tread_pairs\tvertical_coverage\trelative_abundance\tfastq_r1\tfastq_r2\n";
     for (const auto& sample : samples) {
         for (const auto& assignment : sample.assignments) {
             out << sample.sample_name << '\t' << assignment.genome.name << '\t' << assignment.species << '\t'
                 << assignment.genome.taxonomy << '\t' << assignment.genome_length << '\t' << assignment.read_pairs
-                << '\t' << assignment.relative_abundance << '\t' << sample.read1_path.string()
-                << '\t' << sample.read2_path.string() << '\n';
+                << '\t' << assignment.vertical_coverage << '\t' << assignment.relative_abundance << '\t'
+                << sample.read1_path.string() << '\t' << sample.read2_path.string() << '\n';
         }
     }
 }
@@ -534,8 +534,9 @@ SampleOutput MetagenomeSimulator::simulate_single(
             }
             const double bases = static_cast<double>(assignment.read_pairs * paired_read_length);
             const double coverage = bases / static_cast<double>(genome_len);
-        assignment.relative_abundance = coverage;  // normalized later
-        assignment.genome_length = genome_len;
+            assignment.vertical_coverage = coverage;
+            assignment.relative_abundance = coverage;  // normalized later in simulate_samples
+            assignment.genome_length = genome_len;
     }
 
     fs::path r1_gz = r1_path;
@@ -585,6 +586,13 @@ std::vector<SampleOutput> MetagenomeSimulator::simulate_samples(
     }
     const auto genome_lengths = build_length_cache(genomes_);
     const auto paired_read_length = static_cast<std::uint64_t>(art_.options().read_length) * 2ULL;
+
+    // Pre-assign strains across samples for all strain_sharing specs.
+    auto strain_assignments = designer_.assign_strains_across_samples(
+        profile_options.strain_sharing, sample_count,
+        profile_options.total_read_pairs, paired_read_length,
+        genome_lengths, rng_);
+
     std::vector<SampleOutput> outputs;
     outputs.reserve(sample_count);
     for (std::size_t i = 0; i < sample_count; ++i) {
@@ -592,8 +600,19 @@ std::vector<SampleOutput> MetagenomeSimulator::simulate_samples(
         name << sample_prefix << "_" << (i + 1);
         protal::Benchmark timer("simulate_metagenome " + name.str());
         timer.Start();
+
+        ProfileDesignOptions per_sample_opts = profile_options;
+        if (profile_options.species_per_sample_min > 0 &&
+            profile_options.species_per_sample_min < profile_options.species_per_sample) {
+            per_sample_opts.species_per_sample = std::uniform_int_distribution<std::size_t>(
+                profile_options.species_per_sample_min,
+                profile_options.species_per_sample)(rng_);
+        }
+        per_sample_opts.forced_strains      = strain_assignments[i].forced_strains;
+        per_sample_opts.species_min_abundance = strain_assignments[i].species_min_abundance;
+
         auto sample =
-            simulate_single(profile_options, name.str(), output_dir, genome_lengths, paired_read_length, skip_reads, keep_tmp);
+            simulate_single(per_sample_opts, name.str(), output_dir, genome_lengths, paired_read_length, skip_reads, keep_tmp);
         timer.Stop();
 
         double coverage_sum = 0.0;
