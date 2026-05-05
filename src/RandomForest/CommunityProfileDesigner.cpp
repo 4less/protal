@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <unordered_set>
+#include <cstdint>
 
 namespace protal::sim {
 
@@ -349,6 +350,16 @@ std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
         }
     };
 
+    // Forced strains from strain-sharing pre-assignment — added before include_species so they are
+    // already in selected_set when include_species is processed (preventing double-inclusion).
+    // They count toward species_per_sample: fewer random species are selected to compensate.
+    for (const auto& [fkey, fstrains] : options.forced_strains) {
+        if (fstrains.empty() || selected_set.count(fkey) > 0) continue;
+        selected_species.emplace_back(fkey, fstrains);
+        selected_set.insert(fkey);
+        reduce_requested_quotas(fkey);
+    }
+
     std::unordered_set<std::string> include_species_set;
     include_species_set.reserve(options.include_species.size());
     for (const auto& spec : options.include_species) {
@@ -482,6 +493,40 @@ std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
         species_rel.push_back(sum_weights > 0.0 ? w / sum_weights : 1.0 / selected_species.size());
     }
 
+    // Apply per-species minimum relative abundance floors (derived from min_vcov).
+    if (!options.species_min_abundance.empty()) {
+        std::vector<bool> floored(selected_species.size(), false);
+        double total_floor = 0.0;
+        for (std::size_t i = 0; i < selected_species.size(); ++i) {
+            auto it = options.species_min_abundance.find(selected_species[i].first);
+            if (it != options.species_min_abundance.end() && species_rel[i] < it->second) {
+                total_floor += it->second;
+                species_rel[i] = it->second;
+                floored[i] = true;
+            }
+        }
+        if (total_floor > 0.0) {
+            if (total_floor >= 1.0) {
+                std::cerr << "[WARNING] species_min_abundance floors sum to " << total_floor
+                          << " >= 1.0; rescaling floors to 0.999.\n";
+                for (std::size_t i = 0; i < selected_species.size(); ++i) {
+                    if (floored[i]) species_rel[i] = species_rel[i] * 0.999 / total_floor;
+                }
+                total_floor = 0.999;
+            }
+            double sum_non_floored = 0.0;
+            for (std::size_t i = 0; i < selected_species.size(); ++i) {
+                if (!floored[i]) sum_non_floored += species_rel[i];
+            }
+            if (sum_non_floored > 0.0) {
+                const double scale = (1.0 - total_floor) / sum_non_floored;
+                for (std::size_t i = 0; i < selected_species.size(); ++i) {
+                    if (!floored[i]) species_rel[i] *= scale;
+                }
+            }
+        }
+    }
+
     // Convert species abundances to read counts matching total_read_pairs.
     std::vector<std::uint64_t> species_counts;
     species_counts.reserve(selected_species.size());
@@ -542,6 +587,139 @@ std::vector<GenomeAssignment> CommunityProfileDesigner::design_profile(
             assignments.push_back(GenomeAssignment{strains[j], species, strain_counts[j], 0.0, 0});
         }
     }
+    return assignments;
+}
+
+std::vector<SampleStrainAssignment> CommunityProfileDesigner::assign_strains_across_samples(
+    const std::vector<StrainSharingSpec>& specs,
+    std::size_t sample_count,
+    std::uint64_t total_read_pairs,
+    std::uint64_t paired_read_length,
+    const std::unordered_map<std::string, std::uint64_t>& genome_lengths,
+    std::mt19937_64& rng) const
+{
+    std::vector<SampleStrainAssignment> assignments(sample_count);
+    if (specs.empty() || sample_count == 0) return assignments;
+
+    auto grouped = group_by_species();
+
+    for (const auto& spec : specs) {
+        if (spec.n_strains == 0) continue;
+
+        auto resolved_opt = resolve_requested_species(spec.species, grouped);
+        if (!resolved_opt.has_value()) {
+            throw std::runtime_error("Strain sharing species not found in genome table: " + spec.species);
+        }
+        const std::string& species_key = *resolved_opt;
+        const auto& available = grouped.at(species_key);
+
+        if (available.size() < spec.n_strains) {
+            throw std::runtime_error(
+                "Not enough strains for strain sharing species \"" + spec.species + "\": need " +
+                std::to_string(spec.n_strains) + ", have " + std::to_string(available.size()));
+        }
+
+        // Select n_strains randomly without replacement.
+        std::vector<std::size_t> idx(available.size());
+        std::iota(idx.begin(), idx.end(), 0);
+        std::shuffle(idx.begin(), idx.end(), rng);
+        std::vector<GenomeRecord> chosen;
+        chosen.reserve(spec.n_strains);
+        for (std::size_t k = 0; k < spec.n_strains; ++k) chosen.push_back(available[idx[k]]);
+
+        // Number of samples that will include this species.
+        const std::size_t n_present = std::min(
+            sample_count,
+            std::max(std::size_t{1},
+                static_cast<std::size_t>(std::round(spec.sample_fraction * static_cast<double>(sample_count)))));
+
+        // Clamp sample_fraction == 0.0 edge case.
+        if (spec.sample_fraction <= 0.0) continue;
+
+        const std::size_t min_occ = std::max(std::size_t{1}, spec.min_occurrence);
+        if (spec.n_strains * min_occ > n_present) {
+            throw std::runtime_error(
+                "Cannot satisfy min_occurrence=" + std::to_string(min_occ) +
+                " for " + std::to_string(spec.n_strains) + " strains in " +
+                std::to_string(n_present) + " samples (need " +
+                std::to_string(spec.n_strains * min_occ) + " slots)");
+        }
+
+        // Shuffle all sample indices to pick the n_present that include this species.
+        std::vector<std::size_t> all_indices(sample_count);
+        std::iota(all_indices.begin(), all_indices.end(), 0);
+        std::shuffle(all_indices.begin(), all_indices.end(), rng);
+        all_indices.resize(n_present);
+
+        // per_present[s] = strains assigned to the s-th present sample.
+        std::vector<std::vector<GenomeRecord>> per_present(n_present);
+
+        // Build a flat list where each strain index appears exactly min_occ times, then shuffle.
+        // This guarantees each strain meets min_occurrence with zero cross-strain collisions:
+        // every sample in the covered prefix receives exactly one strain from this pass.
+        std::vector<std::size_t> flat;
+        flat.reserve(spec.n_strains * min_occ);
+        for (std::size_t k = 0; k < spec.n_strains; ++k) {
+            for (std::size_t m = 0; m < min_occ; ++m) flat.push_back(k);
+        }
+        std::shuffle(flat.begin(), flat.end(), rng);
+        for (std::size_t s = 0; s < flat.size(); ++s) {
+            per_present[s].push_back(chosen[flat[s]]);
+        }
+
+        // Samples beyond the flat prefix (when n_present > n_strains * min_occ) get a random strain.
+        for (std::size_t s = flat.size(); s < n_present; ++s) {
+            std::uniform_int_distribution<std::size_t> pick(0, spec.n_strains - 1);
+            per_present[s].push_back(chosen[pick(rng)]);
+        }
+
+        // Probabilistically add more strains from the forced pool (same chain logic as
+        // --strains_per_species, but drawing only from the n_strains already chosen).
+        if (!spec.conspecific_strain_probabilities.empty()) {
+            std::uniform_real_distribution<double> uni(0.0, 1.0);
+            for (std::size_t s = 0; s < n_present; ++s) {
+                // Collect indices of chosen strains not yet in this sample.
+                std::unordered_set<std::string> already;
+                for (const auto& g : per_present[s]) already.insert(g.name);
+                std::vector<std::size_t> pool;
+                pool.reserve(spec.n_strains);
+                for (std::size_t k = 0; k < spec.n_strains; ++k) {
+                    if (!already.count(chosen[k].name)) pool.push_back(k);
+                }
+                std::shuffle(pool.begin(), pool.end(), rng);
+                std::size_t next = 0;
+                for (double p : spec.conspecific_strain_probabilities) {
+                    if (next >= pool.size()) break;
+                    if (uni(rng) <= p) {
+                        per_present[s].push_back(chosen[pool[next++]]);
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Commit to per-sample assignments and compute min_abundance floors.
+        for (std::size_t s = 0; s < n_present; ++s) {
+            const std::size_t sample_idx = all_indices[s];
+            assignments[sample_idx].forced_strains[species_key] = per_present[s];
+
+            if (spec.min_vcov > 0.0 && total_read_pairs > 0 && paired_read_length > 0) {
+                double total_min_reads = 0.0;
+                for (const auto& strain : per_present[s]) {
+                    auto it = genome_lengths.find(strain.name);
+                    if (it != genome_lengths.end()) {
+                        total_min_reads += std::ceil(
+                            spec.min_vcov * static_cast<double>(it->second) /
+                            static_cast<double>(paired_read_length));
+                    }
+                }
+                const double min_rel = total_min_reads / static_cast<double>(total_read_pairs);
+                assignments[sample_idx].species_min_abundance[species_key] = min_rel;
+            }
+        }
+    }
+
     return assignments;
 }
 
