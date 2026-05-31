@@ -253,6 +253,17 @@ namespace protal {
         for (auto j = ins_count; j > 0; j--) msa_row.emplace_back('-');
     }
 
+    // Returns IUPAC ambiguity code for a sorted, deduplicated set of allele bases.
+    static char IUPACCode(std::vector<char>& alleles) {
+        static const std::unordered_map<std::string, char> iupac = {
+            {"AG", 'R'}, {"CT", 'Y'}, {"AT", 'W'}, {"CG", 'S'}, {"AC", 'M'}, {"GT", 'K'},
+            {"CGT", 'B'}, {"ACT", 'H'}, {"AGT", 'D'}, {"ACG", 'V'}, {"ACGT", 'N'}
+        };
+        std::string key(alleles.begin(), alleles.end());
+        auto it = iupac.find(key);
+        return (it != iupac.end()) ? it->second : (alleles.empty() ? 'N' : alleles.front());
+    }
+
     using VariantVecRef = std::reference_wrapper<VariantVec>;
     using SequenceRangeHandlerRef = std::reference_wrapper<SequenceRangeHandler>;
     using OptionalMSASequenceItem = std::optional<std::pair<VariantVec, SequenceRangeHandlerRef>>;
@@ -524,7 +535,7 @@ namespace protal {
         return has_variant;
     }
 
-    static bool MSA(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum, double min_frequency=0.0, bool require_strand=false, size_t min_mean_qual=0, MSAStats* stats = nullptr, MSARow* ref_row = nullptr) {
+    static bool MSA(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum, double min_frequency=0.0, bool require_strand=false, size_t min_mean_qual=0, MSAStats* stats = nullptr, MSARow* ref_row = nullptr, size_t snp_max_alleles = 1) {
         if (msa.size() != items.size()) {
             std::cerr << msa.size() << " != " << items.size() << " <- items" << std::endl;
             std::cerr << "Msa object must be of the same length as items" << std::endl;
@@ -545,10 +556,12 @@ namespace protal {
         std::vector<uint16_t> pause_timer(items.size(), 0);
         std::vector<OptionalVariant> column( items.size(), OptionalVariant{} );
         std::vector<bool> column_pass( items.size(), false );
+        std::vector<const VariantBin*> column_bins( items.size(), nullptr );
         bool had_indel = false;
 
         for (size_t rpos = 0; rpos < reference.length(); rpos++) {
             std::fill(column.begin(), column.end(), OptionalVariant{});
+            std::fill(column_bins.begin(), column_bins.end(), nullptr);
             char ref = reference[rpos];
             auto max_ins = 0;
 
@@ -603,6 +616,7 @@ namespace protal {
 
                     column_pass[i] = pass;
                     column[i] = call;
+                    column_bins[i] = &variant;
 
                     if (pass && column[i]->IsINS()) max_ins = column[i]->GetStructuralSize() > max_ins ? column[i]->GetStructuralSize() : max_ins;
                 }
@@ -711,9 +725,29 @@ namespace protal {
                             // PASS: SNP -------------------------------------------------------------------------------
                             outs[i] += "F";
                             if (stats) (*stats)[i].snps_retained++;
-                            // Variant passes and is SNP
                             AddInsertionGap(msa_row, max_ins);
-                            msa_row.emplace_back(var->GetVariant());
+                            if (snp_max_alleles > 1 && column_bins[i] != nullptr) {
+                                uint16_t pos_cov_v = (rpos < cov.size()) ? cov[rpos] : 0;
+                                // Collect all passing SNP alleles ranked by observations descending
+                                std::vector<std::pair<uint32_t,char>> candidates;
+                                for (auto const& v : *column_bins[i]) {
+                                    if (v.IsSNP() && !v.IsReference() &&
+                                        VariantPass(v, *column_bins[i], min_qual_sum, min_cov, min_frequency, pos_cov_v, require_strand, min_mean_qual)) {
+                                        candidates.emplace_back(v.Observations(), v.GetVariant());
+                                    }
+                                }
+                                std::sort(candidates.begin(), candidates.end(), [](auto const& a, auto const& b){ return a.first > b.first; });
+                                std::vector<char> alleles;
+                                for (auto const& [obs, base] : candidates) {
+                                    if (alleles.size() >= snp_max_alleles) break;
+                                    if (std::find(alleles.begin(), alleles.end(), base) == alleles.end())
+                                        alleles.push_back(base);
+                                }
+                                std::sort(alleles.begin(), alleles.end());
+                                msa_row.emplace_back(alleles.size() > 1 ? IUPACCode(alleles) : var->GetVariant());
+                            } else {
+                                msa_row.emplace_back(var->GetVariant());
+                            }
                         } else if (var->IsINS()) {
                             // PASS: INSERTION -------------------------------------------------------------------------
                             outs[i] += "G";

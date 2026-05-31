@@ -1100,6 +1100,7 @@ namespace protal {
         auto min_af = options.GetSNPMinAF();
         auto require_strand = options.GetSNPRequireStrand();
         auto min_mean_qual = options.GetSNPMinMeanQual();
+        auto snp_max_alleles = options.GetSNPMaxAlleles();
         auto min_samples_with_gene = 3;
 
         std::vector<size_t> profile_indices = GetProfilesWithTaxon(taxid, profiles, options, filter);
@@ -1246,7 +1247,7 @@ namespace protal {
 
 
                 protal::MSAStats gene_stats(items.size());
-                bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum, min_af, require_strand, min_mean_qual, &gene_stats, &ref_msa_row);
+                bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum, min_af, require_strand, min_mean_qual, &gene_stats, &ref_msa_row, snp_max_alleles);
 
                 if (!result) continue;
 
