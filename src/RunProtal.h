@@ -459,7 +459,10 @@ namespace protal {
                 std::cout << "Thread " << omp_get_thread_num() << " run profile" << std::endl;
             }
 
-            auto profile = profiler.Profile(sample_name, std::optional<std::reference_wrapper<std::ostream>>{erro});
+            auto profile = profiler.Profile(sample_name, std::optional<std::reference_wrapper<std::ostream>>{erro},
+                                            options.GetSNPMinCov(), options.GetSNPMinCov(),
+                                            options.GetSNPMinAF(), options.GetSNPMinMeanQual(),
+                                            options.GetSNPMinPhredSum(), options.GetSNPRequireStrand());
             erro.close();
             bm_profile.Stop();
             
@@ -1094,6 +1097,9 @@ namespace protal {
         auto min_hcov = options.GetMSAMinHCOV();
         auto min_qual_sum = options.GetSNPMinPhredSum();
         auto min_cov = options.GetSNPMinCov();
+        auto min_af = options.GetSNPMinAF();
+        auto require_strand = options.GetSNPRequireStrand();
+        auto min_mean_qual = options.GetSNPMinMeanQual();
         auto min_samples_with_gene = 3;
 
         std::vector<size_t> profile_indices = GetProfilesWithTaxon(taxid, profiles, options, filter);
@@ -1240,7 +1246,7 @@ namespace protal {
 
 
                 protal::MSAStats gene_stats(items.size());
-                bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum, &gene_stats, &ref_msa_row);
+                bool result = protal::MSA(items, gene.Sequence(), msa, min_cov, min_qual_sum, min_af, require_strand, min_mean_qual, &gene_stats, &ref_msa_row);
 
                 if (!result) continue;
 
@@ -1409,6 +1415,8 @@ namespace protal {
                      // --- filter breakdown + % of total_variant_positions ---
                      << "\tvariants_filtered_qual_sum\tvariants_filtered_qual_sum_pct"
                      << "\tvariants_filtered_obs_cov\tvariants_filtered_obs_cov_pct"
+                     << "\tvariants_filtered_af\tvariants_filtered_af_pct"
+                     << "\tvariants_filtered_strand\tvariants_filtered_strand_pct"
                      // --- pass/filter summary percentages ---
                      << "\ttotal_pass_pct\ttotal_filtered_pct"
                      // --- position-level counts + % of total_positions ---
@@ -1431,6 +1439,8 @@ namespace protal {
                          << '\t' << s.deletions_retained         << '\t' << s.PctDeletionsRetained()
                          << '\t' << s.variants_filtered_qual_sum << '\t' << s.PctFilteredQualSum()
                          << '\t' << s.variants_filtered_obs_cov  << '\t' << s.PctFilteredObsCov()
+                         << '\t' << s.variants_filtered_af       << '\t' << s.PctFilteredAF()
+                         << '\t' << s.variants_filtered_strand   << '\t' << s.PctFilteredStrand()
                          << '\t' << s.PctPass()
                          << '\t' << s.PctFiltered()
                          << '\t' << s.positions_ref              << '\t' << s.PctPositionsRef()

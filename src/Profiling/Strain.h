@@ -91,9 +91,9 @@ namespace protal {
             return m_sequence_range_handler;
         }
 
-        void PostProcess(size_t min_observations=2, size_t min_observations_fwdrev=2, double min_frequency=0.2, size_t min_avg_quality=15) {
+        void PostProcess(size_t min_observations=2, size_t min_observations_fwdrev=2, double min_frequency=0.2, size_t min_avg_quality=15, size_t min_phred_sum=0, bool require_strand=false) {
             auto cov = m_sequence_range_handler.CalculateCoverageVector2();
-            m_variant_handler.PostProcessSNPs(cov, min_observations, min_observations_fwdrev, min_frequency, min_avg_quality);
+            m_variant_handler.PostProcessSNPs(cov, min_observations, min_observations_fwdrev, min_frequency, min_avg_quality, min_phred_sum, require_strand);
         }
 
         void AddToSequenceRange(SamEntry const& sam, size_t read_id) {
@@ -230,17 +230,20 @@ namespace protal {
     using DoubleMatrix = Matrix<double>;
 
 
-    static bool VariantPass(Variant const& call, VariantBin const& bin, size_t min_var_qual_sum=50, size_t min_var_cov=3) {
-        if (call.QualitySum() < min_var_qual_sum || call.Observations() < min_var_cov) return false;
-//        std::cout << VariantHandler::VariantBinToMinimalString(bin);
-//        std::cout << " -- PASS --> " << bin.front().ToString() << std::endl;
-//        size_t total = std::accumulate(bin.begin(), bin.end(), 0, [](size_t acc, Variant const& v) { return acc + v.Observations(); });
-//        double ratio = static_cast<double>(bin.front().Observations())/total;
-//        if (!bin.front().IsReference() && bin.size() > 1 && ratio < 0.8) {
-//            std::cout << VariantHandler::VariantBinToString(bin);
-//            std::cout << "            (" << bin.front().Observations() << "/" << total << ")" << std::endl;
-//            Utils::Input();
-//        }
+    static bool VariantPass(Variant const& call, VariantBin const& bin,
+                            size_t min_var_qual_sum=50, size_t min_var_cov=3,
+                            double min_frequency=0.0, uint16_t coverage=0,
+                            bool require_strand=false, size_t min_mean_qual=0) {
+        if (call.Observations() < min_var_cov) return false;
+        // OR logic: passes if either quality gate holds
+        bool quality_ok = call.QualitySum() >= min_var_qual_sum ||
+                          (min_mean_qual > 0 && call.MeanQuality() >= min_mean_qual);
+        if (!quality_ok) return false;
+        if (min_frequency > 0.0 && coverage > 0) {
+            double freq = static_cast<double>(call.Observations()) / coverage;
+            if (freq < min_frequency) return false;
+        }
+        if (require_strand && !call.HasFwdAndRev()) return false;
         return true;
     }
 
@@ -265,8 +268,10 @@ namespace protal {
         size_t snps_retained = 0;              ///< Variant passed all filters and is a SNP
         size_t insertions_retained = 0;        ///< Variant passed all filters and is an insertion
         size_t deletions_retained = 0;         ///< Variant passed all filters and is a deletion
-        size_t variants_filtered_qual_sum = 0; ///< Variant failed minimum quality sum filter (min_qual_sum)
-        size_t variants_filtered_obs_cov = 0;  ///< Variant failed minimum observation count filter (min_var_cov=3)
+        size_t variants_filtered_qual_sum = 0; ///< Variant failed quality gate (phred_sum < min AND mean_qual < min)
+        size_t variants_filtered_obs_cov = 0;  ///< Variant failed minimum observation count filter (--snp_min_cov)
+        size_t variants_filtered_af = 0;       ///< Variant failed allele frequency filter (--snp_min_af)
+        size_t variants_filtered_strand = 0;   ///< Variant failed strand-bias filter (--snp_no_strand not set)
 
         // Position-level outcomes (one count per reference position, excluding deletion continuations)
         size_t positions_ref = 0;              ///< Covered >=min_cov, no variant called → reference base used
@@ -281,7 +286,8 @@ namespace protal {
         }
 
         size_t TotalFiltered() const {
-            return variants_filtered_qual_sum + variants_filtered_obs_cov;
+            return variants_filtered_qual_sum + variants_filtered_obs_cov
+                 + variants_filtered_af + variants_filtered_strand;
         }
 
         size_t TotalVariantPositions() const {
@@ -313,6 +319,16 @@ namespace protal {
         double PctFilteredObsCov() const {
             auto d = TotalVariantPositions();
             return d > 0 ? 100.0 * variants_filtered_obs_cov / d : 0.0;
+        }
+
+        double PctFilteredAF() const {
+            auto d = TotalVariantPositions();
+            return d > 0 ? 100.0 * variants_filtered_af / d : 0.0;
+        }
+
+        double PctFilteredStrand() const {
+            auto d = TotalVariantPositions();
+            return d > 0 ? 100.0 * variants_filtered_strand / d : 0.0;
         }
 
         double PctSnpsRetained() const {
@@ -357,6 +373,8 @@ namespace protal {
             deletions_retained         += o.deletions_retained;
             variants_filtered_qual_sum += o.variants_filtered_qual_sum;
             variants_filtered_obs_cov  += o.variants_filtered_obs_cov;
+            variants_filtered_af       += o.variants_filtered_af;
+            variants_filtered_strand   += o.variants_filtered_strand;
             positions_ref              += o.positions_ref;
             positions_below_min_cov    += o.positions_below_min_cov;
             positions_no_coverage      += o.positions_no_coverage;
@@ -506,7 +524,7 @@ namespace protal {
         return has_variant;
     }
 
-    static bool MSA(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum, MSAStats* stats = nullptr, MSARow* ref_row = nullptr) {
+    static bool MSA(MSASequenceItems const& items, std::string const& reference, MSAVector& msa, uint32_t min_cov, uint32_t min_qual_sum, double min_frequency=0.0, bool require_strand=false, size_t min_mean_qual=0, MSAStats* stats = nullptr, MSARow* ref_row = nullptr) {
         if (msa.size() != items.size()) {
             std::cerr << msa.size() << " != " << items.size() << " <- items" << std::endl;
             std::cerr << "Msa object must be of the same length as items" << std::endl;
@@ -577,7 +595,8 @@ namespace protal {
                     // Position has variant.
                     auto& variant = variants[indices[i]];
                     auto& call = GetConsensusCall(variant);
-                    bool pass = VariantPass(call, variant, min_qual_sum);
+                    uint16_t pos_cov = (rpos < cov.size()) ? cov[rpos] : 0;
+                    bool pass = VariantPass(call, variant, min_qual_sum, min_cov, min_frequency, pos_cov, require_strand, min_mean_qual);
 
                     outs[i] += std::to_string(pass);
                     outs[i] += "\t";
@@ -673,12 +692,18 @@ namespace protal {
                             outs[i] += "E";
                             // NO PASS: IGNORE COLUMN ------------------------------------------------------------------
                             // Variant does not pass - add 'N' for ambiguous base.
-                            // Track which filter(s) caused the rejection (min_var_cov matches VariantPass default).
+                            // Re-check each filter independently to attribute rejection reason(s).
                             if (stats) {
-                                constexpr size_t min_var_cov = 3;
                                 auto& s = (*stats)[i];
-                                if (var->QualitySum() < min_qual_sum) s.variants_filtered_qual_sum++;
-                                if (var->Observations() < min_var_cov) s.variants_filtered_obs_cov++;
+                                uint16_t pos_cov_for_af = (rpos < cov.size()) ? cov[rpos] : 0;
+                                if (var->Observations() < min_cov) s.variants_filtered_obs_cov++;
+                                bool qual_fails = var->QualitySum() < min_qual_sum &&
+                                                  !(min_mean_qual > 0 && var->MeanQuality() >= min_mean_qual);
+                                if (qual_fails) s.variants_filtered_qual_sum++;
+                                if (min_frequency > 0.0 && pos_cov_for_af > 0 &&
+                                    static_cast<double>(var->Observations()) / pos_cov_for_af < min_frequency)
+                                    s.variants_filtered_af++;
+                                if (require_strand && !var->HasFwdAndRev()) s.variants_filtered_strand++;
                             }
                             AddInsertionGap(msa_row, max_ins);
                             msa_row.emplace_back(VARIANT_NO_PASS);

@@ -192,28 +192,29 @@ namespace protal {
             return str;
         }
 
-        bool FilterSNPs(Variant& var, size_t coverage, size_t min_observations, size_t min_observations_fwdrev, double min_frequency, size_t min_avg_quality) {
+        bool FilterSNPs(Variant& var, size_t coverage, size_t min_observations, size_t min_observations_fwdrev, double min_frequency, size_t min_avg_quality, size_t min_phred_sum=0, bool require_strand=false) {
             auto observations = var.Observations();
             auto frequency = static_cast<double>(observations) / coverage;
             auto mean_qual = var.MeanQuality();
 
-            bool valid =
-                    (observations >= min_observations ||
-                    var.HasFwdAndRev() && observations >= min_observations_fwdrev) &&
-                    frequency >= min_frequency &&
-                    mean_qual >= min_avg_quality;
+            bool count_ok = (observations >= min_observations ||
+                             (var.HasFwdAndRev() && observations >= min_observations_fwdrev));
+            bool freq_ok = frequency >= min_frequency;
+            // OR logic: passes if either quality gate holds
+            bool quality_ok = mean_qual >= min_avg_quality || var.QualitySum() >= min_phred_sum;
+            bool strand_ok = !require_strand || var.HasFwdAndRev();
 
-            return valid;
+            return count_ok && freq_ok && quality_ok && strand_ok;
         }
 
-        void FilterSNPs(VariantBin& bin, size_t coverage, size_t min_observations, size_t min_observations_fwdrev, double min_frequency, size_t min_avg_quality) {
+        void FilterSNPs(VariantBin& bin, size_t coverage, size_t min_observations, size_t min_observations_fwdrev, double min_frequency, size_t min_avg_quality, size_t min_phred_sum=0, bool require_strand=false) {
             for (auto& var : bin) {
-                auto is_valid = FilterSNPs(var, coverage, min_observations, min_observations_fwdrev, min_frequency, min_avg_quality);
+                auto is_valid = FilterSNPs(var, coverage, min_observations, min_observations_fwdrev, min_frequency, min_avg_quality, min_phred_sum, require_strand);
                 var.SetValid(is_valid);
             }
         }
 
-        void PostProcessSNPBin(VariantBin& bin, size_t coverage, size_t min_observations=5, size_t min_observations_fwdrev=3, double min_frequency=0.2, size_t min_avg_quality=15) {
+        void PostProcessSNPBin(VariantBin& bin, size_t coverage, size_t min_observations=5, size_t min_observations_fwdrev=3, double min_frequency=0.2, size_t min_avg_quality=15, size_t min_phred_sum=0, bool require_strand=false) {
             auto var_pos = bin.front().Position();
 
             // Total variant var_observations
@@ -256,16 +257,16 @@ namespace protal {
             variant.SetObservations(coverage - var_observations);
 
 
-            FilterSNPs(bin, coverage, min_observations, min_observations_fwdrev, min_frequency, min_avg_quality);
+            FilterSNPs(bin, coverage, min_observations, min_observations_fwdrev, min_frequency, min_avg_quality, min_phred_sum, require_strand);
         }
 
-        void PostProcessSNPs(std::vector<uint16_t>& coverage, size_t min_observations=2, size_t min_observations_fwdrev=2, double min_frequency=0.2, size_t min_avg_quality=15) {
+        void PostProcessSNPs(std::vector<uint16_t>& coverage, size_t min_observations=2, size_t min_observations_fwdrev=2, double min_frequency=0.2, size_t min_avg_quality=15, size_t min_phred_sum=0, bool require_strand=false) {
             // Iterate all variant positions.
             for (auto& [variant_pos, variant_bin] : m_variants) {
                 auto& bin = m_variants.at(variant_pos);
                 auto cov = coverage[variant_pos];
 
-                PostProcessSNPBin(bin, cov, min_observations, min_observations_fwdrev, min_frequency, min_avg_quality);
+                PostProcessSNPBin(bin, cov, min_observations, min_observations_fwdrev, min_frequency, min_avg_quality, min_phred_sum, require_strand);
             }
         }
 
