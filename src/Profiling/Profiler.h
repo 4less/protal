@@ -1022,19 +1022,13 @@ namespace protal {
                 return m_name;
             }
 
-            void PostProcessSNPs() {
-                size_t min_observations = 3;
-                size_t min_observations_fwdrev = 2;
-                double min_frequency = 0.2;
-                size_t min_avg_quality = 10;
-
-
+            void PostProcessSNPs(size_t min_observations=2, size_t min_observations_fwdrev=2, double min_frequency=0.0, size_t min_avg_quality=15, size_t min_phred_sum=0, bool require_strand=false) {
                 for (auto& [tid, _] : m_taxa) {
                     auto& taxon = m_taxa.at(tid);
                     for (auto& [gid, __] : taxon.GetGenes()) {
                         auto& gene = taxon.GetGenes().at(gid);
                         auto& strain_handler = gene.GetStrainLevel();
-                        strain_handler.PostProcess(min_observations, min_observations_fwdrev, min_frequency, min_avg_quality);
+                        strain_handler.PostProcess(min_observations, min_observations_fwdrev, min_frequency, min_avg_quality, min_phred_sum, require_strand);
                     }
                 }
             }
@@ -2054,7 +2048,7 @@ namespace protal {
             }
 
             using OptionalRefOstream = std::optional<std::reference_wrapper<std::ostream>>;
-            MicrobialProfile Profile(std::string sample_name, OptionalRefOstream erroneous_sam_out={}) {
+            MicrobialProfile Profile(std::string sample_name, OptionalRefOstream erroneous_sam_out={}, size_t snp_min_cov=2, size_t snp_min_obs_fwdrev=2, double snp_min_af=0.0, size_t snp_min_mean_qual=15, size_t snp_min_phred_sum=0, bool snp_require_strand=false) {
                 MicrobialProfile profile(m_genome_loader);
                 profile.SetName(sample_name);
 
@@ -2090,7 +2084,7 @@ namespace protal {
                 }
 
                 m_post_process_bm.Start();
-                profile.PostProcessSNPs();
+                profile.PostProcessSNPs(snp_min_cov, snp_min_obs_fwdrev, snp_min_af, snp_min_mean_qual, snp_min_phred_sum, snp_require_strand);
                 m_post_process_bm.Stop();
 
 

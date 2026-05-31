@@ -31,7 +31,10 @@ namespace protal {
     static const std::string PROTAL_DB_ENV_VARIABLE = "PROTAL_DB_PATH";
 
     static const double DEFAULT_MIN_SNP_COV = 2;
-    static const double DEFAULT_MIN_SNP_PHRED_SUM = 60;
+    static const double DEFAULT_MIN_SNP_PHRED_SUM = 90;
+    static const double DEFAULT_MIN_SNP_AF = 0.0;
+    static const size_t DEFAULT_MIN_SNP_MEAN_QUAL = 15;
+    static const bool   DEFAULT_SNP_REQUIRE_STRAND = true; // disabled via --snp_no_strand
 
     static cxxopts::Options CxxOptions() {
         cxxopts::Options options(
@@ -73,8 +76,11 @@ namespace protal {
         // Strain / SNP options
         options.add_options("Strains")
                 ("no_strains", "Stay on species level. Do not output SNPs or MSAs. Default is on.")
-                ("snp_min_cov", "Minimum coverage for calling a SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_COV)))
-                ("snp_min_phred_sum", "Minimum phred sum across all observations of allele to call SNP", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_PHRED_SUM)))
+                ("snp_min_cov", "Minimum number of reads supporting a variant to call a SNP.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_COV)))
+                ("snp_min_phred_sum", "Minimum cumulative phred score (sum of base qualities) across all supporting reads. Combined with --snp_min_mean_qual via OR: a variant passes quality if phred_sum >= snp_min_phred_sum OR mean_qual >= snp_min_mean_qual.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_PHRED_SUM)))
+                ("snp_min_mean_qual", "Minimum mean base quality across supporting reads. Combined with --snp_min_phred_sum via OR: a variant passes quality if mean_qual >= snp_min_mean_qual OR phred_sum >= snp_min_phred_sum. Note: at low coverage, --snp_min_cov is the binding constraint regardless.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MIN_SNP_MEAN_QUAL)))
+                ("snp_min_af", "Minimum allele frequency for a variant (variant observations / position coverage). Interacts with --snp_min_cov: below coverage = snp_min_cov/snp_min_af, the count filter is stricter.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_AF)))
+                ("snp_no_strand", "Disable strand-bias filter. By default protal requires at least one supporting read from each strand (forward and reverse); pass this flag to allow variants supported by a single strand.")
                 ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
                 ("msa_min_hcov", "Minimum non-N/non-'-' bases required per sequence to keep it in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_HCOV)))
                 ("msa_species", "Restrict MSAs to a single species (s__Genus_species) or a comma-separated list.", cxxopts::value<std::string>()->default_value(""))
@@ -170,6 +176,9 @@ namespace protal {
         std::vector<std::string> msa_species;
         double snp_min_cov = DEFAULT_MIN_SNP_COV;
         double snp_min_phred_sum = DEFAULT_MIN_SNP_PHRED_SUM;
+        double snp_min_af = DEFAULT_MIN_SNP_AF;
+        size_t snp_min_mean_qual = DEFAULT_MIN_SNP_MEAN_QUAL;
+        bool   snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
         double multi_allelic_mean_genecol_threshold = 0.0;
         double multi_allelic_mean_pergene_threshold = 0.0;
     };
@@ -239,6 +248,9 @@ namespace protal {
 
         double m_snp_min_cov = DEFAULT_MIN_SNP_COV;
         double m_snp_min_phred_sum = DEFAULT_MIN_SNP_PHRED_SUM;
+        double m_snp_min_af = DEFAULT_MIN_SNP_AF;
+        size_t m_snp_min_mean_qual = DEFAULT_MIN_SNP_MEAN_QUAL;
+        bool   m_snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
 
     public:
         static inline const std::string PROTAL_INDEX_FILE = "index.prx";
@@ -328,7 +340,10 @@ namespace protal {
                 m_msa_min_hcov(d.msa_min_hcov),
                 m_msa_species(std::move(d.msa_species)),
                 m_snp_min_cov(d.snp_min_cov),
-                m_snp_min_phred_sum(d.snp_min_phred_sum) {
+                m_snp_min_phred_sum(d.snp_min_phred_sum),
+                m_snp_min_af(d.snp_min_af),
+                m_snp_min_mean_qual(d.snp_min_mean_qual),
+                m_snp_require_strand(d.snp_require_strand) {
             if (d.samplename_list.empty()) {
                 m_sampleid_list = m_prefix_list;
             } else {
@@ -381,6 +396,9 @@ namespace protal {
             result_str << "------ Strains ------" << std::string(30, '-') << '\n';
             result_str << "snp min cov:         " << std::to_string(m_snp_min_cov) << '\n';
             result_str << "snp min phred sum:   " << std::to_string(m_snp_min_phred_sum) << '\n';
+            result_str << "snp min mean qual:   " << std::to_string(m_snp_min_mean_qual) << '\n';
+            result_str << "snp min af:          " << std::to_string(m_snp_min_af) << '\n';
+            result_str << "snp require strand:  " << (m_snp_require_strand ? "yes" : "no (--snp_no_strand)") << '\n';
             result_str << "msa species:         " << Utils::join(m_msa_species, ",") << '\n';
             result_str << "msa min hcov:        " << std::to_string(m_msa_min_hcov) << '\n';
             result_str << "---- Dev Options ----" << std::string(30, '-') << '\n';
@@ -757,13 +775,11 @@ namespace protal {
             return m_msa_species;
         }
 
-        auto GetSNPMinCov() {
-            return m_snp_min_cov;
-        }
-
-        auto GetSNPMinPhredSum() {
-            return m_snp_min_phred_sum;
-        }
+        auto GetSNPMinCov() const { return m_snp_min_cov; }
+        auto GetSNPMinPhredSum() const { return m_snp_min_phred_sum; }
+        auto GetSNPMinAF() const { return m_snp_min_af; }
+        auto GetSNPMinMeanQual() const { return m_snp_min_mean_qual; }
+        auto GetSNPRequireStrand() const { return m_snp_require_strand; }
 
         size_t GetAlignTop() const {
             return m_align_top;
@@ -1330,8 +1346,11 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                 }
             }
 
-            double snp_min_cov = result["snp_min_cov"].as<double>();
-            double snp_min_phred_sum = result["snp_min_phred_sum"].as<double>();
+            double snp_min_cov        = result["snp_min_cov"].as<double>();
+            double snp_min_phred_sum  = result["snp_min_phred_sum"].as<double>();
+            double snp_min_af         = result["snp_min_af"].as<double>();
+            size_t snp_min_mean_qual  = result["snp_min_mean_qual"].as<size_t>();
+            bool   snp_require_strand = !result.count("snp_no_strand");
 
 
             auto reference = result["reference"].as<std::string>();
@@ -1568,6 +1587,9 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             d.msa_species              = std::move(msa_species);
             d.snp_min_phred_sum        = snp_min_phred_sum;
             d.snp_min_cov              = snp_min_cov;
+            d.snp_min_af               = snp_min_af;
+            d.snp_min_mean_qual        = snp_min_mean_qual;
+            d.snp_require_strand       = snp_require_strand;
             d.x_drop                   = x_drop;
             d.max_key_ubiquity         = max_key_ubiquity;
             d.min_successful_lookups   = min_successful_lookups;
