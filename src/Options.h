@@ -35,6 +35,7 @@ namespace protal {
     static const double DEFAULT_MIN_SNP_AF = 0.0;
     static const size_t DEFAULT_MIN_SNP_MEAN_QUAL = 15;
     static const bool   DEFAULT_SNP_REQUIRE_STRAND = true; // disabled via --snp_no_strand
+    static const size_t DEFAULT_SNP_MAX_ALLELES = 3;
 
     static cxxopts::Options CxxOptions() {
         cxxopts::Options options(
@@ -85,7 +86,8 @@ namespace protal {
                 ("msa_min_hcov", "Minimum non-N/non-'-' bases required per sequence to keep it in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_HCOV)))
                 ("msa_species", "Restrict MSAs to a single species (s__Genus_species) or a comma-separated list.", cxxopts::value<std::string>()->default_value(""))
                 ("multi_allelic_mean_genecol_threshold", "Remove entire gene columns from MSA where mean MRate2 across all samples exceeds this threshold.", cxxopts::value<double>()->default_value("0.0"))
-                ("multi_allelic_mean_pergene_threshold", "In per-gene filtered MSA, replace a sample's gene columns with '-' where that sample's MRate2 exceeds this threshold.", cxxopts::value<double>()->default_value("0.0"));
+                ("multi_allelic_mean_pergene_threshold", "In per-gene filtered MSA, replace a sample's gene columns with '-' where that sample's MRate2 exceeds this threshold.", cxxopts::value<double>()->default_value("0.0"))
+                ("snp_max_alleles", "Maximum number of alleles at a position to encode as an IUPAC ambiguity code in the MSA. 1 = only the top allele (standard), 2 = encode two-allele mixtures (e.g. R,Y), 3 = also encode three-allele mixtures (e.g. B,H). Alleles are ranked by observation count; ties go to higher-quality allele.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_SNP_MAX_ALLELES)));
                 
         
         // Advanced / benchmarking / build
@@ -179,6 +181,7 @@ namespace protal {
         double snp_min_af = DEFAULT_MIN_SNP_AF;
         size_t snp_min_mean_qual = DEFAULT_MIN_SNP_MEAN_QUAL;
         bool   snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
+        size_t snp_max_alleles = DEFAULT_SNP_MAX_ALLELES;
         double multi_allelic_mean_genecol_threshold = 0.0;
         double multi_allelic_mean_pergene_threshold = 0.0;
     };
@@ -251,6 +254,7 @@ namespace protal {
         double m_snp_min_af = DEFAULT_MIN_SNP_AF;
         size_t m_snp_min_mean_qual = DEFAULT_MIN_SNP_MEAN_QUAL;
         bool   m_snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
+        size_t m_snp_max_alleles = DEFAULT_SNP_MAX_ALLELES;
 
     public:
         static inline const std::string PROTAL_INDEX_FILE = "index.prx";
@@ -343,7 +347,8 @@ namespace protal {
                 m_snp_min_phred_sum(d.snp_min_phred_sum),
                 m_snp_min_af(d.snp_min_af),
                 m_snp_min_mean_qual(d.snp_min_mean_qual),
-                m_snp_require_strand(d.snp_require_strand) {
+                m_snp_require_strand(d.snp_require_strand),
+                m_snp_max_alleles(d.snp_max_alleles) {
             if (d.samplename_list.empty()) {
                 m_sampleid_list = m_prefix_list;
             } else {
@@ -399,6 +404,7 @@ namespace protal {
             result_str << "snp min mean qual:   " << std::to_string(m_snp_min_mean_qual) << '\n';
             result_str << "snp min af:          " << std::to_string(m_snp_min_af) << '\n';
             result_str << "snp require strand:  " << (m_snp_require_strand ? "yes" : "no (--snp_no_strand)") << '\n';
+            result_str << "snp max alleles:     " << std::to_string(m_snp_max_alleles) << '\n';
             result_str << "msa species:         " << Utils::join(m_msa_species, ",") << '\n';
             result_str << "msa min hcov:        " << std::to_string(m_msa_min_hcov) << '\n';
             result_str << "---- Dev Options ----" << std::string(30, '-') << '\n';
@@ -780,6 +786,7 @@ namespace protal {
         auto GetSNPMinAF() const { return m_snp_min_af; }
         auto GetSNPMinMeanQual() const { return m_snp_min_mean_qual; }
         auto GetSNPRequireStrand() const { return m_snp_require_strand; }
+        auto GetSNPMaxAlleles() const { return m_snp_max_alleles; }
 
         size_t GetAlignTop() const {
             return m_align_top;
@@ -1351,6 +1358,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             double snp_min_af         = result["snp_min_af"].as<double>();
             size_t snp_min_mean_qual  = result["snp_min_mean_qual"].as<size_t>();
             bool   snp_require_strand = !result.count("snp_no_strand");
+            size_t snp_max_alleles    = result["snp_max_alleles"].as<size_t>();
 
 
             auto reference = result["reference"].as<std::string>();
@@ -1590,6 +1598,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             d.snp_min_af               = snp_min_af;
             d.snp_min_mean_qual        = snp_min_mean_qual;
             d.snp_require_strand       = snp_require_strand;
+            d.snp_max_alleles          = snp_max_alleles;
             d.x_drop                   = x_drop;
             d.max_key_ubiquity         = max_key_ubiquity;
             d.min_successful_lookups   = min_successful_lookups;
