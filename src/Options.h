@@ -39,6 +39,10 @@ namespace protal {
     static const double DEFAULT_GENE_MIN_HCOV_FRAC = 0.50;
     static const double DEFAULT_GENE_MIN_MEAN_DEPTH = 3.0;
     static const size_t DEFAULT_MSA_MIN_SAMPLES = 3;
+    // Permissive hard caps: catch only gross multi-allelicity (repeat regions /
+    // mismapping). Nuanced, run-adaptive filtering is delegated to qcmsa.
+    static const double DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD = 0.50;
+    static const double DEFAULT_MULTI_ALLELIC_MEAN_PERGENE_THRESHOLD = 0.50;
 
     static cxxopts::Options CxxOptions() {
         cxxopts::Options options(
@@ -88,8 +92,8 @@ namespace protal {
                 ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
                 ("msa_min_hcov", "Minimum non-N/non-'-' bases required per sequence to keep it in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_HCOV)))
                 ("msa_species", "Restrict MSAs to a single species (s__Genus_species) or a comma-separated list.", cxxopts::value<std::string>()->default_value(""))
-                ("multi_allelic_mean_genecol_threshold", "Remove entire gene columns from MSA where mean MRate2 across all samples exceeds this threshold.", cxxopts::value<double>()->default_value("0.0"))
-                ("multi_allelic_mean_pergene_threshold", "In per-gene filtered MSA, replace a sample's gene columns with '-' where that sample's MRate2 exceeds this threshold.", cxxopts::value<double>()->default_value("0.0"))
+                ("multi_allelic_mean_genecol_threshold", "Hard cap: remove entire gene columns from the MSA where mean MRate2 across all samples exceeds this threshold (a gene more multi-allelic than not is a clear repeat region / mismapping signal). Permissive by default; nuanced run-adaptive filtering is delegated to qcmsa. Set to 0.0 for maximally strict behaviour (any multi-allelicity removes the gene).", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD)))
+                ("multi_allelic_mean_pergene_threshold", "Hard cap: in the per-gene filtered MSA, replace a sample's gene columns with '-' where that sample's MRate2 exceeds this threshold. Permissive by default; nuanced run-adaptive filtering is delegated to qcmsa. Set to 0.0 for maximally strict behaviour (any multi-allelicity masks the cell).", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MULTI_ALLELIC_MEAN_PERGENE_THRESHOLD)))
                 ("snp_max_alleles", "Maximum number of alleles at a position to encode as an IUPAC ambiguity code in the MSA. 1 = only the top allele (standard), 2 = encode two-allele mixtures (e.g. R,Y), 3 = also encode three-allele mixtures (e.g. B,H). Alleles are ranked by observation count; ties go to higher-quality allele.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_SNP_MAX_ALLELES)))
                 ("gene_min_hcov_frac", "Minimum fraction of a gene's positions that must be covered (>= 1 read) for that sample's gene to enter the MSA. Samples whose gene falls below this are treated as not having the gene (gap-filled). Set to 0 to disable.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_HCOV_FRAC)))
                 ("gene_min_mean_depth", "Minimum mean read depth across the covered positions of a gene for that sample's gene to enter the MSA. Samples below this are treated as not having the gene (gap-filled). Set to 0 to disable.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_MEAN_DEPTH)))
@@ -191,8 +195,8 @@ namespace protal {
         double gene_min_hcov_frac = DEFAULT_GENE_MIN_HCOV_FRAC;
         double gene_min_mean_depth = DEFAULT_GENE_MIN_MEAN_DEPTH;
         size_t msa_min_samples = DEFAULT_MSA_MIN_SAMPLES;
-        double multi_allelic_mean_genecol_threshold = 0.0;
-        double multi_allelic_mean_pergene_threshold = 0.0;
+        double multi_allelic_mean_genecol_threshold = DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD;
+        double multi_allelic_mean_pergene_threshold = DEFAULT_MULTI_ALLELIC_MEAN_PERGENE_THRESHOLD;
     };
 
     class Options {
@@ -240,8 +244,8 @@ namespace protal {
         std::string m_profile_truth;
         std::string m_model;
         double m_knob = 0.5;
-        double m_multi_allelic_mean_genecol_threshold = 0.0;
-        double m_multi_allelic_mean_pergene_threshold = 0.0;
+        double m_multi_allelic_mean_genecol_threshold = DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD;
+        double m_multi_allelic_mean_pergene_threshold = DEFAULT_MULTI_ALLELIC_MEAN_PERGENE_THRESHOLD;
 
         size_t m_threads = DEFAULT_THREADS;
 
@@ -423,6 +427,8 @@ namespace protal {
             result_str << "gene min hcov frac:  " << std::to_string(m_gene_min_hcov_frac) << '\n';
             result_str << "gene min mean depth: " << std::to_string(m_gene_min_mean_depth) << '\n';
             result_str << "msa min samples:     " << std::to_string(m_msa_min_samples) << '\n';
+            result_str << "ma genecol thresh:   " << std::to_string(m_multi_allelic_mean_genecol_threshold) << '\n';
+            result_str << "ma pergene thresh:   " << std::to_string(m_multi_allelic_mean_pergene_threshold) << '\n';
             result_str << "msa species:         " << Utils::join(m_msa_species, ",") << '\n';
             result_str << "msa min hcov:        " << std::to_string(m_msa_min_hcov) << '\n';
             result_str << "---- Dev Options ----" << std::string(30, '-') << '\n';
