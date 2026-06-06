@@ -36,6 +36,9 @@ namespace protal {
     static const size_t DEFAULT_MIN_SNP_MEAN_QUAL = 15;
     static const bool   DEFAULT_SNP_REQUIRE_STRAND = true; // disabled via --snp_no_strand
     static const size_t DEFAULT_SNP_MAX_ALLELES = 3;
+    static const double DEFAULT_GENE_MIN_HCOV_FRAC = 0.50;
+    static const double DEFAULT_GENE_MIN_MEAN_DEPTH = 3.0;
+    static const size_t DEFAULT_MSA_MIN_SAMPLES = 3;
 
     static cxxopts::Options CxxOptions() {
         cxxopts::Options options(
@@ -87,7 +90,10 @@ namespace protal {
                 ("msa_species", "Restrict MSAs to a single species (s__Genus_species) or a comma-separated list.", cxxopts::value<std::string>()->default_value(""))
                 ("multi_allelic_mean_genecol_threshold", "Remove entire gene columns from MSA where mean MRate2 across all samples exceeds this threshold.", cxxopts::value<double>()->default_value("0.0"))
                 ("multi_allelic_mean_pergene_threshold", "In per-gene filtered MSA, replace a sample's gene columns with '-' where that sample's MRate2 exceeds this threshold.", cxxopts::value<double>()->default_value("0.0"))
-                ("snp_max_alleles", "Maximum number of alleles at a position to encode as an IUPAC ambiguity code in the MSA. 1 = only the top allele (standard), 2 = encode two-allele mixtures (e.g. R,Y), 3 = also encode three-allele mixtures (e.g. B,H). Alleles are ranked by observation count; ties go to higher-quality allele.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_SNP_MAX_ALLELES)));
+                ("snp_max_alleles", "Maximum number of alleles at a position to encode as an IUPAC ambiguity code in the MSA. 1 = only the top allele (standard), 2 = encode two-allele mixtures (e.g. R,Y), 3 = also encode three-allele mixtures (e.g. B,H). Alleles are ranked by observation count; ties go to higher-quality allele.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_SNP_MAX_ALLELES)))
+                ("gene_min_hcov_frac", "Minimum fraction of a gene's positions that must be covered (>= 1 read) for that sample's gene to enter the MSA. Samples whose gene falls below this are treated as not having the gene (gap-filled). Set to 0 to disable.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_HCOV_FRAC)))
+                ("gene_min_mean_depth", "Minimum mean read depth across the covered positions of a gene for that sample's gene to enter the MSA. Samples below this are treated as not having the gene (gap-filled). Set to 0 to disable.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_MEAN_DEPTH)))
+                ("msa_min_samples", "Minimum number of samples that must carry a gene (after per-gene coverage filtering) for it to be included in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_SAMPLES)));
                 
         
         // Advanced / benchmarking / build
@@ -182,6 +188,9 @@ namespace protal {
         size_t snp_min_mean_qual = DEFAULT_MIN_SNP_MEAN_QUAL;
         bool   snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
         size_t snp_max_alleles = DEFAULT_SNP_MAX_ALLELES;
+        double gene_min_hcov_frac = DEFAULT_GENE_MIN_HCOV_FRAC;
+        double gene_min_mean_depth = DEFAULT_GENE_MIN_MEAN_DEPTH;
+        size_t msa_min_samples = DEFAULT_MSA_MIN_SAMPLES;
         double multi_allelic_mean_genecol_threshold = 0.0;
         double multi_allelic_mean_pergene_threshold = 0.0;
     };
@@ -255,6 +264,9 @@ namespace protal {
         size_t m_snp_min_mean_qual = DEFAULT_MIN_SNP_MEAN_QUAL;
         bool   m_snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
         size_t m_snp_max_alleles = DEFAULT_SNP_MAX_ALLELES;
+        double m_gene_min_hcov_frac = DEFAULT_GENE_MIN_HCOV_FRAC;
+        double m_gene_min_mean_depth = DEFAULT_GENE_MIN_MEAN_DEPTH;
+        size_t m_msa_min_samples = DEFAULT_MSA_MIN_SAMPLES;
 
     public:
         static inline const std::string PROTAL_INDEX_FILE = "index.prx";
@@ -348,7 +360,10 @@ namespace protal {
                 m_snp_min_af(d.snp_min_af),
                 m_snp_min_mean_qual(d.snp_min_mean_qual),
                 m_snp_require_strand(d.snp_require_strand),
-                m_snp_max_alleles(d.snp_max_alleles) {
+                m_snp_max_alleles(d.snp_max_alleles),
+                m_gene_min_hcov_frac(d.gene_min_hcov_frac),
+                m_gene_min_mean_depth(d.gene_min_mean_depth),
+                m_msa_min_samples(d.msa_min_samples) {
             if (d.samplename_list.empty()) {
                 m_sampleid_list = m_prefix_list;
             } else {
@@ -405,6 +420,9 @@ namespace protal {
             result_str << "snp min af:          " << std::to_string(m_snp_min_af) << '\n';
             result_str << "snp require strand:  " << (m_snp_require_strand ? "yes" : "no (--snp_no_strand)") << '\n';
             result_str << "snp max alleles:     " << std::to_string(m_snp_max_alleles) << '\n';
+            result_str << "gene min hcov frac:  " << std::to_string(m_gene_min_hcov_frac) << '\n';
+            result_str << "gene min mean depth: " << std::to_string(m_gene_min_mean_depth) << '\n';
+            result_str << "msa min samples:     " << std::to_string(m_msa_min_samples) << '\n';
             result_str << "msa species:         " << Utils::join(m_msa_species, ",") << '\n';
             result_str << "msa min hcov:        " << std::to_string(m_msa_min_hcov) << '\n';
             result_str << "---- Dev Options ----" << std::string(30, '-') << '\n';
@@ -787,6 +805,9 @@ namespace protal {
         auto GetSNPMinMeanQual() const { return m_snp_min_mean_qual; }
         auto GetSNPRequireStrand() const { return m_snp_require_strand; }
         auto GetSNPMaxAlleles() const { return m_snp_max_alleles; }
+        auto GetGeneMinHCovFrac() const { return m_gene_min_hcov_frac; }
+        auto GetGeneMinMeanDepth() const { return m_gene_min_mean_depth; }
+        auto GetMSAMinSamples() const { return m_msa_min_samples; }
 
         size_t GetAlignTop() const {
             return m_align_top;
@@ -1359,6 +1380,9 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             size_t snp_min_mean_qual  = result["snp_min_mean_qual"].as<size_t>();
             bool   snp_require_strand = !result.count("snp_no_strand");
             size_t snp_max_alleles    = result["snp_max_alleles"].as<size_t>();
+            double gene_min_hcov_frac = result["gene_min_hcov_frac"].as<double>();
+            double gene_min_mean_depth = result["gene_min_mean_depth"].as<double>();
+            size_t msa_min_samples    = result["msa_min_samples"].as<size_t>();
 
 
             auto reference = result["reference"].as<std::string>();
@@ -1598,6 +1622,9 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             d.snp_min_af               = snp_min_af;
             d.snp_min_mean_qual        = snp_min_mean_qual;
             d.snp_require_strand       = snp_require_strand;
+            d.gene_min_hcov_frac       = gene_min_hcov_frac;
+            d.gene_min_mean_depth      = gene_min_mean_depth;
+            d.msa_min_samples          = msa_min_samples;
             d.snp_max_alleles          = snp_max_alleles;
             d.x_drop                   = x_drop;
             d.max_key_ubiquity         = max_key_ubiquity;

@@ -1101,7 +1101,9 @@ namespace protal {
         auto require_strand = options.GetSNPRequireStrand();
         auto min_mean_qual = options.GetSNPMinMeanQual();
         auto snp_max_alleles = options.GetSNPMaxAlleles();
-        auto min_samples_with_gene = 3;
+        auto gene_min_hcov_frac = options.GetGeneMinHCovFrac();
+        auto gene_min_mean_depth = options.GetGeneMinMeanDepth();
+        auto min_samples_with_gene = options.GetMSAMinSamples();
 
         std::vector<size_t> profile_indices = GetProfilesWithTaxon(taxid, profiles, options, filter);
 
@@ -1165,12 +1167,9 @@ namespace protal {
                 if (!genes.contains(geneid)) {
                     items.emplace_back(OptionalMSASequenceItem{});
                 } else {
-                    samples_with_gene++;
                     auto& gene_obs = genes.at(geneid);
                     auto& strain = gene_obs.GetStrainLevel();
-                    auto snps = SharedAlignmentRegion::GetSNPs(strain.GetVariantHandler());
                     auto& region = strain.GetSequenceRangeHandler();
-                    items.emplace_back( OptionalMSASequenceItem { { std::move(snps), region } } );
 
                     auto ac = gene_obs.AlleleSNPCounts(min_cov, min_qual_sum);
                     region.CalculateCoverageVector();
@@ -1183,6 +1182,23 @@ namespace protal {
                     double mean_vcov_nonzero = 0.0;
                     double median_vcov_nonzero = 0.0;
                     double hcov = static_cast<double>(counts_vcov1) / static_cast<double>(gene_obs.m_gene_length);
+
+                    // M3: per-sample gene coverage filter. A gene that is too sparsely
+                    // covered (horizontally or in depth) for this sample is treated as
+                    // absent (gap-filled) rather than contributing a noisy sequence.
+                    double mean_depth_covered = counts_vcov1 > 0
+                        ? std::accumulate(tmp_vec.begin(), tmp_vec.end(), 0.0) / static_cast<double>(counts_vcov1)
+                        : 0.0;
+                    bool gene_passes = hcov >= gene_min_hcov_frac && mean_depth_covered >= gene_min_mean_depth;
+
+                    if (gene_passes) {
+                        samples_with_gene++;
+                        auto snps = SharedAlignmentRegion::GetSNPs(strain.GetVariantHandler());
+                        items.emplace_back( OptionalMSASequenceItem { { std::move(snps), region } } );
+                    } else {
+                        items.emplace_back(OptionalMSASequenceItem{});
+                    }
+
                     if (os_meta) {
                         auto sorted_cov = tmp_vec;
                         sorted_cov.resize(gene_obs.m_gene_length, 0);
