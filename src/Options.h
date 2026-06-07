@@ -36,9 +36,13 @@ namespace protal {
     static const size_t DEFAULT_MIN_SNP_MEAN_QUAL = 15;
     static const bool   DEFAULT_SNP_REQUIRE_STRAND = true; // disabled via --snp_no_strand
     static const size_t DEFAULT_SNP_MAX_ALLELES = 3;
-    static const double DEFAULT_GENE_MIN_HCOV_FRAC = 0.50;
-    static const double DEFAULT_GENE_MIN_MEAN_DEPTH = 3.0;
-    static const size_t DEFAULT_MSA_MIN_SAMPLES = 3;
+    // Permissive coverage defaults: aggressive coverage filtering was shown to
+    // discard genes that still carry strain-discriminating signal (esp. for
+    // low-abundance species). The qcmsa post-filter (default on) does the adaptive
+    // multi-allelicity filtering; coverage here only drops near-absent genes.
+    static const double DEFAULT_GENE_MIN_HCOV_FRAC = 0.30;   // was 0.50
+    static const double DEFAULT_GENE_MIN_MEAN_DEPTH = 1.0;   // was 3.0 (MIDAS2-style 1x)
+    static const size_t DEFAULT_MSA_MIN_SAMPLES = 3;         // structural gate (>3 samples)
     // Permissive hard caps: catch only gross multi-allelicity (repeat regions /
     // mismapping). Nuanced, run-adaptive filtering is delegated to qcmsa.
     static const double DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD = 0.50;
@@ -99,7 +103,8 @@ namespace protal {
                 ("gene_min_hcov_frac", "Minimum fraction of a gene's positions that must be covered (>= 1 read) for that sample's gene to enter the MSA. Samples whose gene falls below this are treated as not having the gene (gap-filled). Set to 0 to disable.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_HCOV_FRAC)))
                 ("gene_min_mean_depth", "Minimum mean read depth across the covered positions of a gene for that sample's gene to enter the MSA. Samples below this are treated as not having the gene (gap-filled). Set to 0 to disable.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_MEAN_DEPTH)))
                 ("msa_min_samples", "Minimum number of samples that must carry a gene (after per-gene coverage filtering) for it to be included in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_SAMPLES)))
-                ("run_qcmsa", "After writing the MSAs, run the qcmsa.py post-filter (adaptive multi-allelicity outlier removal + site cleanup) on each species' per-gene-filtered MSA. Requires python3; fails gracefully with a warning if python3 or the script cannot be found.")
+                ("run_qcmsa", "Run the qcmsa.py post-filter (adaptive multi-allelicity outlier removal + site cleanup) on each species' per-gene-filtered MSA. ON BY DEFAULT; disable with --no_qcmsa. Requires python3; fails gracefully with a warning if python3 or the script cannot be found.")
+                ("no_qcmsa", "Disable the qcmsa post-filter (it is on by default).")
                 ("strain_preset", "Aggressiveness preset passed through to qcmsa.py when --run_qcmsa is set: strict | default | sensitive (tunes the Tukey IQR multiplier and min-bad count).", cxxopts::value<std::string>()->default_value(DEFAULT_STRAIN_PRESET))
                 ("qcmsa_script", "Path to qcmsa.py. If empty, protal auto-detects it next to the executable (../scripts/qcmsa.py, ./scripts/qcmsa.py) and honours the PROTAL_QCMSA_SCRIPT environment variable.", cxxopts::value<std::string>()->default_value(""));
 
@@ -201,7 +206,7 @@ namespace protal {
         size_t msa_min_samples = DEFAULT_MSA_MIN_SAMPLES;
         double multi_allelic_mean_genecol_threshold = DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD;
         double multi_allelic_mean_pergene_threshold = DEFAULT_MULTI_ALLELIC_MEAN_PERGENE_THRESHOLD;
-        bool   run_qcmsa = false;
+        bool   run_qcmsa = true;
         std::string strain_preset = DEFAULT_STRAIN_PRESET;
         std::string qcmsa_script;
     };
@@ -278,7 +283,7 @@ namespace protal {
         double m_gene_min_hcov_frac = DEFAULT_GENE_MIN_HCOV_FRAC;
         double m_gene_min_mean_depth = DEFAULT_GENE_MIN_MEAN_DEPTH;
         size_t m_msa_min_samples = DEFAULT_MSA_MIN_SAMPLES;
-        bool   m_run_qcmsa = false;
+        bool   m_run_qcmsa = true;
         std::string m_strain_preset = DEFAULT_STRAIN_PRESET;
         std::string m_qcmsa_script;
 
@@ -1407,7 +1412,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             double gene_min_hcov_frac = result["gene_min_hcov_frac"].as<double>();
             double gene_min_mean_depth = result["gene_min_mean_depth"].as<double>();
             size_t msa_min_samples    = result["msa_min_samples"].as<size_t>();
-            bool   run_qcmsa          = result.count("run_qcmsa");
+            bool   run_qcmsa          = !result.count("no_qcmsa");  // on by default
             std::string strain_preset = result["strain_preset"].as<std::string>();
             std::string qcmsa_script  = result["qcmsa_script"].as<std::string>();
             if (strain_preset != "strict" && strain_preset != "default" && strain_preset != "sensitive") {
