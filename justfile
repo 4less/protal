@@ -115,6 +115,35 @@ strain-trees:
     done
     echo "[trees] built $built tree(s) in {{strain_run}}/trees (suffix=.{{strain_msa_suffix}})"
 
+# Re-filter a raw run's MSAs with qcmsa, applying M3-equivalent coverage gating
+# (from the meta hcov/depth columns) PLUS the usual MRate2 + site cleanup. Lets
+# you re-filter strain_test_out/test2 (the raw run) with any thresholds without
+# re-running protal. Outputs into <run>/refiltered/.
+refilter_hcov        := "0.5"
+refilter_depth       := "3"
+refilter_min_samples := "3"
+strain-refilter:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    mkdir -p "{{strain_run}}/refiltered"
+    shopt -s nullglob
+    n=0
+    for msa in "{{strain_run}}/strains/"*.pergene_filtered.msa.fna; do
+        sp=$(basename "$msa" .pergene_filtered.msa.fna)
+        part="{{strain_run}}/strains/$sp.partition.txt"
+        meta="{{strain_run}}/strains/$sp.meta.tsv"
+        [ -f "$part" ] && [ -f "$meta" ] || continue
+        python3 scripts/qcmsa.py "$msa" "$part" "$meta" \
+            --prefix "{{strain_run}}/refiltered/$sp" --preset {{preset}} \
+            --gene-min-hcov {{refilter_hcov}} \
+            --gene-min-mean-depth {{refilter_depth}} \
+            --gene-min-samples {{refilter_min_samples}} \
+            > "{{strain_run}}/refiltered/$sp.qcmsa.log" 2>&1 \
+          && { echo "[refilter] $sp"; n=$((n+1)); } \
+          || echo "[refilter] $sp: failed (see {{strain_run}}/refiltered/$sp.qcmsa.log)"
+    done
+    echo "[refilter] re-filtered $n species (hcov>={{refilter_hcov}}, depth>={{refilter_depth}}, >{{refilter_min_samples}} samples) -> {{strain_run}}/refiltered"
+
 # (Re)build the self-contained HTML QC report from an existing strain run.
 strain-report:
     python3 scripts/strain_test/strain_report.py \
