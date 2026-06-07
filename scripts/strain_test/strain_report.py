@@ -193,57 +193,112 @@ def _esc(s):
     return html.escape(str(s))
 
 
-def svg_species_stack(name, cats, colors, ylabel, width=250, plot_h=230):
-    """One vertical stacked bar for a single species, auto-scaled to its own total.
-
-    cats: list of (category_name, value) in stacking order (bottom first)."""
-    total = sum(v for _, v in cats)
-    vmax = total or 1
-    pad_t, pad_b, pad_l, pad_r = 26, 64, 56, 12
-    height = pad_t + plot_h + pad_b
-    bw = 78
-    bx = pad_l + 24
-    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
-             f'font-family="sans-serif" font-size="11">']
-    parts.append(f'<text x="{width/2:.0f}" y="16" text-anchor="middle" font-size="11" '
-                 f'font-weight="bold">{_esc(name)}</text>')
-    # y axis with its OWN scale (0 .. species total)
-    parts.append(f'<line x1="{pad_l}" y1="{pad_t}" x2="{pad_l}" y2="{pad_t+plot_h}" stroke="#888"/>')
-    for frac in (0, 0.5, 1.0):
-        y = pad_t + plot_h * (1 - frac)
-        val = int(round(vmax * frac))
-        parts.append(f'<line x1="{pad_l-4}" y1="{y:.1f}" x2="{pad_l}" y2="{y:.1f}" stroke="#888"/>')
-        parts.append(f'<text x="{pad_l-7}" y="{y+4:.1f}" text-anchor="end" fill="#555" '
-                     f'font-size="9">{val}</text>')
-    parts.append(f'<text x="13" y="{pad_t+plot_h/2:.0f}" text-anchor="middle" fill="#555" '
-                 f'font-size="9" transform="rotate(-90 13 {pad_t+plot_h/2:.0f})">{_esc(ylabel)}</text>')
-    y0 = pad_t + plot_h
-    for lab, v in cats:
-        h = (v / vmax) * plot_h if vmax else 0
-        if h > 0:
-            parts.append(f'<rect x="{bx}" y="{y0-h:.1f}" width="{bw}" height="{h:.1f}" '
-                         f'fill="{colors.get(lab, "#888")}">'
-                         f'<title>{_esc(lab)}: {v:.0f} ({v/vmax:.1%})</title></rect>')
-        y0 -= h
-    parts.append(f'<text x="{bx+bw/2:.0f}" y="{pad_t-4}" text-anchor="middle" fill="#333" '
-                 f'font-size="9">Σ={int(round(total))}</text>')
-    parts.append("</svg>")
-    return "\n".join(parts)
-
-
 def species_panels(items, colors, ylabel):
-    """items: list of (species_name, [(cat, value), ...]). Renders one auto-scaled
-    mini stacked bar per species in a flex row, with a shared legend on top."""
+    """One row per species: a horizontal 100%-stacked 'relative' bar (with the
+    species label on the left) and, to its right, a horizontal 'absolute' bar
+    scaled to a shared maximum so magnitudes stay comparable across species.
+
+    items: list of (species_name, [(cat, value), ...]) in stacking order.
+    colors: {cat: hex} (also defines legend order)."""
     if not items:
         return "<p><em>No data.</em></p>"
-    legend = "".join(
-        f'<span style="white-space:nowrap"><span style="display:inline-block;width:11px;'
-        f'height:11px;background:{c};vertical-align:middle;margin:0 4px 0 12px"></span>'
-        f'{_esc(n)}</span>' for n, c in colors.items())
-    svgs = "".join('<div style="margin:2px 6px">' + svg_species_stack(n, cats, colors, ylabel)
-                   + "</div>" for n, cats in items)
-    return (f'<div style="margin:4px 0">{legend}</div>'
-            f'<div style="display:flex;flex-wrap:wrap;align-items:flex-end">{svgs}</div>')
+
+    cats = list(colors.keys())
+    maxtotal = max((sum(v for _, v in c) for _, c in items), default=1) or 1
+
+    label_w, rel_w, gap, abs_w, rmar = 215, 235, 30, 300, 60
+    row_h, bar_h, top, bot = 23, 15, 64, 30
+    width = label_w + rel_w + gap + abs_w + rmar
+    height = top + len(items) * row_h + bot
+
+    P = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+         f'font-family="sans-serif" font-size="10">']
+
+    # legend (wraps via tspan-free manual x advance)
+    lx = 4
+    for cat in cats:
+        P.append(f'<rect x="{lx}" y="6" width="11" height="11" fill="{colors[cat]}"/>')
+        P.append(f'<text x="{lx+15}" y="16" fill="#333">{_esc(cat)}</text>')
+        lx += 15 + len(cat) * 6.0 + 16
+    if lx > width:  # widen if legend overflows
+        width = int(lx) + 10
+        P[0] = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+                f'font-family="sans-serif" font-size="10">')
+
+    rel_x0 = label_w
+    abs_x0 = label_w + rel_w + gap
+    # column headers
+    P.append(f'<text x="{rel_x0+rel_w/2:.0f}" y="{top-16}" text-anchor="middle" '
+             f'font-weight="bold" fill="#444">relative (%)</text>')
+    P.append(f'<text x="{abs_x0+abs_w/2:.0f}" y="{top-16}" text-anchor="middle" '
+             f'font-weight="bold" fill="#444">absolute ({_esc(ylabel)})</text>')
+
+    for i, (name, catvals) in enumerate(items):
+        y = top + i * row_h
+        ty = y + bar_h - 3
+        total = sum(v for _, v in catvals)
+        # species label (left)
+        P.append(f'<text x="{label_w-8}" y="{ty}" text-anchor="end" fill="#222" '
+                 f'font-size="10">{_esc(name)}</text>')
+        # relative 100%-stacked bar
+        x = rel_x0
+        if total > 0:
+            for cat, v in catvals:
+                w = v / total * rel_w
+                if w > 0:
+                    P.append(f'<rect x="{x:.2f}" y="{y}" width="{w:.2f}" height="{bar_h}" '
+                             f'fill="{colors.get(cat, "#888")}">'
+                             f'<title>{_esc(name)} {_esc(cat)}: {v:.0f} ({v/total:.1%})</title></rect>')
+                    x += w
+        else:
+            P.append(f'<rect x="{rel_x0}" y="{y}" width="{rel_w}" height="{bar_h}" fill="#eee"/>')
+        # absolute bar (shared scale)
+        x = abs_x0
+        for cat, v in catvals:
+            w = v / maxtotal * abs_w
+            if w > 0:
+                P.append(f'<rect x="{x:.2f}" y="{y}" width="{w:.2f}" height="{bar_h}" '
+                         f'fill="{colors.get(cat, "#888")}">'
+                         f'<title>{_esc(name)} {_esc(cat)}: {v:.0f}</title></rect>')
+                x += w
+        P.append(f'<text x="{x+4:.1f}" y="{ty}" fill="#333" font-size="9">{int(round(total))}</text>')
+
+    # axes under the last row
+    base_y = top + len(items) * row_h + 4
+    for frac, lab in ((0, "0"), (0.5, "50"), (1.0, "100%")):
+        xx = rel_x0 + frac * rel_w
+        P.append(f'<line x1="{xx:.1f}" y1="{base_y}" x2="{xx:.1f}" y2="{base_y+4}" stroke="#999"/>')
+        P.append(f'<text x="{xx:.1f}" y="{base_y+14}" text-anchor="middle" fill="#777" '
+                 f'font-size="8">{lab}</text>')
+    for frac in (0, 0.5, 1.0):
+        xx = abs_x0 + frac * abs_w
+        P.append(f'<line x1="{xx:.1f}" y1="{base_y}" x2="{xx:.1f}" y2="{base_y+4}" stroke="#999"/>')
+        P.append(f'<text x="{xx:.1f}" y="{base_y+14}" text-anchor="middle" fill="#777" '
+                 f'font-size="8">{int(round(maxtotal*frac))}</text>')
+    P.append("</svg>")
+    return "\n".join(P)
+
+
+def svg_gradient_legend(rgb, desired, low_lab="low (0)", high_lab="high"):
+    """Small inline colour-scale key: white->rgb swatches, with low/high labels and
+    a green check on the 'desired' end. Drawn with discrete rects (no SVG ids)."""
+    w, n, x0 = 120, 12, 46
+    seg = w / n
+    P = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{x0+w+150}" height="30" '
+         f'font-family="sans-serif" font-size="9">']
+    for k in range(n):
+        P.append(f'<rect x="{x0+k*seg:.1f}" y="4" width="{seg+0.6:.1f}" height="10" '
+                 f'fill="{_heat_color(k/(n-1), 1.0, rgb)}"/>')
+    P.append(f'<rect x="{x0}" y="4" width="{w}" height="10" fill="none" stroke="#bbb"/>')
+    P.append(f'<text x="{x0-4}" y="13" text-anchor="end" fill="#666">{_esc(low_lab)}</text>')
+    P.append(f'<text x="{x0+w+4}" y="13" fill="#666">{_esc(high_lab)}</text>')
+    dx = (x0 if desired == "low" else x0 + w)
+    P.append(f'<text x="{dx}" y="27" text-anchor="middle" fill="#2ca02c" '
+             f'font-weight="bold">&#10003; desired</text>')
+    P.append('<rect x="0" y="2" width="40" height="13" fill="#eeeeee" stroke="#bbb"/>')
+    P.append('<text x="44" y="27" fill="#999">grey = gene absent in sample</text>')
+    P.append("</svg>")
+    return "".join(P)
 
 
 def _heat_color(v, vmax, rgb=(214, 39, 40)):
@@ -296,18 +351,24 @@ def svg_heatmap(samples, genes, cell, filt_samples, filt_genes, title, vmax,
     return "\n".join(parts)
 
 
-# Per-(sample,gene) meta variables to render as heatmaps, with the filter each drives.
+# Per-(sample,gene) meta variables to render as heatmaps. Fields:
+#   key, label, rgb, m3_drive, caption, desired_end, good_meaning, bad_meaning
 HEATMAP_VARS = [
     ("hcov", "hcov (fraction of gene covered)", (31, 119, 180), "m3_hcov",
-     "drives M3 gene filter; black outline = below --gene_min_hcov_frac"),
+     "drives the M3 gene filter; black-outlined cells fall below --gene_min_hcov_frac and are gap-filled",
+     "high", "dark = well-covered gene (kept)", "pale / black-outlined = sparse coverage, dropped by M3"),
     ("mean_vcov_nonzero", "mean depth over covered positions", (44, 160, 44), "m3_depth",
-     "drives M3 gene filter; black outline = below --gene_min_mean_depth"),
-    ("vertical_coverage", "vertical coverage (mean depth, whole gene)", (148, 103, 189), None,
-     "overall per-gene coverage"),
-    ("multi_rate_vcov2", "MRate2 (multi-allelicity)", (214, 39, 40), None,
-     "drives qcmsa gene/sample filtering"),
+     "drives the M3 gene filter; black-outlined cells fall below --gene_min_mean_depth",
+     "high", "dark = deep, confident coverage (kept)", "pale / black-outlined = shallow, dropped by M3"),
+    ("vertical_coverage", "vertical coverage (mean depth over whole gene)", (148, 103, 189), None,
+     "overall per-gene sequencing depth (context)",
+     "high", "dark = more sequencing depth", "pale = barely sequenced"),
+    ("multi_rate_vcov2", "MRate2 (multi-allelicity rate)", (214, 39, 40), None,
+     "drives qcmsa gene/sample filtering",
+     "low", "pale = clean single strain", "dark = mixed strains / contamination, removed by qcmsa"),
     ("filtered_rate_vcov2", "filtered-SNP rate (positions removed by M1 SNP gates)", (255, 127, 14), None,
-     "shows where M1 removed variants"),
+     "fraction of variant positions M1 discarded",
+     "low", "pale = few variants needed filtering", "dark = many low-quality variants discarded"),
 ]
 
 
@@ -570,15 +631,20 @@ def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data,
         s, g = hd["samples"], hd["genes"]
         fs, fg = hd["filt_samples"], hd["filt_genes"]
         svgs = []
-        for vk, label, rgb, drive, caption in HEATMAP_VARS:
+        for vk, label, rgb, drive, caption, desired, good, bad in HEATMAP_VARS:
             vmaxv = hd["var_vmax"][vk]
             fail_below = m3["hcov"] if drive == "m3_hcov" else (
                 m3["depth"] if drive == "m3_depth" else None)
             fmt = "%.3f" if vmaxv <= 5 else "%.0f"
+            high_lab = f"high ({vmaxv:.3g})"
             svgs.append(
-                f'<div style="margin:6px 0"><div class="muted" style="font-size:12px">'
-                f'<b>{_esc(label)}</b> &mdash; {_esc(caption)}</div>'
-                f'<div class="grid">'
+                f'<div style="margin:8px 0"><div style="font-size:12px">'
+                f'<b>{_esc(label)}</b> <span class="muted">&mdash; {_esc(caption)}</span></div>'
+                f'<div class="muted" style="font-size:11px">'
+                f'<span style="color:#2ca02c">&#10003; {_esc(good)}</span> &nbsp;&middot;&nbsp; '
+                f'<span style="color:#d62728">&#10007; {_esc(bad)}</span></div>'
+                + svg_gradient_legend(rgb, desired, high_lab=high_lab)
+                + f'<div class="grid">'
                 + svg_heatmap(s, g, hd["var_cells"][vk], fs, fg, "",
                               max(1e-9, vmaxv), rgb=rgb, fail_below=fail_below, fmt=fmt)
                 + "</div></div>")
@@ -680,6 +746,10 @@ before M3). "% kept (M3)" = of observed genes, the fraction that passed the M3 c
 <p class="muted">Per species, summed across samples. Variants are filtered by protal's M1 SNP gates:
 low cumulative phred-sum (<code>--snp_min_phred_sum</code>) or insufficient supporting reads
 (<code>--snp_min_cov</code>). The second panel shows why positions had no callable variant.</p>
+<p class="muted"><b>Colours:</b>
+<span style="color:#2ca02c">&#10003; green = retained</span> (desired &mdash; variants kept for the tree);
+<span style="color:#ff7f0e">orange</span> / <span style="color:#d62728">red = filtered out</span>
+(undesired loss, but correct when the evidence is weak). A tall green bar is good.</p>
 <h3>Variant fate (retained vs filtered by M1 gates)</h3>
 <div class="grid">{svg_a}</div>
 <h3>Why positions had no callable variant</h3>
@@ -691,14 +761,23 @@ low cumulative phred-sum (<code>--snp_min_phred_sum</code>) or insufficient supp
 <code>--gene_min_mean_depth</code> = {m3['depth']}: mean depth over covered positions). A gene
 enters the MSA only if more than <code>--msa_min_samples</code> = {m3['min_samples']} samples pass.
 Per species, auto-scaled to its own totals.</p>
-<h3>Gene funnel: observed genes &rarr; kept vs dropped by M3</h3>
+<p class="muted"><b>Colours:</b>
+<span style="color:#2ca02c">&#10003; green = in MSA</span> (desired);
+<span style="color:#d62728">&#10007; red = dropped by M3</span> (observed but coverage too low);
+<span style="color:#999">grey = no read hits</span> (never observed &mdash; abundance-limited, the worst case).
+More green = better. For the coverage cells, green = passes; orange/blue/red = fails (the colour says
+<i>why</i>) and those cells get gap-filled.</p>
+<h3>Gene funnel: DB markers &rarr; observed &rarr; kept vs dropped by M3</h3>
 <div class="grid">{svg_c_genes}</div>
 <h3>Per-(sample,gene) coverage cells: pass vs why they failed</h3>
 <div class="grid">{svg_c_cells}</div>
 
 <h2>(c) Gene &amp; sample filtering (qcmsa, milestone M5)</h2>
 <p class="muted">qcmsa removes genes/samples that are multi-allelicity (MRate2) outliers via the
-iterative Tukey-IQR rule. Bars show kept vs filtered.</p>
+iterative Tukey-IQR rule. <b>Colours:</b>
+<span style="color:#2ca02c">green</span>/<span style="color:#1f77b4">blue = kept</span> (desired);
+<span style="color:#d62728">&#10007; red = removed as a contamination/mixed-strain outlier</span>.
+On clean data most bars are fully green/blue (little to remove).</p>
 <h3>Gene filtering</h3>
 <div class="grid">{svg_b_genes}</div>
 <h3>Sample filtering</h3>
@@ -709,7 +788,10 @@ iterative Tukey-IQR rule. Bars show kept vs filtered.</p>
 Rows = samples, columns = observed genes (light grey = gene absent in that sample).
 Red row labels / red &#9650; columns mark samples / genes removed by qcmsa. Black cell
 outlines mark cells below the M3 coverage thresholds
-(hcov &lt; {m3['hcov']} or mean depth &lt; {m3['depth']}) that get gap-filled.</p>
+(hcov &lt; {m3['hcov']} or mean depth &lt; {m3['depth']}) that get gap-filled.
+<b>Each panel has its own colour key</b> with a &#10003; on the desired end &mdash; note the
+direction flips: for the coverage variables <i>darker = better</i>, but for MRate2 and the
+filtered-SNP rate <i>darker = worse</i>.</p>
 {''.join(heat_blocks)}
 
 <h2>Filtering reasons (detail)</h2>
