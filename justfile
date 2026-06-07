@@ -47,6 +47,55 @@ strain-protal:
         --run_qcmsa --strain_preset {{preset}} \
         2>&1 | tee {{strain_run}}/protal_run.log | tr '\r' '\n' | grep -vE '^\[=*>* *\] *[0-9]+ %' || true
 
+# Build a per-species ML tree from each strain MSA with IQ-TREE. Override the
+# input with strain_msa_suffix=pergene_filtered (protal, more sites) or =filtered
+# (qcmsa final, default). Uses the `iqtree` conda env by default; override the
+# launcher with strain_iqtree=... . Skips gracefully if IQ-TREE is unavailable.
+strain_msa_suffix := "filtered"
+strain_iqtree := ""
+strain-trees:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    # Resolve an IQ-TREE launcher: explicit override > PATH > `iqtree` conda env.
+    iq="{{strain_iqtree}}"
+    if [ -z "$iq" ]; then
+        iq=$(command -v iqtree3 || command -v iqtree2 || command -v iqtree || true)
+    fi
+    if [ -z "$iq" ] && command -v conda >/dev/null 2>&1; then
+        for b in iqtree3 iqtree2 iqtree; do
+            if conda run -n iqtree "$b" --version >/dev/null 2>&1; then
+                iq="conda run -n iqtree $b"; break
+            fi
+        done
+    fi
+    if [ -z "$iq" ]; then
+        echo "[trees] IQ-TREE not found (PATH or 'iqtree' conda env); skipping."
+        exit 0
+    fi
+    echo "[trees] using: $iq"
+    mkdir -p "{{strain_run}}/trees"
+    shopt -s nullglob
+    built=0
+    for msa in "{{strain_run}}/strains/"*."{{strain_msa_suffix}}".msa.fna; do
+        sp=$(basename "$msa" ."{{strain_msa_suffix}}".msa.fna)
+        nseq=$(grep -c '^>' "$msa")
+        if [ "$nseq" -lt 4 ]; then
+            echo "[trees] $sp: only $nseq sequences (<4) - skipping"
+            continue
+        fi
+        echo "[trees] $sp ($nseq taxa) -> {{strain_run}}/trees/$sp.treefile"
+        # Unpartitioned GTR+G ML tree with 1000 ultrafast bootstraps. IQ-TREE
+        # reads the IUPAC ambiguity codes protal writes (milestone M2) natively.
+        # A matching .{{strain_msa_suffix}}.partition.txt is available for
+        # partitioned analyses (add: -p "$part").
+        $iq -s "$msa" -m GTR+G -B 1000 -T AUTO --seqtype DNA \
+            --prefix "{{strain_run}}/trees/$sp" -redo \
+            > "{{strain_run}}/trees/$sp.iqtree.stdout.log" 2>&1 \
+          && built=$((built+1)) \
+          || echo "[trees] $sp: IQ-TREE failed (see {{strain_run}}/trees/$sp.iqtree.stdout.log)"
+    done
+    echo "[trees] built $built tree(s) in {{strain_run}}/trees (suffix=.{{strain_msa_suffix}})"
+
 # (Re)build the self-contained HTML QC report from an existing strain run.
 strain-report:
     python3 scripts/strain_test/strain_report.py \
