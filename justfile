@@ -5,19 +5,34 @@ set shell := ["bash", "-cu"]
 # ----------------------------------------------------------------------------
 protal      := "build/protal"
 strain_db   := env_var_or_default("PROTAL_DB_PATH", "/home/fritscher/data/db/tool/protal/protal-db-r226-0.5.1a")
-strain_test2:= "/home/fritscher/non-git/simulate_metagenomes_test/test2"
-strain_run  := justfile_directory() / "strain_test_out"
+strain_input:= "/home/fritscher/non-git/simulate_metagenomes_test/test2"   # simulated dataset (input)
+strain_out  := justfile_directory() / "strain_test_out"
+strain_variant := "test1"                 # output subfolder: test1 (full filtering) / test2 (raw)
+strain_run  := strain_out / strain_variant
 strain_threads := "8"
 preset      := "default"
+# Extra protal flags. test2 (raw) disables ALL protal gene/sample filtering so the
+# MSA keeps every observed gene and detected sample (only M1/M2 SNP filtering stays),
+# leaving gene/sample filtering entirely to qcmsa and letting users re-filter.
+strain_protal_filter_args := ""
 
 # Delete all cmake-build-
 clear:
     rm -rf cmake-build-*
 
 # Full M1-M5 strain test: run protal (default settings, with the qcmsa post-filter)
-# on the pre-existing test2 alignments, then build the HTML QC report.
+# on the pre-existing dataset alignments, then build the HTML QC report.
 strain-test: strain-protal strain-dbcounts strain-report
     @echo "Report: {{strain_run}}/report/report.html"
+
+# "Raw" variant -> strain_test_out/test2: protal filters ONLY SNPs (M1/M2); it does
+# NOT drop genes (M3), samples (msa_min_samples / per-seq hcov) or mask by
+# multi-allelicity (M4). qcmsa then does all gene/sample filtering. The unfiltered
+# .msa.fna / .pergene_filtered.msa.fna can be re-filtered with other thresholds.
+strain-test-raw:
+    just strain_variant=test2 \
+         strain_protal_filter_args="--gene_min_hcov_frac 0 --gene_min_mean_depth 0 --msa_min_samples 0 --msa_min_hcov 0 --multi_allelic_mean_genecol_threshold 1.1 --multi_allelic_mean_pergene_threshold 1.1" \
+         strain-test
 
 # Count marker genes per species in the DB genome (the true gene denominator,
 # revealing how many markers were lost to abundance before M3). Cached as a TSV.
@@ -34,18 +49,22 @@ strain-protal:
     # Assemble the map: base OUTPUT_DIR + reuse existing SAMs/reads, local strain output.
     {{ '{' }} \
       printf '#OUTPUT_DIR\t%s\n'          "{{strain_run}}"; \
-      printf '#INPUT_DIR\t%s\n'           "{{strain_test2}}/output/reads"; \
-      printf '#SAM_OUTPUT_DIR\t%s\n'      "{{strain_test2}}/protal/alignments"; \
+      printf '#INPUT_DIR\t%s\n'           "{{strain_input}}/output/reads"; \
+      printf '#SAM_OUTPUT_DIR\t%s\n'      "{{strain_input}}/protal/alignments"; \
       printf '#PROFILE_OUTPUT_DIR\t%s\n'  "{{strain_run}}/profiles"; \
       printf '#STRAIN_OUTPUT_DIR\t%s\n'   "{{strain_run}}/strains"; \
       printf '#MISC_OUTPUT_DIR\t%s\n'     "{{strain_run}}/misc"; \
-      grep -vE '^#(INPUT_DIR|OUTPUT_DIR)' "{{strain_test2}}/protal_map.tsv"; \
+      grep -vE '^#(INPUT_DIR|OUTPUT_DIR)' "{{strain_input}}/protal_map.tsv"; \
     {{ '}' }} > {{strain_run}}/strain_test_map.tsv
+    # Write the full log to a file (avoids a pipeline whose trailing grep can fail
+    # the recipe under `set -o pipefail`, which lmod's BASH_ENV enables), then show
+    # a progress-bar-stripped tail.
     PROTAL_DB_PATH="{{strain_db}}" {{protal}} profile \
         --map {{strain_run}}/strain_test_map.tsv \
         -t {{strain_threads}} \
-        --run_qcmsa --strain_preset {{preset}} \
-        2>&1 | tee {{strain_run}}/protal_run.log | tr '\r' '\n' | grep -vE '^\[=*>* *\] *[0-9]+ %' || true
+        --run_qcmsa --strain_preset {{preset}} {{strain_protal_filter_args}} \
+        > {{strain_run}}/protal_run.log 2>&1 || true
+    -tr '\r' '\n' < {{strain_run}}/protal_run.log | grep -vE '^\[=*>* *\] *[0-9]+ %' | tail -40
 
 # Build a per-species ML tree from each strain MSA with IQ-TREE. Override the
 # input with strain_msa_suffix=pergene_filtered (protal, more sites) or =filtered
