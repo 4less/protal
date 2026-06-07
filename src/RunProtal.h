@@ -1115,7 +1115,8 @@ namespace protal {
         fs::path exe = fs::canonical("/proc/self/exe", ec);
         if (!ec) {
             fs::path dir = exe.parent_path();
-            for (const auto& cand : { dir / "scripts" / "qcmsa.py",
+            for (const auto& cand : { dir / "qcmsa.py",                       // alongside the binary
+                                      dir / "scripts" / "qcmsa.py",
                                       dir.parent_path() / "scripts" / "qcmsa.py" }) {
                 if (fs::exists(cand)) return cand.string();
             }
