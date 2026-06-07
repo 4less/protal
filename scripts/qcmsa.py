@@ -72,18 +72,22 @@ def upper_fence(values, iqr_mult):
     return q75 + iqr_mult * (q75 - q25)
 
 
-def flag_outliers(counts, min_bad, iqr_mult):
+def flag_outliers(counts, min_bad, iqr_mult, include_zeros=False):
     """Given {key: n_bad}, return (flagged_set, fence) for upper-outlier keys.
 
-    Mirrors qcmsa.R::flag_outliers -- fence is computed on the *non-zero* counts,
-    needs >= 4 non-zero values to fire at all, and a key must additionally have
-    n_bad >= min_bad so a single bad cell can never trigger removal on its own.
-    Returns the fence used (or None when too few non-zero values to fire).
+    fence = Tukey upper fence (Q3 + iqr_mult*IQR). By default it is computed on the
+    *non-zero* counts (qcmsa.R behaviour: finds outliers among the items that already
+    carry signal, robust to a noisy real-data background). With include_zeros=True the
+    fence is computed on the FULL distribution including the zeros -- so when most
+    items are zero (a clean baseline), Q3 collapses to 0 and the fence flags ANY
+    non-zero item (>= min_bad). A key still needs n_bad >= min_bad so a single bad
+    cell never triggers removal. Needs >= 4 non-zero values to fire at all.
     """
     nonzero = [c for c in counts.values() if c > 0]
     if len(nonzero) < 4:
         return set(), None
-    fence = upper_fence(nonzero, iqr_mult)
+    base = list(counts.values()) if include_zeros else nonzero
+    fence = upper_fence(base, iqr_mult)
     return {k for k, c in counts.items() if c > fence and c >= min_bad}, fence
 
 
@@ -234,7 +238,7 @@ def write_fasta(path, names, seqs, width=80):
 # Pass 1: MRate2 iterative gene/sample filter (identical to qcmsa.R).
 # ----------------------------------------------------------------------------
 def mrate2_filter(rows, all_genes, all_samples, min_bad, iqr_mult,
-                  gene_abs=0, sample_abs=0, max_iter=100):
+                  gene_abs=0, sample_abs=0, include_zeros=False, max_iter=100):
     kept_genes = set(all_genes)
     kept_samples = set(all_samples)
     # reason[id] = (n_bad, fence_or_'abs>=N', iteration) recorded when flagged
@@ -250,7 +254,7 @@ def mrate2_filter(rows, all_genes, all_samples, min_bad, iqr_mult,
         # genes with zero bad cells still need a (zero) entry for the fence base
         for g in kept_genes:
             gene_counts.setdefault(g, 0)
-        tukey_genes, gene_fence = flag_outliers(gene_counts, min_bad, iqr_mult)
+        tukey_genes, gene_fence = flag_outliers(gene_counts, min_bad, iqr_mult, include_zeros)
         # absolute rule: catch ANY signal above the (often clean-zero) baseline,
         # which the Tukey fence cannot do when the bad items ARE the distribution.
         abs_genes = ({g for g, c in gene_counts.items() if c >= gene_abs}
@@ -265,7 +269,7 @@ def mrate2_filter(rows, all_genes, all_samples, min_bad, iqr_mult,
                 sample_counts[sample] += 1
         for s in kept_samples:
             sample_counts.setdefault(s, 0)
-        tukey_samples, sample_fence = flag_outliers(sample_counts, min_bad, iqr_mult)
+        tukey_samples, sample_fence = flag_outliers(sample_counts, min_bad, iqr_mult, include_zeros)
         abs_samples = ({s for s, c in sample_counts.items() if c >= sample_abs}
                        if sample_abs > 0 else set())
         bad_samples = tukey_samples | abs_samples
@@ -325,6 +329,12 @@ def build_argparser():
     p.add_argument("--gene-abs-min-bad", type=int, default=0,
                    help="Remove a gene multi-allelic in >= this many samples, regardless of "
                         "the Tukey fence. 0=off.")
+    p.add_argument("--mrate2-include-zeros", action="store_true",
+                   help="Compute the Tukey fence on the FULL distribution (including the "
+                        "zero-MRate2 items) instead of the non-zero values only. On a clean "
+                        "baseline (most items zero) this makes the fence collapse to ~0 so any "
+                        "non-zero item (>= --min-bad peers) is flagged -- catches a sparse 10%% "
+                        "of bad samples/genes that the non-zero fence treats as the norm.")
 
     # Coverage gating -- this is where the gene/sample coverage filtering lives
     # (protal emits a raw MSA). Computed from the meta hcov / mean-depth columns.
@@ -434,7 +444,8 @@ def main(argv=None):
     (kept_genes, kept_samples, mr_filtered_genes, filtered_samples,
      gene_reason, sample_reason) = mrate2_filter(
         rows_for_mrate2, cov_survivor_genes, all_samples, min_bad, iqr_mult,
-        gene_abs=args.gene_abs_min_bad, sample_abs=args.sample_abs_min_bad
+        gene_abs=args.gene_abs_min_bad, sample_abs=args.sample_abs_min_bad,
+        include_zeros=args.mrate2_include_zeros
     )
     filtered_genes = mr_filtered_genes | cov_dropped_genes
     sys.stderr.write(f"Filtered genes: {len(filtered_genes)} / {len(all_genes)}"
