@@ -123,6 +123,8 @@ strain-trees:
 refilter_hcov        := "0.3"
 refilter_depth       := "1"
 refilter_min_samples := "3"
+refilter_sample_abs  := "0"    # >0: remove a sample multi-allelic in >= N genes (catches conspecific/mixed strains)
+refilter_gene_abs    := "0"    # >0: remove a gene multi-allelic in >= N samples
 strain-refilter:
     #!/usr/bin/env bash
     set -uo pipefail
@@ -139,6 +141,8 @@ strain-refilter:
             --gene-min-hcov {{refilter_hcov}} \
             --gene-min-mean-depth {{refilter_depth}} \
             --gene-min-samples {{refilter_min_samples}} \
+            --sample-abs-min-bad {{refilter_sample_abs}} \
+            --gene-abs-min-bad {{refilter_gene_abs}} \
             > "{{strain_run}}/refiltered/$sp.qcmsa.log" 2>&1 \
           && { echo "[refilter] $sp"; n=$((n+1)); } \
           || echo "[refilter] $sp: failed (see {{strain_run}}/refiltered/$sp.qcmsa.log)"
