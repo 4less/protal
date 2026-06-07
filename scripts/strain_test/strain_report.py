@@ -109,6 +109,71 @@ def discover_species(strains_dir):
     return [os.path.basename(m)[:-len(".meta.tsv")] for m in metas]
 
 
+# Default protal M3 thresholds (see Options.h). Used if not overridden/parsed.
+M3_DEFAULTS = dict(hcov=0.50, depth=3.0, min_samples=3)
+
+
+def parse_m3_params(log_path):
+    """Read the M3 thresholds back from protal's ToString() dump in its run log."""
+    if not log_path or not os.path.exists(log_path):
+        return None
+    keys = {"gene min hcov frac:": "hcov", "gene min mean depth:": "depth",
+            "msa min samples:": "min_samples"}
+    found = {}
+    with open(log_path, errors="ignore") as fh:
+        for line in fh:
+            for k, name in keys.items():
+                if k in line:
+                    try:
+                        found[name] = float(line.split(k, 1)[1].strip().split()[0])
+                    except (ValueError, IndexError):
+                        pass
+    if len(found) < 3:
+        return None
+    found["min_samples"] = int(found["min_samples"])
+    return found
+
+
+def compute_protal_filtering(meta_path, hcov_t, depth_t, min_samples):
+    """Reconstruct protal's M3 gene-coverage funnel from the per-cell meta table.
+
+    A (sample,gene) cell 'passes' if hcov >= hcov_t AND mean_vcov_nonzero >= depth_t.
+    A gene enters the MSA if #passing samples > min_samples (protal uses strict >).
+    Returns per-gene/per-cell tallies, or None if the meta file is missing.
+    """
+    if not os.path.exists(meta_path):
+        return None
+    obs = defaultdict(int)        # gene -> observed cells
+    passed = defaultdict(int)     # gene -> passing cells
+    cells = dict(total=0, ok=0, fail_h=0, fail_d=0, fail_both=0)
+    samples = set()
+    for r in read_tsv(meta_path):
+        samples.add(r["sample"])
+        g = r["gene_id"]
+        try:
+            h = float(r.get("hcov", 0) or 0)
+            d = float(r.get("mean_vcov_nonzero", 0) or 0)
+        except ValueError:
+            h, d = 0.0, 0.0
+        obs[g] += 1
+        cells["total"] += 1
+        ok_h, ok_d = h >= hcov_t, d >= depth_t
+        if ok_h and ok_d:
+            passed[g] += 1
+            cells["ok"] += 1
+        elif not ok_h and not ok_d:
+            cells["fail_both"] += 1
+        elif not ok_h:
+            cells["fail_h"] += 1
+        else:
+            cells["fail_d"] += 1
+    genes_obs = len(obs)
+    genes_in = sum(1 for g in obs if passed[g] > min_samples)
+    return dict(genes_observed=genes_obs, genes_in_msa=genes_in,
+                genes_dropped=genes_obs - genes_in, cells=cells,
+                n_samples=len(samples))
+
+
 # ----------------------------------------------------------------------------
 # Tiny SVG chart helpers (no external deps)
 # ----------------------------------------------------------------------------
@@ -222,12 +287,29 @@ def main(argv=None):
     ap.add_argument("--strains", required=True, help="protal strain output dir")
     ap.add_argument("--qcmsa", default=None, help="dir with qcmsa outputs (default: --strains)")
     ap.add_argument("--out", required=True, help="report output dir")
+    ap.add_argument("--protal-log", default=None,
+                    help="protal run log to read M3 thresholds from "
+                         "(default: <strains>/../protal_run.log)")
+    ap.add_argument("--gene-min-hcov-frac", type=float, default=None)
+    ap.add_argument("--gene-min-mean-depth", type=float, default=None)
+    ap.add_argument("--msa-min-samples", type=int, default=None)
     args = ap.parse_args(argv)
     qcmsa_dir = args.qcmsa or args.strains
     os.makedirs(args.out, exist_ok=True)
 
+    # Resolve M3 thresholds: explicit CLI > parsed from protal log > defaults.
+    log_path = args.protal_log or os.path.join(args.strains, os.pardir, "protal_run.log")
+    m3 = parse_m3_params(log_path) or dict(M3_DEFAULTS)
+    if args.gene_min_hcov_frac is not None:
+        m3["hcov"] = args.gene_min_hcov_frac
+    if args.gene_min_mean_depth is not None:
+        m3["depth"] = args.gene_min_mean_depth
+    if args.msa_min_samples is not None:
+        m3["min_samples"] = args.msa_min_samples
+
     species = discover_species(args.strains)
     rows, checks = [], []
+    pf_by_species = {}  # species -> protal M3 filtering tallies
 
     def check(level, sp, msg):
         checks.append((level, sp, msg))
@@ -259,10 +341,20 @@ def main(argv=None):
         a_genes = count_partition_genes(os.path.join(qcmsa_dir, sp + ".filtered.partition.txt"))
         snp_agg, snp_n = aggregate_snp_stats(os.path.join(args.strains, sp + ".snp_stats.tsv"))
 
+        pf = compute_protal_filtering(meta, m3["hcov"], m3["depth"], m3["min_samples"])
+        pf_by_species[sp] = pf
+
         row = dict(species=sp, meta_samples=len(meta_samples), meta_genes=len(meta_genes),
                    before_seqs=b_seqs, before_sample_seqs=b_samp, before_genes=b_genes,
                    after_seqs=a_seqs, after_sample_seqs=a_samp, after_genes=a_genes,
                    qcmsa_ran=summ is not None)
+        if pf:
+            row["genes_observed"] = pf["genes_observed"]
+            row["genes_in_msa"] = pf["genes_in_msa"]
+            row["protal_genes_dropped"] = pf["genes_dropped"]
+            # sample sequences dropped by protal's per-sequence hcov floor (msa_min_hcov)
+            row["protal_samples_dropped"] = (pf["n_samples"] - b_samp
+                                             if b_samp is not None else None)
         if summ:
             for k in ("sites_in", "sites_kept", "genes_filtered", "samples_filtered", "outlier_cells"):
                 row[k] = summ["count"].get(k)
@@ -286,6 +378,14 @@ def main(argv=None):
         if snp_agg and snp_agg.get("total_variant_positions", 0) > 0 and snp_agg.get("snps_retained", 0) == 0:
             check("WARN", sp, f"ALL {int(snp_agg['total_variant_positions'])} variant positions filtered by "
                               f"SNP filters (M1) across {snp_n} samples - no SNPs retained")
+        if pf and pf["genes_observed"] > 0:
+            frac = pf["genes_dropped"] / pf["genes_observed"]
+            if frac >= 0.4:
+                check("WARN", sp,
+                      f"protal M3 gene-coverage filter dropped {pf['genes_dropped']}/{pf['genes_observed']} "
+                      f"observed genes ({frac:.0%}); low-coverage species - consider lowering "
+                      f"--gene_min_hcov_frac ({m3['hcov']}) / --gene_min_mean_depth ({m3['depth']}) "
+                      f"or --msa_min_samples ({m3['min_samples']})")
         if summ is None:
             if b_samp and b_samp >= 2:
                 check("WARN", sp, "qcmsa produced no output despite >=2 sample sequences")
@@ -303,7 +403,8 @@ def main(argv=None):
 
     write_tables(args.out, rows)
     write_markdown(args.out, rows, checks, species)
-    write_html(args.out, rows, checks, species, args.strains, qcmsa_dir, heat_data)
+    write_html(args.out, rows, checks, species, args.strains, qcmsa_dir, heat_data,
+               pf_by_species, m3)
 
     n_fail = sum(1 for l, _, _ in checks if l == "FAIL")
     n_warn = sum(1 for l, _, _ in checks if l == "WARN")
@@ -341,7 +442,29 @@ def write_markdown(out, rows, checks, species):
         fh.write("\n".join(L) + "\n")
 
 
-def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data):
+def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data,
+               pf_by_species=None, m3=None):
+    pf_by_species = pf_by_species or {}
+    m3 = m3 or dict(M3_DEFAULTS)
+
+    # ---- protal-internal gene/sample filtering (M3) -- per-species panels ----
+    pf_items = [(sp, pf) for sp in species if (pf := pf_by_species.get(sp))]
+    pf_items.sort(key=lambda t: -(t[1]["genes_observed"]))
+    gene_funnel_colors = {"genes in MSA": "#2ca02c", "genes dropped (M3 coverage)": "#d62728"}
+    svg_c_genes = species_panels(
+        [(sp.replace("s__", ""), [("genes in MSA", pf["genes_in_msa"]),
+                                  ("genes dropped (M3 coverage)", pf["genes_dropped"])])
+         for sp, pf in pf_items], gene_funnel_colors, "observed genes")
+    cell_colors = {"pass coverage": "#2ca02c", "fail: low hcov": "#ff7f0e",
+                   "fail: low depth": "#1f77b4", "fail: low hcov+depth": "#d62728"}
+    svg_c_cells = species_panels(
+        [(sp.replace("s__", ""),
+          [("pass coverage", pf["cells"]["ok"]),
+           ("fail: low hcov", pf["cells"]["fail_h"]),
+           ("fail: low depth", pf["cells"]["fail_d"]),
+           ("fail: low hcov+depth", pf["cells"]["fail_both"])])
+         for sp, pf in pf_items], cell_colors, "(sample,gene) cells")
+
     # ---- plot (a): SNP filtering -- one auto-scaled panel per species ----
     snp_rows = []
     for sp in species:
@@ -416,10 +539,13 @@ def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data):
         if not r["before_seqs"]:
             continue
         sites = (f'{r.get("sites_in","?")}&rarr;{r.get("sites_kept","?")}' if r["qcmsa_ran"] else "—")
+        obs = r.get("genes_observed")
+        kept_pct = (f"{r['before_genes']/obs:.0%}" if obs else "—")
         trs.append(
             f"<tr><td>{_esc(r['species'])}</td><td>{r['meta_samples']}</td>"
-            f"<td>{r['before_seqs']}</td><td>{r['before_genes']}</td>"
-            f"<td>{r.get('after_seqs','—')}</td><td>{r.get('after_genes','—')}</td>"
+            f"<td>{r.get('genes_observed','—')}</td>"
+            f"<td>{r['before_genes']}</td><td>{kept_pct}</td><td>{r['before_seqs']}</td>"
+            f"<td>{r.get('after_genes','—')}</td><td>{r.get('after_seqs','—')}</td>"
             f"<td>{sites}</td><td>{r.get('genes_filtered','—')}</td>"
             f"<td>{r.get('samples_filtered','—')}</td></tr>")
     no_msa = [r["species"] for r in rows if not r["before_seqs"]]
@@ -447,16 +573,23 @@ def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data):
 <h2>Automated checks &mdash; {nf} FAIL, {nw} WARN</h2>
 {check_rows()}
 
-<h2>Samples &amp; genes per MSA (protal default &rarr; after qcmsa)</h2>
+<h2>Genes &amp; samples through the pipeline</h2>
+<p class="muted">Two filtering stages. <b>protal</b> (M1&ndash;M4) decides which genes/samples enter
+the MSA at all (columns up to "protal seqs"); <b>qcmsa</b> (M5) then post-filters that MSA
+(columns from "qcmsa genes"). "genes observed" = genes seen in &ge;1 sample (the candidate set);
+"protal genes" = genes that passed the M3 coverage filter and entered the MSA.</p>
 <table>
-<tr><th>species</th><th>meta samples</th><th>before seqs</th><th>before genes</th>
-<th>after seqs</th><th>after genes</th><th>sites in&rarr;kept</th>
-<th>genes filt</th><th>samples filt</th></tr>
+<tr><th rowspan="2">species</th><th rowspan="2">meta samples</th>
+<th colspan="3">protal (M1&ndash;M4)</th><th rowspan="2">protal seqs</th>
+<th colspan="2">qcmsa (M5)</th><th rowspan="2">sites in&rarr;kept</th>
+<th rowspan="2">qcmsa genes filt</th><th rowspan="2">qcmsa samples filt</th></tr>
+<tr><th>genes observed</th><th>genes in MSA</th><th>% genes kept</th>
+<th>genes</th><th>seqs</th></tr>
 {''.join(trs)}
 </table>
 <p class="muted">No protal MSA (too few samples/genes to reconstruct a strain): {_esc(', '.join(no_msa) or '(none)')}</p>
 
-<h2>(a) Which SNPs were filtered out, and why</h2>
+<h2>(a) Which SNPs were filtered out, and why &mdash; protal M1</h2>
 <p class="muted">Per species, summed across samples. Variants are filtered by protal's M1 SNP gates:
 low cumulative phred-sum (<code>--snp_min_phred_sum</code>) or insufficient supporting reads
 (<code>--snp_min_cov</code>). The second panel shows why positions had no callable variant.</p>
@@ -465,7 +598,18 @@ low cumulative phred-sum (<code>--snp_min_phred_sum</code>) or insufficient supp
 <h3>Why positions had no callable variant</h3>
 <div class="grid">{svg_a2}</div>
 
-<h2>(b) Gene &amp; sample filtering (qcmsa, milestone M5)</h2>
+<h2>(b) Gene &amp; sample filtering inside protal &mdash; M3 coverage</h2>
+<p class="muted">A (sample,gene) cell enters the MSA only if it passes the M3 coverage gate
+(<code>--gene_min_hcov_frac</code> = {m3['hcov']}: fraction of gene covered &ge;1 read, AND
+<code>--gene_min_mean_depth</code> = {m3['depth']}: mean depth over covered positions). A gene
+enters the MSA only if more than <code>--msa_min_samples</code> = {m3['min_samples']} samples pass.
+Per species, auto-scaled to its own totals.</p>
+<h3>Gene funnel: observed genes &rarr; kept vs dropped by M3</h3>
+<div class="grid">{svg_c_genes}</div>
+<h3>Per-(sample,gene) coverage cells: pass vs why they failed</h3>
+<div class="grid">{svg_c_cells}</div>
+
+<h2>(c) Gene &amp; sample filtering (qcmsa, milestone M5)</h2>
 <p class="muted">qcmsa removes genes/samples that are multi-allelicity (MRate2) outliers via the
 iterative Tukey-IQR rule. Bars show kept vs filtered; the heatmaps below show the underlying
 per-cell MRate2 with filtered rows (red labels) and genes (red &#9650;) flagged.</p>
