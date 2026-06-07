@@ -1133,11 +1133,9 @@ namespace protal {
                          "PROTAL_QCMSA_SCRIPT); skipping post-filter for " << name << std::endl;
             return;
         }
-        // Prefer the per-gene filtered MSA; fall back to the base MSA. Both share
-        // the base partition file's column coordinates.
-        std::string msa = options.GetMSAPerGeneFilteredOutput(name);
-        if (!fs::exists(msa)) msa = options.GetMSAOutput(name);
-        std::string partition = options.GetMSAPartitionOutput(name);
+        // Run qcmsa on protal's native (raw) MSA; it writes the final <name>.msa.fna.
+        std::string msa = options.GetMSAOutput(name);              // .raw.msa.fna
+        std::string partition = options.GetMSAPartitionOutput(name); // .raw.partition.txt
         std::string meta = options.GetSpeciesMetaOutput(name);
         if (!fs::exists(msa) || !fs::exists(partition) || !fs::exists(meta)) {
             std::cerr << "[qcmsa] WARNING: missing MSA/partition/meta for " << name
@@ -1398,7 +1396,6 @@ namespace protal {
         // --- Filtered MSA outputs ---
         if (!gene_cols.empty()) {
             double genecol_thresh = options.GetMultiAllelicMeanGeneColThreshold();
-            double pergene_thresh = options.GetMultiAllelicMeanPerGeneThreshold();
             size_t total_cols = msa[0].size();
 
             // Compute per-gene mean MRate2 and determine which genes pass the genecol filter
@@ -1444,24 +1441,8 @@ namespace protal {
                 }
             }
 
-            // Write pergene filtered MSA (per-sample gene columns replaced with '-' where MRate2 > threshold)
-            {
-                MSAVector msa_pg = msa;
-                for (size_t g = 0; g < gene_cols.size(); g++) {
-                    for (size_t si = 0; si < gene_mrate2s[g].size(); si++) {
-                        if (gene_mrate2s[g][si] > pergene_thresh) {
-                            for (size_t ci = gene_cols[g].first; ci <= gene_cols[g].second; ci++)
-                                msa_pg[si + 1][ci] = '-';
-                        }
-                    }
-                }
-                std::ofstream os_pg(options.GetMSAPerGeneFilteredOutput(taxon_name), std::ios::out);
-                for (size_t ri = 0; ri < msa_pg.size(); ri++) {
-                    if (!IsRowGood(msa_pg[ri], min_hcov)) continue;
-                    os_pg << '>' << names[ri] << '\n';
-                    os_pg << std::string(msa_pg[ri].begin(), msa_pg[ri].end()) << '\n';
-                }
-            }
+            // (pergene_filtered MSA output removed -- the qcmsa post-filter handles
+            //  per-sample/gene multi-allelicity filtering on the raw MSA.)
         }
 
         auto processed_msa = protal::ProcessMSA(msa, options.GetMSAMinVCOV());
