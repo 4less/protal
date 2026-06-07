@@ -181,7 +181,7 @@ static:
     cmake --build cmake-build-static --target protal_static -- -j$(nproc)
 
 # Build all targets, baseline avx2 static and simulate
-build-all: clear baseline avx2 static simulate
+build-all: clear baseline avx2 simulate static
 
 # Install protal, protal_avx2, protal_map_utils, protal_launcher and simulate_metagenomes into prefix/bin
 install prefix="$HOME/.local":
