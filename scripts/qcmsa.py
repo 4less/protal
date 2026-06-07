@@ -233,10 +233,11 @@ def write_fasta(path, names, seqs, width=80):
 # ----------------------------------------------------------------------------
 # Pass 1: MRate2 iterative gene/sample filter (identical to qcmsa.R).
 # ----------------------------------------------------------------------------
-def mrate2_filter(rows, all_genes, all_samples, min_bad, iqr_mult, max_iter=100):
+def mrate2_filter(rows, all_genes, all_samples, min_bad, iqr_mult,
+                  gene_abs=0, sample_abs=0, max_iter=100):
     kept_genes = set(all_genes)
     kept_samples = set(all_samples)
-    # reason[id] = (n_bad, fence, iteration) recorded when the item is flagged
+    # reason[id] = (n_bad, fence_or_'abs>=N', iteration) recorded when flagged
     gene_reason = {}
     sample_reason = {}
 
@@ -249,7 +250,12 @@ def mrate2_filter(rows, all_genes, all_samples, min_bad, iqr_mult, max_iter=100)
         # genes with zero bad cells still need a (zero) entry for the fence base
         for g in kept_genes:
             gene_counts.setdefault(g, 0)
-        bad_genes, gene_fence = flag_outliers(gene_counts, min_bad, iqr_mult)
+        tukey_genes, gene_fence = flag_outliers(gene_counts, min_bad, iqr_mult)
+        # absolute rule: catch ANY signal above the (often clean-zero) baseline,
+        # which the Tukey fence cannot do when the bad items ARE the distribution.
+        abs_genes = ({g for g, c in gene_counts.items() if c >= gene_abs}
+                     if gene_abs > 0 else set())
+        bad_genes = tukey_genes | abs_genes
 
         # sample -> number of bad genes, computed AFTER removing this round's bad genes
         sample_counts = defaultdict(int)
@@ -259,19 +265,26 @@ def mrate2_filter(rows, all_genes, all_samples, min_bad, iqr_mult, max_iter=100)
                 sample_counts[sample] += 1
         for s in kept_samples:
             sample_counts.setdefault(s, 0)
-        bad_samples, sample_fence = flag_outliers(sample_counts, min_bad, iqr_mult)
+        tukey_samples, sample_fence = flag_outliers(sample_counts, min_bad, iqr_mult)
+        abs_samples = ({s for s, c in sample_counts.items() if c >= sample_abs}
+                       if sample_abs > 0 else set())
+        bad_samples = tukey_samples | abs_samples
 
         sys.stderr.write(
-            f"  iter {it}: {len(bad_genes)} gene(s) flagged | "
-            f"{len(bad_samples)} sample(s) flagged\n"
+            f"  iter {it}: {len(bad_genes)} gene(s) flagged "
+            f"({len(tukey_genes)} Tukey, {len(abs_genes - tukey_genes)} abs) | "
+            f"{len(bad_samples)} sample(s) flagged "
+            f"({len(tukey_samples)} Tukey, {len(abs_samples - tukey_samples)} abs)\n"
         )
 
         if not bad_genes and not bad_samples:
             break
         for g in bad_genes:
-            gene_reason[g] = (gene_counts[g], gene_fence, it)
+            fence = (gene_fence if g in tukey_genes else f">=abs {gene_abs}")
+            gene_reason[g] = (gene_counts[g], fence, it)
         for s in bad_samples:
-            sample_reason[s] = (sample_counts[s], sample_fence, it)
+            fence = (sample_fence if s in tukey_samples else f">=abs {sample_abs}")
+            sample_reason[s] = (sample_counts[s], fence, it)
         kept_genes -= bad_genes
         kept_samples -= bad_samples
 
@@ -302,6 +315,16 @@ def build_argparser():
                    help="Tukey IQR multiplier for the MRate2 fence (default 1.5)")
     p.add_argument("--min-bad", type=int, default=None,
                    help="Min bad peers before a gene/sample is removed (default 2)")
+    # Absolute multi-allelicity cutoffs -- catch ANY signal above a clean-zero
+    # baseline (e.g. conspecific/mixed strains), which the Tukey fence cannot do
+    # because the bad items then ARE the distribution. Default 0 = off.
+    p.add_argument("--sample-abs-min-bad", type=int, default=0,
+                   help="Remove a sample with multi-allelic (MRate2>0) signal in >= this "
+                        "many genes, regardless of the Tukey fence. 0=off. Try 1-2 to catch "
+                        "mixed/conspecific strains.")
+    p.add_argument("--gene-abs-min-bad", type=int, default=0,
+                   help="Remove a gene multi-allelic in >= this many samples, regardless of "
+                        "the Tukey fence. 0=off.")
 
     # Coverage gating -- this is where the gene/sample coverage filtering lives
     # (protal emits a raw MSA). Computed from the meta hcov / mean-depth columns.
@@ -410,7 +433,8 @@ def main(argv=None):
     # --- pass 1: MRate2 gene/sample filter ---
     (kept_genes, kept_samples, mr_filtered_genes, filtered_samples,
      gene_reason, sample_reason) = mrate2_filter(
-        rows_for_mrate2, cov_survivor_genes, all_samples, min_bad, iqr_mult
+        rows_for_mrate2, cov_survivor_genes, all_samples, min_bad, iqr_mult,
+        gene_abs=args.gene_abs_min_bad, sample_abs=args.sample_abs_min_bad
     )
     filtered_genes = mr_filtered_genes | cov_dropped_genes
     sys.stderr.write(f"Filtered genes: {len(filtered_genes)} / {len(all_genes)}"
@@ -605,13 +629,15 @@ def main(argv=None):
                     fh.write(f"gene_filtered\t{g}\t{nb}\t{txt}\n")
                     continue
                 nb, fence, it = gene_reason.get(g, (None, None, None))
-                reason = (f"MRate2-outlier: {nb} samples > fence {fence:.3g} "
-                          f"(iter {it})") if nb is not None else "MRate2-outlier"
+                fs = (f"{fence:.3g}" if isinstance(fence, (int, float)) else fence)
+                reason = (f"multi-allelic: {nb} samples > {fs} "
+                          f"(iter {it})") if nb is not None else "multi-allelic outlier"
                 fh.write(f"gene_filtered\t{g}\t{nb}\t{reason}\n")
             for s in sorted(filtered_samples):
                 nb, fence, it = sample_reason.get(s, (None, None, None))
-                reason = (f"MRate2-outlier: {nb} genes > fence {fence:.3g} "
-                          f"(iter {it})") if nb is not None else "MRate2-outlier"
+                fs = (f"{fence:.3g}" if isinstance(fence, (int, float)) else fence)
+                reason = (f"multi-allelic: {nb} genes > {fs} "
+                          f"(iter {it})") if nb is not None else "multi-allelic outlier"
                 fh.write(f"sample_filtered\t{s}\t{nb}\t{reason}\n")
             for s, g in sorted(outlier_cells):
                 fh.write(f"cell_outlier\t{s}|gene{g}\t\tMRate2 > cell_fence {cell_fence:.3g}\n")
