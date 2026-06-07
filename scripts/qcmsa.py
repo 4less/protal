@@ -119,15 +119,20 @@ def parse_partition(path):
 META_GENE_COL = "gene_id"
 META_SAMPLE_COL = "sample"
 META_MRATE2_COL = "multi_rate_vcov2"
+META_HCOV_COL = "hcov"               # fraction of gene covered (M3 --gene_min_hcov_frac)
+META_DEPTH_COL = "mean_vcov_nonzero"  # mean depth over covered positions (M3 --gene_min_mean_depth)
 
 
 def load_meta(path, gene_whitelist):
-    """Load (sample, gene, mrate2) rows, restricted to genes in gene_whitelist.
+    """Load per-(sample,gene) meta restricted to genes in gene_whitelist.
 
-    Returns (rows, samples_in_order, genes_sorted) where rows is a list of
-    (sample:str, gene:int, mrate2:float).
+    Returns (rows, samples_in_order, genes_sorted, cov) where
+      rows = list of (sample:str, gene:int, mrate2:float)
+      cov  = {(sample, gene): (hcov:float, mean_depth:float)} (empty if the
+             coverage columns are absent).
     """
     rows = []
+    cov = {}
     with open_maybe_gz(path, "rt") as fh:
         header = fh.readline().rstrip("\n").split("\t")
         try:
@@ -139,6 +144,8 @@ def load_meta(path, gene_whitelist):
                 f"qcmsa.py: meta file '{path}' is missing expected column "
                 f"({exc}); header was: {header}"
             )
+        hi = header.index(META_HCOV_COL) if META_HCOV_COL in header else None
+        di = header.index(META_DEPTH_COL) if META_DEPTH_COL in header else None
         for line in fh:
             if not line.strip():
                 continue
@@ -146,7 +153,13 @@ def load_meta(path, gene_whitelist):
             gene = int(f[gi])
             if gene not in gene_whitelist:
                 continue
-            rows.append((f[si], gene, float(f[mi])))
+            sample = f[si]
+            rows.append((sample, gene, float(f[mi])))
+            if hi is not None and di is not None:
+                try:
+                    cov[(sample, gene)] = (float(f[hi]), float(f[di]))
+                except ValueError:
+                    pass
 
     samples_seen = []
     seen = set()
@@ -156,7 +169,36 @@ def load_meta(path, gene_whitelist):
             seen.add(sample)
             samples_seen.append(sample)
         genes_seen.add(gene)
-    return rows, samples_seen, sorted(genes_seen)
+    return rows, samples_seen, sorted(genes_seen), cov
+
+
+def coverage_filter(cov, all_genes, hcov_t, depth_t, min_samples):
+    """Reproduce protal's M3 coverage gate from the meta coverage columns.
+
+    A (sample,gene) cell passes if hcov >= hcov_t AND mean_depth >= depth_t.
+    A gene is dropped if NOT more than min_samples cells pass (protal uses a
+    strict '>' on msa_min_samples). Returns (dropped_genes, fail_cells, reason)
+    where fail_cells are coverage-failing cells in *surviving* genes (to gap-fill).
+    """
+    passing = defaultdict(int)
+    failing = defaultdict(set)   # gene -> set of failing samples
+    for (sample, gene), (h, d) in cov.items():
+        if gene not in all_genes:
+            continue
+        if h >= hcov_t and d >= depth_t:
+            passing[gene] += 1
+        else:
+            failing[gene].add(sample)
+    dropped, fail_cells, reason = set(), set(), {}
+    for gene in all_genes:
+        np = passing.get(gene, 0)
+        if np <= min_samples:        # not strictly greater -> dropped (matches protal)
+            dropped.add(gene)
+            reason[gene] = (np, "M3 coverage: only %d sample(s) pass" % np)
+        else:
+            for s in failing.get(gene, ()):
+                fail_cells.add((s, gene))
+    return dropped, fail_cells, reason
 
 
 def read_fasta(path):
@@ -260,6 +302,20 @@ def build_argparser():
                    help="Tukey IQR multiplier for the MRate2 fence (default 1.5)")
     p.add_argument("--min-bad", type=int, default=None,
                    help="Min bad peers before a gene/sample is removed (default 2)")
+
+    # Coverage gating -- reproduces protal's M3 from the meta hcov / mean-depth
+    # columns, so a raw (unfiltered-by-protal) MSA can be coverage-filtered here.
+    # All default to 0 = OFF (raw behaviour unchanged). Set 0.5 / 3 / 3 to mirror
+    # protal's M3 defaults.
+    p.add_argument("--gene-min-hcov", type=float, default=0.0,
+                   help="M3-equivalent: min fraction of a gene covered for a "
+                        "(sample,gene) cell to pass (protal --gene_min_hcov_frac). 0=off")
+    p.add_argument("--gene-min-mean-depth", type=float, default=0.0,
+                   help="M3-equivalent: min mean depth over covered positions for a "
+                        "cell to pass (protal --gene_min_mean_depth). 0=off")
+    p.add_argument("--gene-min-samples", type=int, default=0,
+                   help="M3-equivalent: drop a gene unless MORE than this many "
+                        "samples pass coverage (protal --msa_min_samples, strict >). 0=off")
     p.add_argument("--max-mrate2", type=float, default=None,
                    help="Hard per-cell MRate2 cap for the cell-outlier fence "
                         "(default: Tukey fence derived from the data)")
@@ -317,7 +373,7 @@ def main(argv=None):
     gene_whitelist = {g for g, _, _ in partition}
     sys.stderr.write(f"Partition: {len(partition)} genes\n")
 
-    rows, all_samples, all_genes = load_meta(args.meta, gene_whitelist)
+    rows, all_samples, all_genes, cov = load_meta(args.meta, gene_whitelist)
     all_samples = sorted(all_samples)
     sys.stderr.write(
         f"Loaded meta: {len(all_samples)} samples x {len(all_genes)} genes (in MSA)\n"
@@ -325,12 +381,37 @@ def main(argv=None):
     sys.stderr.write(f"Params: iqr_mult={iqr_mult} min_bad={min_bad}"
                      + (f" preset={args.preset}" if args.preset else "") + "\n")
 
+    # --- pass 0: optional coverage gate (reproduces protal M3 from meta) ---
+    cov_gate = (args.gene_min_hcov > 0 or args.gene_min_mean_depth > 0
+                or args.gene_min_samples > 0)
+    cov_dropped_genes, cov_fail_cells, cov_reason = set(), set(), {}
+    if cov_gate:
+        if not cov:
+            sys.stderr.write("qcmsa.py: coverage gating requested but meta has no "
+                             "hcov/mean_vcov_nonzero columns; skipping coverage gate.\n")
+        else:
+            cov_dropped_genes, cov_fail_cells, cov_reason = coverage_filter(
+                cov, set(all_genes), args.gene_min_hcov,
+                args.gene_min_mean_depth, args.gene_min_samples)
+            sys.stderr.write(
+                f"Coverage gate (hcov>={args.gene_min_hcov}, depth>="
+                f"{args.gene_min_mean_depth}, >{args.gene_min_samples} samples): "
+                f"dropped {len(cov_dropped_genes)}/{len(all_genes)} genes, "
+                f"gap-filled {len(cov_fail_cells)} cell(s)\n")
+    # Genes/cells removed by coverage don't participate in the MRate2 stats (they
+    # are gaps in the output), so the adaptive fence is computed on covered data.
+    cov_survivor_genes = [g for g in all_genes if g not in cov_dropped_genes]
+    rows_for_mrate2 = [(s, g, mr) for (s, g, mr) in rows
+                       if g not in cov_dropped_genes and (s, g) not in cov_fail_cells]
+
     # --- pass 1: MRate2 gene/sample filter ---
-    (kept_genes, kept_samples, filtered_genes, filtered_samples,
+    (kept_genes, kept_samples, mr_filtered_genes, filtered_samples,
      gene_reason, sample_reason) = mrate2_filter(
-        rows, all_genes, all_samples, min_bad, iqr_mult
+        rows_for_mrate2, cov_survivor_genes, all_samples, min_bad, iqr_mult
     )
-    sys.stderr.write(f"Filtered genes: {len(filtered_genes)} / {len(all_genes)}\n")
+    filtered_genes = mr_filtered_genes | cov_dropped_genes
+    sys.stderr.write(f"Filtered genes: {len(filtered_genes)} / {len(all_genes)}"
+                     f" ({len(cov_dropped_genes)} coverage, {len(mr_filtered_genes)} MRate2)\n")
     sys.stderr.write(f"Filtered samples: {len(filtered_samples)} / {len(all_samples)}\n")
 
     # --- cell-outlier fence ---
@@ -394,15 +475,15 @@ def main(argv=None):
             col_gene.append(g)
             col_orig.append(c)
 
-    # Subset each kept sequence to the surviving columns; mask outlier cells.
-    # We build a per-row mask set of (row_index) only where needed.
+    # Subset each kept sequence to the surviving columns; gap-fill coverage-failed
+    # cells (M3-equivalent) and, if requested, MRate2 outlier cells.
     msa_rows = []
     for n in kept_names:
         seq = seq_of[n]
         chars = [seq[c] for c in col_orig]
-        if args.mask_cells and n in sample_set:
+        if n in sample_set:
             for j, g in enumerate(col_gene):
-                if (n, g) in outlier_cells:
+                if (n, g) in cov_fail_cells or (args.mask_cells and (n, g) in outlier_cells):
                     chars[j] = "-"
         msa_rows.append(chars)
 
@@ -506,6 +587,9 @@ def main(argv=None):
             fh.write(f"count\tgenes_in\t{len(all_genes)}\t\n")
             fh.write(f"count\tgenes_kept\t{len(kept_genes)}\t\n")
             fh.write(f"count\tgenes_filtered\t{len(filtered_genes)}\t\n")
+            fh.write(f"count\tgenes_filtered_coverage\t{len(cov_dropped_genes)}\t\n")
+            fh.write(f"count\tgenes_filtered_mrate2\t{len(mr_filtered_genes)}\t\n")
+            fh.write(f"count\tcoverage_gap_filled_cells\t{len(cov_fail_cells)}\t\n")
             fh.write(f"count\tsites_in\t{n_cols}\t\n")
             fh.write(f"count\tsites_kept\t{len(surviving)}\t\n")
             fh.write(f"count\tsites_removed\t{n_removed_sites}\t\n")
@@ -513,6 +597,10 @@ def main(argv=None):
             fh.write(f"count\tseqs_out\t{n_seqs_out}\t\n")
             fh.write(f"count\treference_seqs_out\t{n_ref}\t\n")
             for g in sorted(filtered_genes):
+                if g in cov_dropped_genes:
+                    nb, txt = cov_reason.get(g, (None, "M3 coverage"))
+                    fh.write(f"gene_filtered\t{g}\t{nb}\t{txt}\n")
+                    continue
                 nb, fence, it = gene_reason.get(g, (None, None, None))
                 reason = (f"MRate2-outlier: {nb} samples > fence {fence:.3g} "
                           f"(iter {it})") if nb is not None else "MRate2-outlier"
