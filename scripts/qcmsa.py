@@ -20,7 +20,7 @@ The filter has two passes:
      per-sequence horizontal-coverage floor after gene removal.
 
 Inputs match protal's output contract:
-  <msa>        FASTA (plain or .gz) -- e.g. <species>.pergene_filtered.msa.fna
+  <msa>        FASTA (plain or .gz) -- protal's <species>.raw.msa.fna
   <partition>  RAxML-style partition -- "DNA, gene<ID> = <start>-<end>" (0-based inclusive)
   <meta.tsv>   protal per-sample x per-gene metrics, WITH a header row
 
@@ -364,7 +364,11 @@ def main(argv=None):
 
     prefix = args.prefix
     if prefix is None:
-        prefix = re.sub(r"\.fna(\.gz)?$", "", args.msa)
+        # strip ".raw.msa.fna" / ".msa.fna" / ".fna" so the output is <name>.msa.fna
+        prefix = re.sub(r"(\.raw)?(\.msa)?\.fna(\.gz)?$", "", args.msa)
+    if os.path.abspath(prefix + ".msa.fna") == os.path.abspath(args.msa):
+        raise SystemExit("qcmsa.py: output would overwrite the input MSA; pass a "
+                         "distinct --prefix (input should be <name>.raw.msa.fna).")
 
     # --- inputs ---
     partition = parse_partition(args.partition)
@@ -549,7 +553,7 @@ def main(argv=None):
     )
 
     # --- write filtered MSA ---
-    msa_out = prefix + ".filtered.msa.fna"
+    msa_out = prefix + ".msa.fna"
     write_fasta(msa_out, kept_names, final_seqs)
     sys.stderr.write(f"Saved: {msa_out}\n")
 
@@ -558,7 +562,7 @@ def main(argv=None):
     surv_per_gene = defaultdict(int)
     for j in surviving:
         surv_per_gene[col_gene[j]] += 1
-    part_out = prefix + ".filtered.partition.txt"
+    part_out = prefix + ".partition.txt"
     with open(part_out, "w") as fh:
         new_start = 0
         for g, _, _ in kept_partition:

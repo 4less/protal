@@ -742,8 +742,10 @@ namespace protal {
             return m_output_dir + '/' + species_name + ".tsv";
         }
 
+        // protal's native (pre-qcmsa) MSA. The qcmsa post-filter writes the final
+        // <species>.msa.fna from this; see scripts/qcmsa.md.
         std::string GetMSAOutput(std::string species_name) const {
-            return m_strain_output_dir + '/' + species_name + ".msa.fna";
+            return m_strain_output_dir + '/' + species_name + ".raw.msa.fna";
         }
 
         std::string GetSpeciesMetaOutput(std::string species_name) const {
@@ -755,7 +757,7 @@ namespace protal {
         }
 
         std::string GetMSAPartitionOutput(std::string species_name) const {
-            return m_strain_output_dir + '/' + species_name + ".partition.txt";
+            return m_strain_output_dir + '/' + species_name + ".raw.partition.txt";
         }
 
         std::string GetMSAStatsOutput(std::string species_name) const {
@@ -768,10 +770,6 @@ namespace protal {
 
         std::string GetMSAGeneColFilteredPartitionOutput(std::string species_name) const {
             return m_strain_output_dir + '/' + species_name + ".genecol_filtered.partition.txt";
-        }
-
-        std::string GetMSAPerGeneFilteredOutput(std::string species_name) const {
-            return m_strain_output_dir + '/' + species_name + ".pergene_filtered.msa.fna";
         }
 
         double GetMultiAllelicMeanGeneColThreshold() const {

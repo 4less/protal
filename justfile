@@ -28,7 +28,7 @@ strain-test: strain-protal strain-dbcounts strain-report
 # "Raw" variant -> strain_test_out/test2: protal filters ONLY SNPs (M1/M2); it does
 # NOT drop genes (M3), samples (msa_min_samples / per-seq hcov) or mask by
 # multi-allelicity (M4). qcmsa then does all gene/sample filtering. The unfiltered
-# .msa.fna / .pergene_filtered.msa.fna can be re-filtered with other thresholds.
+# <species>.raw.msa.fna can be re-filtered with other thresholds.
 strain-test-raw:
     just strain_variant=test2 \
          strain_protal_filter_args="--gene_min_hcov_frac 0 --gene_min_mean_depth 0 --msa_min_samples 0 --msa_min_hcov 0 --multi_allelic_mean_genecol_threshold 1.1 --multi_allelic_mean_pergene_threshold 1.1" \
@@ -66,11 +66,11 @@ strain-protal:
         > {{strain_run}}/protal_run.log 2>&1 || true
     -tr '\r' '\n' < {{strain_run}}/protal_run.log | grep -vE '^\[=*>* *\] *[0-9]+ %' | tail -40
 
-# Build a per-species ML tree from each strain MSA with IQ-TREE. Override the
-# input with strain_msa_suffix=pergene_filtered (protal, more sites) or =filtered
-# (qcmsa final, default). Uses the `iqtree` conda env by default; override the
+# Build a per-species ML tree from each strain MSA with IQ-TREE. strain_tree_input
+# selects the MSA: "filtered" = qcmsa output <sp>.msa.fna (default); "raw" = protal
+# native <sp>.raw.msa.fna. Uses the `iqtree` conda env by default; override the
 # launcher with strain_iqtree=... . Skips gracefully if IQ-TREE is unavailable.
-strain_msa_suffix := "filtered"
+strain_tree_input := "filtered"
 strain_iqtree := ""
 strain-trees:
     #!/usr/bin/env bash
@@ -94,9 +94,12 @@ strain-trees:
     echo "[trees] using: $iq"
     mkdir -p "{{strain_run}}/trees"
     shopt -s nullglob
+    case "{{strain_tree_input}}" in raw) ext=".raw.msa.fna";; *) ext=".msa.fna";; esac
     built=0
-    for msa in "{{strain_run}}/strains/"*."{{strain_msa_suffix}}".msa.fna; do
-        sp=$(basename "$msa" ."{{strain_msa_suffix}}".msa.fna)
+    for meta in "{{strain_run}}/strains/"*.meta.tsv; do
+        sp=$(basename "$meta" .meta.tsv)
+        msa="{{strain_run}}/strains/$sp$ext"
+        [ -f "$msa" ] || continue
         nseq=$(grep -c '^>' "$msa")
         if [ "$nseq" -lt 4 ]; then
             echo "[trees] $sp: only $nseq sequences (<4) - skipping"
@@ -105,15 +108,13 @@ strain-trees:
         echo "[trees] $sp ($nseq taxa) -> {{strain_run}}/trees/$sp.treefile"
         # Unpartitioned GTR+G ML tree with 1000 ultrafast bootstraps. IQ-TREE
         # reads the IUPAC ambiguity codes protal writes (milestone M2) natively.
-        # A matching .{{strain_msa_suffix}}.partition.txt is available for
-        # partitioned analyses (add: -p "$part").
         $iq -s "$msa" -m GTR+G -B 1000 -T AUTO --seqtype DNA \
             --prefix "{{strain_run}}/trees/$sp" -redo \
             > "{{strain_run}}/trees/$sp.iqtree.stdout.log" 2>&1 \
           && built=$((built+1)) \
           || echo "[trees] $sp: IQ-TREE failed (see {{strain_run}}/trees/$sp.iqtree.stdout.log)"
     done
-    echo "[trees] built $built tree(s) in {{strain_run}}/trees (suffix=.{{strain_msa_suffix}})"
+    echo "[trees] built $built tree(s) in {{strain_run}}/trees (input={{strain_tree_input}})"
 
 # Re-filter a raw run's MSAs with qcmsa, applying M3-equivalent coverage gating
 # (from the meta hcov/depth columns) PLUS the usual MRate2 + site cleanup. Lets
@@ -128,9 +129,9 @@ strain-refilter:
     mkdir -p "{{strain_run}}/refiltered"
     shopt -s nullglob
     n=0
-    for msa in "{{strain_run}}/strains/"*.pergene_filtered.msa.fna; do
-        sp=$(basename "$msa" .pergene_filtered.msa.fna)
-        part="{{strain_run}}/strains/$sp.partition.txt"
+    for msa in "{{strain_run}}/strains/"*.raw.msa.fna; do
+        sp=$(basename "$msa" .raw.msa.fna)
+        part="{{strain_run}}/strains/$sp.raw.partition.txt"
         meta="{{strain_run}}/strains/$sp.meta.tsv"
         [ -f "$part" ] && [ -f "$meta" ] || continue
         python3 scripts/qcmsa.py "$msa" "$part" "$meta" \

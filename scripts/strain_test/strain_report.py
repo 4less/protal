@@ -417,10 +417,8 @@ def main(argv=None):
 
     for sp in species:
         meta = os.path.join(args.strains, sp + ".meta.tsv")
-        base_part = os.path.join(args.strains, sp + ".partition.txt")
-        pergene = os.path.join(args.strains, sp + ".pergene_filtered.msa.fna")
-        base_msa = os.path.join(args.strains, sp + ".msa.fna")
-        before_msa = pergene if os.path.exists(pergene) else base_msa
+        base_part = os.path.join(args.strains, sp + ".raw.partition.txt")  # protal native
+        before_msa = os.path.join(args.strains, sp + ".raw.msa.fna")       # protal native
 
         meta_samples, meta_genes = set(), set()
         var_cells = {vk: {} for vk, *_ in HEATMAP_VARS}   # var -> {(sample,gene): value}
@@ -441,8 +439,8 @@ def main(argv=None):
         b_seqs, b_samp = count_fasta_seqs(before_msa)
         b_genes = count_partition_genes(base_part)
         summ = load_summary(os.path.join(qcmsa_dir, sp + ".qcmsa_summary.tsv"))
-        a_seqs, a_samp = count_fasta_seqs(os.path.join(qcmsa_dir, sp + ".filtered.msa.fna"))
-        a_genes = count_partition_genes(os.path.join(qcmsa_dir, sp + ".filtered.partition.txt"))
+        a_seqs, a_samp = count_fasta_seqs(os.path.join(qcmsa_dir, sp + ".msa.fna"))
+        a_genes = count_partition_genes(os.path.join(qcmsa_dir, sp + ".partition.txt"))
         snp_agg, snp_n = aggregate_snp_stats(os.path.join(args.strains, sp + ".snp_stats.tsv"))
 
         pf = compute_protal_filtering(meta, m3["hcov"], m3["depth"], m3["min_samples"])

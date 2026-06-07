@@ -11,16 +11,16 @@ For one species, qcmsa reads three files protal produces in the strain output di
 
 | input | what it is |
 |---|---|
-| `<species>.pergene_filtered.msa.fna` | the MSA to filter (use `.msa.fna` if you prefer the unmasked base MSA) |
-| `<species>.partition.txt` | gene → column ranges (RAxML style) |
+| `<species>.raw.msa.fna` | protal's native MSA — the input to filter |
+| `<species>.raw.partition.txt` | gene → column ranges (RAxML style) |
 | `<species>.meta.tsv` | per-(sample,gene) coverage + multi-allelicity metrics (the filter's evidence) |
 
-It writes (prefix defaults to the MSA path minus `.fna`):
+It writes (prefix defaults to `<species>`, i.e. the input path minus `.raw.msa.fna`):
 
 | output | what it is |
 |---|---|
-| `<prefix>.filtered.msa.fna` | the filtered MSA |
-| `<prefix>.filtered.partition.txt` | partition with recomputed coordinates |
+| `<prefix>.msa.fna` | the filtered MSA (this is the one to use downstream) |
+| `<prefix>.partition.txt` | partition with recomputed coordinates |
 | `<prefix>.qcmsa_summary.tsv` | machine-readable decision log (what was filtered and why) |
 | `<prefix>.qc.png` | optional MRate2 heatmap (`--plot`, needs matplotlib) |
 
@@ -84,8 +84,8 @@ re-aligned; this takes seconds.
 ```bash
 # stricter multi-allelicity removal + reproduce permissive M3 coverage gating
 python3 scripts/qcmsa.py \
-    out/strains/s__Bacteroides_ovatus.pergene_filtered.msa.fna \
-    out/strains/s__Bacteroides_ovatus.partition.txt \
+    out/strains/s__Bacteroides_ovatus.raw.msa.fna \
+    out/strains/s__Bacteroides_ovatus.raw.partition.txt \
     out/strains/s__Bacteroides_ovatus.meta.tsv \
     --prefix out/refiltered/s__Bacteroides_ovatus \
     --preset sensitive \
@@ -114,7 +114,7 @@ Outputs land in `strain_test_out/<variant>/refiltered/`.
   (or `--iqr-mult 1.0 --min-bad 1`).
 - **Want the rawest possible MSA to feed your own pipeline?** Run protal with
   `--no_qcmsa` (and permissive/zero coverage flags) and filter downstream yourself —
-  the `.msa.fna` + `.meta.tsv` carry everything you need.
+  the `.raw.msa.fna` + `.meta.tsv` carry everything you need.
 
 ## Note on where filtering lives
 
