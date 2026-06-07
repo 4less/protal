@@ -116,52 +116,57 @@ def _esc(s):
     return html.escape(str(s))
 
 
-def svg_stacked_bar(labels, series, colors, title, ylabel, width=900, bar_h_area=300):
-    """series: list of (name, [value per label]). Vertical stacked bars."""
-    n = len(labels)
-    if n == 0:
-        return f"<p><em>No data for: {_esc(title)}</em></p>"
-    pad_l, pad_r, pad_t, pad_b = 60, 160, 40, 120
-    width = max(width, pad_l + pad_r + n * 28)
-    plot_w = width - pad_l - pad_r
-    height = pad_t + bar_h_area + pad_b
-    totals = [sum(s[1][i] for s in series) for i in range(n)]
-    vmax = max(totals) or 1
-    bw = plot_w / n * 0.7
-    gap = plot_w / n
+def svg_species_stack(name, cats, colors, ylabel, width=250, plot_h=230):
+    """One vertical stacked bar for a single species, auto-scaled to its own total.
+
+    cats: list of (category_name, value) in stacking order (bottom first)."""
+    total = sum(v for _, v in cats)
+    vmax = total or 1
+    pad_t, pad_b, pad_l, pad_r = 26, 64, 56, 12
+    height = pad_t + plot_h + pad_b
+    bw = 78
+    bx = pad_l + 24
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
              f'font-family="sans-serif" font-size="11">']
-    parts.append(f'<text x="{width/2}" y="20" text-anchor="middle" font-size="14" '
-                 f'font-weight="bold">{_esc(title)}</text>')
-    # y axis
-    parts.append(f'<line x1="{pad_l}" y1="{pad_t}" x2="{pad_l}" y2="{pad_t+bar_h_area}" stroke="#888"/>')
+    parts.append(f'<text x="{width/2:.0f}" y="16" text-anchor="middle" font-size="11" '
+                 f'font-weight="bold">{_esc(name)}</text>')
+    # y axis with its OWN scale (0 .. species total)
+    parts.append(f'<line x1="{pad_l}" y1="{pad_t}" x2="{pad_l}" y2="{pad_t+plot_h}" stroke="#888"/>')
     for frac in (0, 0.5, 1.0):
-        y = pad_t + bar_h_area * (1 - frac)
-        val = int(vmax * frac)
-        parts.append(f'<line x1="{pad_l-4}" y1="{y}" x2="{pad_l}" y2="{y}" stroke="#888"/>')
-        parts.append(f'<text x="{pad_l-8}" y="{y+4}" text-anchor="end" fill="#555">{val}</text>')
-    parts.append(f'<text x="16" y="{pad_t+bar_h_area/2}" text-anchor="middle" fill="#555" '
-                 f'transform="rotate(-90 16 {pad_t+bar_h_area/2})">{_esc(ylabel)}</text>')
-    for i, lab in enumerate(labels):
-        x = pad_l + i * gap + (gap - bw) / 2
-        y0 = pad_t + bar_h_area
-        for name, vals in series:
-            v = vals[i]
-            h = (v / vmax) * bar_h_area if vmax else 0
-            if h > 0:
-                parts.append(f'<rect x="{x:.1f}" y="{y0-h:.1f}" width="{bw:.1f}" height="{h:.1f}" '
-                             f'fill="{colors.get(name, "#888")}"><title>{_esc(lab)} {_esc(name)}: {v:.0f}</title></rect>')
-            y0 -= h
-        parts.append(f'<text x="{x+bw/2:.1f}" y="{pad_t+bar_h_area+12}" text-anchor="end" '
-                     f'fill="#333" transform="rotate(-45 {x+bw/2:.1f} {pad_t+bar_h_area+12})">{_esc(lab)}</text>')
-    # legend
-    ly = pad_t
-    for name, _ in series:
-        parts.append(f'<rect x="{width-pad_r+10}" y="{ly}" width="12" height="12" fill="{colors.get(name,"#888")}"/>')
-        parts.append(f'<text x="{width-pad_r+26}" y="{ly+11}" fill="#333">{_esc(name)}</text>')
-        ly += 18
+        y = pad_t + plot_h * (1 - frac)
+        val = int(round(vmax * frac))
+        parts.append(f'<line x1="{pad_l-4}" y1="{y:.1f}" x2="{pad_l}" y2="{y:.1f}" stroke="#888"/>')
+        parts.append(f'<text x="{pad_l-7}" y="{y+4:.1f}" text-anchor="end" fill="#555" '
+                     f'font-size="9">{val}</text>')
+    parts.append(f'<text x="13" y="{pad_t+plot_h/2:.0f}" text-anchor="middle" fill="#555" '
+                 f'font-size="9" transform="rotate(-90 13 {pad_t+plot_h/2:.0f})">{_esc(ylabel)}</text>')
+    y0 = pad_t + plot_h
+    for lab, v in cats:
+        h = (v / vmax) * plot_h if vmax else 0
+        if h > 0:
+            parts.append(f'<rect x="{bx}" y="{y0-h:.1f}" width="{bw}" height="{h:.1f}" '
+                         f'fill="{colors.get(lab, "#888")}">'
+                         f'<title>{_esc(lab)}: {v:.0f} ({v/vmax:.1%})</title></rect>')
+        y0 -= h
+    parts.append(f'<text x="{bx+bw/2:.0f}" y="{pad_t-4}" text-anchor="middle" fill="#333" '
+                 f'font-size="9">Σ={int(round(total))}</text>')
     parts.append("</svg>")
     return "\n".join(parts)
+
+
+def species_panels(items, colors, ylabel):
+    """items: list of (species_name, [(cat, value), ...]). Renders one auto-scaled
+    mini stacked bar per species in a flex row, with a shared legend on top."""
+    if not items:
+        return "<p><em>No data.</em></p>"
+    legend = "".join(
+        f'<span style="white-space:nowrap"><span style="display:inline-block;width:11px;'
+        f'height:11px;background:{c};vertical-align:middle;margin:0 4px 0 12px"></span>'
+        f'{_esc(n)}</span>' for n, c in colors.items())
+    svgs = "".join('<div style="margin:2px 6px">' + svg_species_stack(n, cats, colors, ylabel)
+                   + "</div>" for n, cats in items)
+    return (f'<div style="margin:4px 0">{legend}</div>'
+            f'<div style="display:flex;flex-wrap:wrap;align-items:flex-end">{svgs}</div>')
 
 
 def _heat_color(v, vmax):
@@ -337,43 +342,39 @@ def write_markdown(out, rows, checks, species):
 
 
 def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data):
-    # ---- plot (a): SNP filtering ----
+    # ---- plot (a): SNP filtering -- one auto-scaled panel per species ----
     snp_rows = []
     for sp in species:
         agg, _ = aggregate_snp_stats(os.path.join(strains_dir, sp + ".snp_stats.tsv"))
         if agg and agg.get("total_variant_positions", 0) > 0:
             snp_rows.append((sp, agg))
     snp_rows.sort(key=lambda d: -d[1].get("total_variant_positions", 0))
-    a_labels = [s.replace("s__", "") for s, _ in snp_rows]
-    a_series = [(lab, [d.get(col, 0) for _, d in snp_rows]) for col, lab in SNP_FIELDS]
     a_colors = {"retained": "#2ca02c", "filtered: low phred-sum": "#ff7f0e",
                 "filtered: low coverage": "#d62728"}
-    svg_a = svg_stacked_bar(a_labels, a_series, a_colors,
-                            "(a) Variant fate after protal SNP filters (M1)", "variant positions (Σ samples)")
-    p_series = [(lab, [d.get(col, 0) for _, d in snp_rows]) for col, lab in POS_FIELDS]
+    a_items = [(sp.replace("s__", ""), [(lab, agg.get(col, 0)) for col, lab in SNP_FIELDS])
+               for sp, agg in snp_rows]
+    svg_a = species_panels(a_items, a_colors, "variant positions (Σ samples)")
     p_colors = {"below min cov": "#1f77b4", "no coverage": "#9467bd", "removed by vcov": "#8c564b"}
-    svg_a2 = svg_stacked_bar(a_labels, p_series, p_colors,
-                             "Position coverage breakdown (Σ samples)", "positions")
+    p_items = [(sp.replace("s__", ""), [(lab, agg.get(col, 0)) for col, lab in POS_FIELDS])
+               for sp, agg in snp_rows]
+    svg_a2 = species_panels(p_items, p_colors, "positions (Σ samples)")
 
-    # ---- plot (b): gene & sample filtering ----
+    # ---- plot (b): gene & sample filtering -- one auto-scaled panel per species ----
     b_rows = []
     for sp in species:
         s = load_summary(os.path.join(qcmsa_dir, sp + ".qcmsa_summary.tsv"))
         if s:
             b_rows.append((sp, s["count"]))
-    b_labels = [s.replace("s__", "") for s, _ in b_rows]
-    svg_b_genes = svg_stacked_bar(
-        b_labels,
-        [("genes kept", [c.get("genes_kept", 0) for _, c in b_rows]),
-         ("genes filtered (MRate2 outlier)", [c.get("genes_filtered", 0) for _, c in b_rows])],
-        {"genes kept": "#2ca02c", "genes filtered (MRate2 outlier)": "#d62728"},
-        "(b) qcmsa gene filtering (adaptive Tukey MRate2)", "genes")
-    svg_b_samples = svg_stacked_bar(
-        b_labels,
-        [("samples kept", [c.get("samples_kept", 0) for _, c in b_rows]),
-         ("samples filtered (MRate2 outlier)", [c.get("samples_filtered", 0) for _, c in b_rows])],
-        {"samples kept": "#1f77b4", "samples filtered (MRate2 outlier)": "#d62728"},
-        "qcmsa sample filtering (adaptive Tukey MRate2)", "samples")
+    g_colors = {"genes kept": "#2ca02c", "genes filtered (MRate2 outlier)": "#d62728"}
+    svg_b_genes = species_panels(
+        [(sp.replace("s__", ""), [("genes kept", c.get("genes_kept", 0)),
+                                  ("genes filtered (MRate2 outlier)", c.get("genes_filtered", 0))])
+         for sp, c in b_rows], g_colors, "genes")
+    s_colors = {"samples kept": "#1f77b4", "samples filtered (MRate2 outlier)": "#d62728"}
+    svg_b_samples = species_panels(
+        [(sp.replace("s__", ""), [("samples kept", c.get("samples_kept", 0)),
+                                  ("samples filtered (MRate2 outlier)", c.get("samples_filtered", 0))])
+         for sp, c in b_rows], s_colors, "samples")
 
     # ---- heatmaps ----
     heat_svgs = [svg_heatmap(s, g, cell, fs, fg,
@@ -459,14 +460,18 @@ def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data):
 <p class="muted">Per species, summed across samples. Variants are filtered by protal's M1 SNP gates:
 low cumulative phred-sum (<code>--snp_min_phred_sum</code>) or insufficient supporting reads
 (<code>--snp_min_cov</code>). The second panel shows why positions had no callable variant.</p>
+<h3>Variant fate (retained vs filtered by M1 gates)</h3>
 <div class="grid">{svg_a}</div>
+<h3>Why positions had no callable variant</h3>
 <div class="grid">{svg_a2}</div>
 
 <h2>(b) Gene &amp; sample filtering (qcmsa, milestone M5)</h2>
 <p class="muted">qcmsa removes genes/samples that are multi-allelicity (MRate2) outliers via the
 iterative Tukey-IQR rule. Bars show kept vs filtered; the heatmaps below show the underlying
 per-cell MRate2 with filtered rows (red labels) and genes (red &#9650;) flagged.</p>
+<h3>Gene filtering</h3>
 <div class="grid">{svg_b_genes}</div>
+<h3>Sample filtering</h3>
 <div class="grid">{svg_b_samples}</div>
 {''.join('<div class="grid">'+h+'</div>' for h in heat_svgs)}
 
