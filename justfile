@@ -120,8 +120,8 @@ strain-trees:
 # (from the meta hcov/depth columns) PLUS the usual MRate2 + site cleanup. Lets
 # you re-filter strain_test_out/test2 (the raw run) with any thresholds without
 # re-running protal. Outputs into <run>/refiltered/.
-refilter_hcov        := "0.5"
-refilter_depth       := "3"
+refilter_hcov        := "0.3"
+refilter_depth       := "1"
 refilter_min_samples := "3"
 strain-refilter:
     #!/usr/bin/env bash

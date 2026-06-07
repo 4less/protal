@@ -303,19 +303,18 @@ def build_argparser():
     p.add_argument("--min-bad", type=int, default=None,
                    help="Min bad peers before a gene/sample is removed (default 2)")
 
-    # Coverage gating -- reproduces protal's M3 from the meta hcov / mean-depth
-    # columns, so a raw (unfiltered-by-protal) MSA can be coverage-filtered here.
-    # All default to 0 = OFF (raw behaviour unchanged). Set 0.5 / 3 / 3 to mirror
-    # protal's M3 defaults.
-    p.add_argument("--gene-min-hcov", type=float, default=0.0,
-                   help="M3-equivalent: min fraction of a gene covered for a "
-                        "(sample,gene) cell to pass (protal --gene_min_hcov_frac). 0=off")
-    p.add_argument("--gene-min-mean-depth", type=float, default=0.0,
-                   help="M3-equivalent: min mean depth over covered positions for a "
-                        "cell to pass (protal --gene_min_mean_depth). 0=off")
-    p.add_argument("--gene-min-samples", type=int, default=0,
-                   help="M3-equivalent: drop a gene unless MORE than this many "
-                        "samples pass coverage (protal --msa_min_samples, strict >). 0=off")
+    # Coverage gating -- this is where the gene/sample coverage filtering lives
+    # (protal emits a raw MSA). Computed from the meta hcov / mean-depth columns.
+    # Defaults are ON; set any to 0 to disable that part.
+    p.add_argument("--gene-min-hcov", type=float, default=0.3,
+                   help="Min fraction of a gene covered for a (sample,gene) cell to "
+                        "pass. Default 0.3; 0 disables.")
+    p.add_argument("--gene-min-mean-depth", type=float, default=1.0,
+                   help="Min mean depth over covered positions for a cell to pass. "
+                        "Default 1.0; 0 disables.")
+    p.add_argument("--gene-min-samples", type=int, default=3,
+                   help="Drop a gene unless MORE than this many samples pass coverage "
+                        "(strict >, like protal's old msa_min_samples). Default 3; 0 disables.")
     p.add_argument("--max-mrate2", type=float, default=None,
                    help="Hard per-cell MRate2 cap for the cell-outlier fence "
                         "(default: Tukey fence derived from the data)")

@@ -36,13 +36,13 @@ namespace protal {
     static const size_t DEFAULT_MIN_SNP_MEAN_QUAL = 15;
     static const bool   DEFAULT_SNP_REQUIRE_STRAND = true; // disabled via --snp_no_strand
     static const size_t DEFAULT_SNP_MAX_ALLELES = 3;
-    // Permissive coverage defaults: aggressive coverage filtering was shown to
-    // discard genes that still carry strain-discriminating signal (esp. for
-    // low-abundance species). The qcmsa post-filter (default on) does the adaptive
-    // multi-allelicity filtering; coverage here only drops near-absent genes.
-    static const double DEFAULT_GENE_MIN_HCOV_FRAC = 0.30;   // was 0.50
-    static const double DEFAULT_GENE_MIN_MEAN_DEPTH = 1.0;   // was 3.0 (MIDAS2-style 1x)
-    static const size_t DEFAULT_MSA_MIN_SAMPLES = 3;         // structural gate (>3 samples)
+    // Gene/sample coverage filtering is OFF by default: protal emits a RAW MSA
+    // (all observed genes, all detected samples) and the qcmsa post-filter (default
+    // on) does the coverage + multi-allelicity filtering, so it can be re-tuned
+    // without re-running protal. Set these > 0 to make protal filter internally.
+    static const double DEFAULT_GENE_MIN_HCOV_FRAC = 0.0;    // off (qcmsa --gene-min-hcov)
+    static const double DEFAULT_GENE_MIN_MEAN_DEPTH = 0.0;   // off (qcmsa --gene-min-mean-depth)
+    static const size_t DEFAULT_MSA_MIN_SAMPLES = 0;         // off (qcmsa --gene-min-samples)
     // Permissive hard caps: catch only gross multi-allelicity (repeat regions /
     // mismapping). Nuanced, run-adaptive filtering is delegated to qcmsa.
     static const double DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD = 0.50;
@@ -100,9 +100,9 @@ namespace protal {
                 ("multi_allelic_mean_genecol_threshold", "Hard cap: remove entire gene columns from the MSA where mean MRate2 across all samples exceeds this threshold (a gene more multi-allelic than not is a clear repeat region / mismapping signal). Permissive by default; nuanced run-adaptive filtering is delegated to qcmsa. Set to 0.0 for maximally strict behaviour (any multi-allelicity removes the gene).", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD)))
                 ("multi_allelic_mean_pergene_threshold", "Hard cap: in the per-gene filtered MSA, replace a sample's gene columns with '-' where that sample's MRate2 exceeds this threshold. Permissive by default; nuanced run-adaptive filtering is delegated to qcmsa. Set to 0.0 for maximally strict behaviour (any multi-allelicity masks the cell).", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MULTI_ALLELIC_MEAN_PERGENE_THRESHOLD)))
                 ("snp_max_alleles", "Maximum number of alleles at a position to encode as an IUPAC ambiguity code in the MSA. 1 = only the top allele (standard), 2 = encode two-allele mixtures (e.g. R,Y), 3 = also encode three-allele mixtures (e.g. B,H). Alleles are ranked by observation count; ties go to higher-quality allele.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_SNP_MAX_ALLELES)))
-                ("gene_min_hcov_frac", "Minimum fraction of a gene's positions that must be covered (>= 1 read) for that sample's gene to enter the MSA. Samples whose gene falls below this are treated as not having the gene (gap-filled). Set to 0 to disable.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_HCOV_FRAC)))
-                ("gene_min_mean_depth", "Minimum mean read depth across the covered positions of a gene for that sample's gene to enter the MSA. Samples below this are treated as not having the gene (gap-filled). Set to 0 to disable.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_MEAN_DEPTH)))
-                ("msa_min_samples", "Minimum number of samples that must carry a gene (after per-gene coverage filtering) for it to be included in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_SAMPLES)))
+                ("gene_min_hcov_frac", "In-protal gene horizontal-coverage filter. OFF by default (0) -- protal emits a raw MSA and the qcmsa post-filter does this (--gene-min-hcov). Set > 0 to make protal gap-fill cells whose gene is covered below this fraction.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_HCOV_FRAC)))
+                ("gene_min_mean_depth", "In-protal gene depth filter. OFF by default (0) -- handled by qcmsa (--gene-min-mean-depth). Set > 0 to make protal gap-fill cells below this mean depth.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_MEAN_DEPTH)))
+                ("msa_min_samples", "In-protal min-samples-per-gene filter. OFF by default (0) -- handled by qcmsa (--gene-min-samples). Set > 0 to drop genes carried by <= this many samples from protal's MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_SAMPLES)))
                 ("run_qcmsa", "Run the qcmsa.py post-filter (adaptive multi-allelicity outlier removal + site cleanup) on each species' per-gene-filtered MSA. ON BY DEFAULT; disable with --no_qcmsa. Requires python3; fails gracefully with a warning if python3 or the script cannot be found.")
                 ("no_qcmsa", "Disable the qcmsa post-filter (it is on by default).")
                 ("strain_preset", "Aggressiveness preset passed through to qcmsa.py when --run_qcmsa is set: strict | default | sensitive (tunes the Tukey IQR multiplier and min-bad count).", cxxopts::value<std::string>()->default_value(DEFAULT_STRAIN_PRESET))

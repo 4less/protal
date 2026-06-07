@@ -26,9 +26,9 @@ It writes (prefix defaults to `<species>`, i.e. the input path minus `.raw.msa.f
 
 ## What it filters (four stages, in order)
 
-1. **Coverage gate** (M3-equivalent, **off by default**) — drops genes / gap-fills
-   cells that are too sparsely covered, read from the meta `hcov` and
-   `mean_vcov_nonzero` columns.
+1. **Coverage gate** (**on by default** — protal now emits a raw MSA and this gate
+   lives here) — drops genes / gap-fills cells that are too sparsely covered, read
+   from the meta `hcov` and `mean_vcov_nonzero` columns.
 2. **Multi-allelicity (MRate2) filter** — removes genes/samples that are
    multi-allelicity outliers via an iterative Tukey-IQR rule, and masks individual
    outlier cells.
@@ -46,16 +46,17 @@ It writes (prefix defaults to `<species>`, i.e. the input path minus `.raw.msa.f
 | `--max-mrate2 FLOAT` | data fence | hard per-cell MRate2 cap for masking outlier cells |
 | `--no-mask-cell-outliers` | (masking on) | don't mask individual outlier cells |
 
-### Coverage (M3-equivalent — turn ON to filter low-coverage genes here)
+### Coverage (this is where gene/sample coverage filtering lives; on by default)
 | flag | default | effect |
 |---|---|---|
-| `--gene-min-hcov FLOAT` | 0 (off) | min fraction of a gene covered for a cell to pass (≈ protal `--gene_min_hcov_frac`) |
-| `--gene-min-mean-depth FLOAT` | 0 (off) | min mean depth over covered positions (≈ protal `--gene_min_mean_depth`) |
-| `--gene-min-samples INT` | 0 (off) | drop a gene unless **more than** this many samples pass coverage (≈ protal `--msa_min_samples`) |
+| `--gene-min-hcov FLOAT` | **0.3** | min fraction of a gene covered for a cell to pass; set 0 to disable |
+| `--gene-min-mean-depth FLOAT` | **1.0** | min mean depth over covered positions; set 0 to disable |
+| `--gene-min-samples INT` | **3** | drop a gene unless **more than** this many samples pass coverage; set 0 to disable |
 
-> To reproduce protal's (new, permissive) M3 inside qcmsa: `--gene-min-hcov 0.3
-> --gene-min-mean-depth 1 --gene-min-samples 3`. The old aggressive M3 was
-> `0.5 / 3 / 3`.
+> These are the defaults, so the integrated run already applies them. protal's own
+> coverage filtering is OFF by default (it emits a raw MSA); set protal
+> `--gene_min_hcov_frac` / `--gene_min_mean_depth` / `--msa_min_samples` > 0 only if
+> you want protal to filter internally instead.
 
 ### Sites and sequences
 | flag | default | effect |
@@ -118,9 +119,11 @@ Outputs land in `strain_test_out/<variant>/refiltered/`.
 
 ## Note on where filtering lives
 
-Coverage filtering is **identical** whether protal does it (M3) or qcmsa does it
-(`--gene-min-*`) — protal exports the exact stats (`hcov`, `mean_vcov_nonzero`) the
-gate uses, so the two produce byte-identical MSAs. Doing it in qcmsa just makes it
-**reversible** (re-tune without re-running protal). The **SNP filters (M1)** cannot
+By default the gene/sample coverage filtering lives **here** (qcmsa), not in protal:
+protal emits a raw `.raw.msa.fna` and qcmsa produces the filtered `.msa.fna`. It is
+identical to doing it in protal — protal exports the exact stats (`hcov`,
+`mean_vcov_nonzero`) the gate uses, so either way is byte-identical — but doing it in
+qcmsa makes it **reversible** (re-tune without re-running protal). The **SNP filters
+(M1)** cannot
 move to qcmsa — they need per-read base-quality/strand data that is not in the meta —
 so those always stay in protal (`--snp_*`).
