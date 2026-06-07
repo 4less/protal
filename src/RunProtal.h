@@ -1093,6 +1093,74 @@ namespace protal {
         return gene_ids;
     }
 
+    // Shell-quote a path/argument for use in a std::system command line.
+    static std::string ShellQuote(const std::string& s) {
+        std::string out = "'";
+        for (char c : s) {
+            if (c == '\'') out += "'\\''";
+            else out += c;
+        }
+        out += "'";
+        return out;
+    }
+
+    // Locate qcmsa.py: explicit option, then PROTAL_QCMSA_SCRIPT env, then next
+    // to the executable (./scripts, ../scripts). Returns "" if not found.
+    static std::string FindQCMSAScript(Options& options) {
+        namespace fs = std::filesystem;
+        if (!options.GetQCMSAScript().empty()) return options.GetQCMSAScript();
+        if (const char* env = std::getenv("PROTAL_QCMSA_SCRIPT"); env && *env)
+            return std::string(env);
+        std::error_code ec;
+        fs::path exe = fs::canonical("/proc/self/exe", ec);
+        if (!ec) {
+            fs::path dir = exe.parent_path();
+            for (const auto& cand : { dir / "scripts" / "qcmsa.py",
+                                      dir.parent_path() / "scripts" / "qcmsa.py" }) {
+                if (fs::exists(cand)) return cand.string();
+            }
+        }
+        return "";
+    }
+
+    // M5 step 4c: invoke the qcmsa.py post-filter on a species' MSA. Failures are
+    // non-fatal -- the strain outputs protal already wrote remain valid.
+    static void RunQCMSA(Options& options, const std::string& name) {
+        namespace fs = std::filesystem;
+        std::string script = FindQCMSAScript(options);
+        if (script.empty() || !fs::exists(script)) {
+            std::cerr << "[qcmsa] WARNING: qcmsa.py not found (set --qcmsa_script or "
+                         "PROTAL_QCMSA_SCRIPT); skipping post-filter for " << name << std::endl;
+            return;
+        }
+        // Prefer the per-gene filtered MSA; fall back to the base MSA. Both share
+        // the base partition file's column coordinates.
+        std::string msa = options.GetMSAPerGeneFilteredOutput(name);
+        if (!fs::exists(msa)) msa = options.GetMSAOutput(name);
+        std::string partition = options.GetMSAPartitionOutput(name);
+        std::string meta = options.GetSpeciesMetaOutput(name);
+        if (!fs::exists(msa) || !fs::exists(partition) || !fs::exists(meta)) {
+            std::cerr << "[qcmsa] WARNING: missing MSA/partition/meta for " << name
+                      << "; skipping post-filter" << std::endl;
+            return;
+        }
+        std::string prefix = options.GetStrainOutputDir() + '/' + name;
+        std::ostringstream cmd;
+        cmd << "python3 " << ShellQuote(script)
+            << ' ' << ShellQuote(msa)
+            << ' ' << ShellQuote(partition)
+            << ' ' << ShellQuote(meta)
+            << " --prefix " << ShellQuote(prefix)
+            << " --preset " << ShellQuote(options.GetStrainPreset())
+            << " --reapply-hcov " << options.GetMSAMinHCOV();
+        std::cerr << "[qcmsa] " << cmd.str() << std::endl;
+        int rc = std::system(cmd.str().c_str());
+        if (rc != 0) {
+            std::cerr << "[qcmsa] WARNING: qcmsa.py exited with code " << rc
+                      << " for " << name << " (post-filter skipped)" << std::endl;
+        }
+    }
+
     static void GetMSAForTaxon (uint32_t taxid, std::string taxon_name, GenomeLoader& loader, Options& options, Profiles& profiles, std::ostream* os_meta=nullptr, std::optional<profiler::TaxonFilter> filter={}) {
         auto min_hcov = options.GetMSAMinHCOV();
         auto min_qual_sum = options.GetSNPMinPhredSum();
@@ -1561,6 +1629,10 @@ namespace protal {
             os_meta << "sample\tgene_id\tvertical_coverage\tcounts_vcov1\tcounts_vcov2\tmulti_allelic\tfiltered\tmulti_rate_vcov1\tfiltered_rate_vcov1\tmulti_rate_vcov2\tfiltered_rate_vcov2\tmedian_vcov\thcov\tgene_length\tmean_vcov_nonzero\tmedian_vcov_nonzero\n";
             GetMSAForTaxon(taxid, name, loader, options, profiles, &os_meta);
             os_meta.close();
+
+            if (options.GetRunQCMSA()) {
+                RunQCMSA(options, name);
+            }
 //            Utils::Input();
         }
         bm_strain.Stop();
