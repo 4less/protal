@@ -561,15 +561,21 @@ def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data,
     m3 = m3 or dict(M3_DEFAULTS)
     db_markers = db_markers or {}
 
-    # ---- protal-internal gene/sample filtering (M3) -- per-species panels ----
+    # Is protal doing its (optional) in-protal coverage filtering, or emitting raw?
+    cov_in_protal = (m3.get("hcov", 0) > 0 or m3.get("depth", 0) > 0
+                     or m3.get("min_samples", 0) > 0)
+    drop_label = ("dropped by protal coverage filter" if cov_in_protal
+                  else "dropped by protal (filter OFF -> 0)")
+
+    # ---- protal funnel: DB markers -> observed -> in protal's (raw) MSA ----
     pf_items = [(sp, pf) for sp in species if (pf := pf_by_species.get(sp))]
     pf_items.sort(key=lambda t: -(t[1]["genes_observed"]))
-    gene_funnel_colors = {"genes in MSA": "#2ca02c", "genes dropped (M3 coverage)": "#d62728",
+    gene_funnel_colors = {"genes in protal MSA": "#2ca02c", drop_label: "#d62728",
                           "no read hits (not observed)": "#bbbbbb"}
 
     def funnel_cats(sp, pf):
-        cats = [("genes in MSA", pf["genes_in_msa"]),
-                ("genes dropped (M3 coverage)", pf["genes_dropped"])]
+        cats = [("genes in protal MSA", pf["genes_in_msa"]),
+                (drop_label, pf["genes_dropped"])]
         dbm = db_markers.get(sp)
         if dbm:
             cats.append(("no read hits (not observed)", max(0, dbm - pf["genes_observed"])))
@@ -612,11 +618,21 @@ def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data,
         s = load_summary(os.path.join(qcmsa_dir, sp + ".qcmsa_summary.tsv"))
         if s:
             b_rows.append((sp, s["count"]))
-    g_colors = {"genes kept": "#2ca02c", "genes filtered (MRate2 outlier)": "#d62728"}
+    g_colors = {"genes kept": "#2ca02c", "dropped: coverage": "#ff7f0e",
+                "dropped: multi-allelic (MRate2)": "#d62728"}
+
+    def qcmsa_gene_cats(c):
+        # prefer the coverage/mrate2 split if the summary provides it
+        cov = c.get("genes_filtered_coverage")
+        mr = c.get("genes_filtered_mrate2")
+        if cov is None or mr is None:          # older summary: lump under MRate2
+            cov, mr = 0, c.get("genes_filtered", 0)
+        return [("genes kept", c.get("genes_kept", 0)),
+                ("dropped: coverage", cov),
+                ("dropped: multi-allelic (MRate2)", mr)]
+
     svg_b_genes = species_panels(
-        [(sp.replace("s__", ""), [("genes kept", c.get("genes_kept", 0)),
-                                  ("genes filtered (MRate2 outlier)", c.get("genes_filtered", 0))])
-         for sp, c in b_rows], g_colors, "genes")
+        [(sp.replace("s__", ""), qcmsa_gene_cats(c)) for sp, c in b_rows], g_colors, "genes")
     s_colors = {"samples kept": "#1f77b4", "samples filtered (MRate2 outlier)": "#d62728"}
     svg_b_samples = species_panels(
         [(sp.replace("s__", ""), [("samples kept", c.get("samples_kept", 0)),
@@ -697,6 +713,27 @@ def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data,
             f"<td>{r.get('samples_filtered','—')}</td></tr>")
     no_msa = [r["species"] for r in rows if not r["before_seqs"]]
 
+    # Section (b) is about protal's OPTIONAL in-protal coverage filter. Frame it by
+    # whether that filter is actually on (thresholds > 0) or off (protal emits raw).
+    if cov_in_protal:
+        sec_b_heading = "(b) Gene &amp; sample filtering inside protal (coverage)"
+        sec_b_caption = (
+            "protal's in-protal coverage filter is ON: a (sample,gene) cell enters the "
+            f"MSA only if hcov &ge; <code>--gene_min_hcov_frac</code> = {m3['hcov']} and "
+            f"mean depth &ge; <code>--gene_min_mean_depth</code> = {m3['depth']}, and a gene "
+            f"needs &gt; <code>--msa_min_samples</code> = {m3['min_samples']} passing samples. "
+            "Red = dropped here by protal.")
+    else:
+        sec_b_heading = "(b) protal output is RAW &mdash; in-protal coverage filtering is OFF"
+        sec_b_caption = (
+            "protal's coverage thresholds are 0 "
+            f"(<code>--gene_min_hcov_frac</code>={m3['hcov']}, "
+            f"<code>--gene_min_mean_depth</code>={m3['depth']}, "
+            f"<code>--msa_min_samples</code>={m3['min_samples']}), so protal does NOT drop "
+            "genes &mdash; the red bars are 0 and green = every observed gene. The actual "
+            "coverage filtering is done by qcmsa (section c). This funnel shows reach only: of "
+            "the marker genes in the DB genome, how many got read hits (green) vs none (grey).")
+
     n_msa = sum(1 for r in rows if r["before_seqs"])
     doc = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Protal strain + qcmsa QC report</title>
@@ -721,23 +758,25 @@ def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data,
 {check_rows()}
 
 <h2>Genes &amp; samples through the pipeline</h2>
-<p class="muted">Two filtering stages. <b>protal</b> (M1&ndash;M4) decides which genes/samples enter
-the MSA at all (columns up to "protal seqs"); <b>qcmsa</b> (M5) then post-filters that MSA
-(columns from "qcmsa genes"). "genes observed" = genes seen in &ge;1 sample (the candidate set);
-"protal genes" = genes that passed the M3 coverage filter and entered the MSA.</p>
+<p class="muted">Two stages. <b>protal</b> calls SNPs and writes the raw MSA (coverage/gene
+filtering is OFF by default, so its MSA keeps every observed gene); <b>qcmsa</b> then does the
+gene/sample filtering (coverage + multi-allelicity). "genes observed" = genes seen in &ge;1
+sample; "genes in protal MSA" = genes in protal's raw MSA (&asymp; observed unless you turned the
+in-protal filter on).</p>
 <table>
 <tr><th rowspan="2">species</th><th rowspan="2">meta samples</th>
-<th colspan="5">protal (M1&ndash;M4)</th><th rowspan="2">protal seqs</th>
-<th colspan="2">qcmsa (M5)</th><th rowspan="2">sites in&rarr;kept</th>
+<th colspan="5">protal (raw output)</th><th rowspan="2">protal seqs</th>
+<th colspan="2">qcmsa (filtered)</th><th rowspan="2">sites in&rarr;kept</th>
 <th rowspan="2">qcmsa genes filt</th><th rowspan="2">qcmsa samples filt</th></tr>
 <tr><th>DB markers</th><th>genes observed</th><th>% markers hit</th>
-<th>genes in MSA</th><th>% kept (M3)</th>
+<th>genes in protal MSA</th><th>% kept in protal</th>
 <th>genes</th><th>seqs</th></tr>
 {''.join(trs)}
 </table>
-<p class="muted">"DB markers" = marker genes present in the species' reference genome (the true
-denominator). "genes observed" = got &ge;1 read hit (the rest are abundance-limited, lost
-before M3). "% kept (M3)" = of observed genes, the fraction that passed the M3 coverage gate.</p>
+<p class="muted">"DB markers" = marker genes in the species' reference genome (the true denominator).
+"genes observed" = got &ge;1 read hit (the rest are abundance-limited). "% kept in protal" = of
+observed genes, the fraction in protal's raw MSA (100% when the in-protal coverage filter is off).
+The gene/sample reductions happen in the qcmsa columns.</p>
 <p class="muted">No protal MSA (too few samples/genes to reconstruct a strain): {_esc(', '.join(no_msa) or '(none)')}</p>
 
 <h2>(a) Which SNPs were filtered out, and why &mdash; protal M1</h2>
@@ -753,30 +792,27 @@ low cumulative phred-sum (<code>--snp_min_phred_sum</code>) or insufficient supp
 <h3>Why positions had no callable variant</h3>
 <div class="grid">{svg_a2}</div>
 
-<h2>(b) Gene &amp; sample filtering inside protal &mdash; M3 coverage</h2>
-<p class="muted">A (sample,gene) cell enters the MSA only if it passes the M3 coverage gate
-(<code>--gene_min_hcov_frac</code> = {m3['hcov']}: fraction of gene covered &ge;1 read, AND
-<code>--gene_min_mean_depth</code> = {m3['depth']}: mean depth over covered positions). A gene
-enters the MSA only if more than <code>--msa_min_samples</code> = {m3['min_samples']} samples pass.
-Per species, auto-scaled to its own totals.</p>
+<h2>{sec_b_heading}</h2>
+<p class="muted">{sec_b_caption}</p>
 <p class="muted"><b>Colours:</b>
-<span style="color:#2ca02c">&#10003; green = in MSA</span> (desired);
-<span style="color:#d62728">&#10007; red = dropped by M3</span> (observed but coverage too low);
-<span style="color:#999">grey = no read hits</span> (never observed &mdash; abundance-limited, the worst case).
-More green = better. For the coverage cells, green = passes; orange/blue/red = fails (the colour says
-<i>why</i>) and those cells get gap-filled.</p>
-<h3>Gene funnel: DB markers &rarr; observed &rarr; kept vs dropped by M3</h3>
+<span style="color:#2ca02c">&#10003; green = in protal's MSA</span>;
+<span style="color:#d62728">red = {drop_label}</span>;
+<span style="color:#999">grey = no read hits</span> (never observed &mdash; abundance-limited).
+The per-cell panel below shows coverage pass/fail (orange/blue/red = why a cell failed); these
+only drive filtering when the in-protal filter is on.</p>
+<h3>Gene funnel: DB markers &rarr; observed &rarr; in protal MSA</h3>
 <div class="grid">{svg_c_genes}</div>
-<h3>Per-(sample,gene) coverage cells: pass vs why they failed</h3>
+<h3>Per-(sample,gene) coverage cells (evidence the coverage gate uses, wherever it runs)</h3>
 <div class="grid">{svg_c_cells}</div>
 
-<h2>(c) Gene &amp; sample filtering (qcmsa, milestone M5)</h2>
-<p class="muted">qcmsa removes genes/samples that are multi-allelicity (MRate2) outliers via the
-iterative Tukey-IQR rule. <b>Colours:</b>
-<span style="color:#2ca02c">green</span>/<span style="color:#1f77b4">blue = kept</span> (desired);
-<span style="color:#d62728">&#10007; red = removed as a contamination/mixed-strain outlier</span>.
-On clean data most bars are fully green/blue (little to remove).</p>
-<h3>Gene filtering</h3>
+<h2>(c) Gene &amp; sample filtering by qcmsa (the default post-filter)</h2>
+<p class="muted">qcmsa does the coverage filtering (from the meta hcov/depth columns) AND the
+multi-allelicity (MRate2) outlier removal. <b>Colours (genes):</b>
+<span style="color:#2ca02c">green = kept</span>;
+<span style="color:#ff7f0e">orange = dropped for coverage</span>;
+<span style="color:#d62728">red = dropped as a multi-allelic (MRate2) outlier</span>.
+Samples: blue = kept, red = removed.</p>
+<h3>Gene filtering (coverage + multi-allelicity)</h3>
 <div class="grid">{svg_b_genes}</div>
 <h3>Sample filtering</h3>
 <div class="grid">{svg_b_samples}</div>
