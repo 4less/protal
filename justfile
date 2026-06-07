@@ -16,8 +16,16 @@ clear:
 
 # Full M1-M5 strain test: run protal (default settings, with the qcmsa post-filter)
 # on the pre-existing test2 alignments, then build the HTML QC report.
-strain-test: strain-protal strain-report
+strain-test: strain-protal strain-dbcounts strain-report
     @echo "Report: {{strain_run}}/report/report.html"
+
+# Count marker genes per species in the DB genome (the true gene denominator,
+# revealing how many markers were lost to abundance before M3). Cached as a TSV.
+strain-dbcounts:
+    PROTAL_DB_PATH="{{strain_db}}" python3 scripts/strain_test/db_gene_counts.py \
+        --db "{{strain_db}}" \
+        --strains {{strain_run}}/strains \
+        --out {{strain_run}}/db_gene_counts.tsv
 
 # Build a map that reuses the existing alignments + reads and writes strain
 # results into the repo-local run dir, then run protal with --run_qcmsa (M5).

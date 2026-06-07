@@ -109,6 +109,18 @@ def discover_species(strains_dir):
     return [os.path.basename(m)[:-len(".meta.tsv")] for m in metas]
 
 
+def load_db_gene_counts(path):
+    """species -> db_markers (count of marker genes in the species' DB genome)."""
+    if not path or not os.path.exists(path):
+        return {}
+    out = {}
+    for r in read_tsv(path):
+        v = r.get("db_markers", "")
+        if v.isdigit():
+            out[r["species"]] = int(v)
+    return out
+
+
 # Default protal M3 thresholds (see Options.h). Used if not overridden/parsed.
 M3_DEFAULTS = dict(hcov=0.50, depth=3.0, min_samples=3)
 
@@ -234,26 +246,29 @@ def species_panels(items, colors, ylabel):
             f'<div style="display:flex;flex-wrap:wrap;align-items:flex-end">{svgs}</div>')
 
 
-def _heat_color(v, vmax):
+def _heat_color(v, vmax, rgb=(214, 39, 40)):
+    """White -> rgb interpolation; None renders as light grey (absent cell)."""
     if v is None:
         return "#eeeeee"
     if vmax <= 0:
         return "#ffffff"
-    t = min(1.0, v / vmax)
-    # white -> red
-    r = 255
-    g = int(255 * (1 - t))
-    b = int(255 * (1 - t))
+    t = min(1.0, max(0.0, v / vmax))
+    r = int(255 + (rgb[0] - 255) * t)
+    g = int(255 + (rgb[1] - 255) * t)
+    b = int(255 + (rgb[2] - 255) * t)
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def svg_heatmap(samples, genes, cell, filt_samples, filt_genes, title, vmax):
+def svg_heatmap(samples, genes, cell, filt_samples, filt_genes, title, vmax,
+                rgb=(214, 39, 40), fail_below=None, fail_var=None, fmt="%.3f"):
+    """Sample x gene heatmap. Optionally outline cells whose value is below a
+    filtering threshold (fail_below) to show what drives gap-filling."""
     rows, cols = len(samples), len(genes)
     if rows == 0 or cols == 0:
         return f"<p><em>No heatmap for {_esc(title)}</em></p>"
     cw = max(4, min(14, 900 // cols))
     ch = max(4, min(14, 600 // rows))
-    pad_l, pad_t, pad_r, pad_b = 90, 28, 30, 18
+    pad_l, pad_t, pad_r, pad_b = 92, 28, 30, 18
     width = pad_l + cols * cw + pad_r
     height = pad_t + rows * ch + pad_b
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
@@ -266,16 +281,34 @@ def svg_heatmap(samples, genes, cell, filt_samples, filt_genes, title, vmax):
             parts.append(f'<text x="{pad_l-4}" y="{y+ch-1}" text-anchor="end" fill="{col}">{_esc(s)}</text>')
         for j, g in enumerate(genes):
             v = cell.get((s, g))
+            fail = (fail_below is not None and v is not None and v < fail_below)
+            stroke = ('stroke="#000" stroke-width="0.6"' if fail else 'stroke="#fff" stroke-width="0.2"')
+            vtxt = (fmt % v) if v is not None else "NA"
             parts.append(f'<rect x="{pad_l+j*cw}" y="{y}" width="{cw}" height="{ch}" '
-                         f'fill="{_heat_color(v, vmax)}" stroke="#fff" stroke-width="0.2">'
-                         f'<title>{_esc(s)} / gene{_esc(g)}: {("%.3f"%v) if v is not None else "NA"}</title></rect>')
-    # mark filtered gene columns
+                         f'fill="{_heat_color(v, vmax, rgb)}" {stroke}>'
+                         f'<title>{_esc(s)} / gene{_esc(g)}: {vtxt}'
+                         f'{" (below threshold)" if fail else ""}</title></rect>')
     for j, g in enumerate(genes):
         if g in filt_genes:
             x = pad_l + j * cw + cw / 2
             parts.append(f'<polygon points="{x-3},{pad_t+rows*ch+2} {x+3},{pad_t+rows*ch+2} {x},{pad_t+rows*ch+8}" fill="red"/>')
     parts.append("</svg>")
     return "\n".join(parts)
+
+
+# Per-(sample,gene) meta variables to render as heatmaps, with the filter each drives.
+HEATMAP_VARS = [
+    ("hcov", "hcov (fraction of gene covered)", (31, 119, 180), "m3_hcov",
+     "drives M3 gene filter; black outline = below --gene_min_hcov_frac"),
+    ("mean_vcov_nonzero", "mean depth over covered positions", (44, 160, 44), "m3_depth",
+     "drives M3 gene filter; black outline = below --gene_min_mean_depth"),
+    ("vertical_coverage", "vertical coverage (mean depth, whole gene)", (148, 103, 189), None,
+     "overall per-gene coverage"),
+    ("multi_rate_vcov2", "MRate2 (multi-allelicity)", (214, 39, 40), None,
+     "drives qcmsa gene/sample filtering"),
+    ("filtered_rate_vcov2", "filtered-SNP rate (positions removed by M1 SNP gates)", (255, 127, 14), None,
+     "shows where M1 removed variants"),
+]
 
 
 # ----------------------------------------------------------------------------
@@ -293,9 +326,14 @@ def main(argv=None):
     ap.add_argument("--gene-min-hcov-frac", type=float, default=None)
     ap.add_argument("--gene-min-mean-depth", type=float, default=None)
     ap.add_argument("--msa-min-samples", type=int, default=None)
+    ap.add_argument("--db-gene-counts", default=None,
+                    help="db_gene_counts.tsv (default: <strains>/../db_gene_counts.tsv)")
     args = ap.parse_args(argv)
     qcmsa_dir = args.qcmsa or args.strains
     os.makedirs(args.out, exist_ok=True)
+
+    db_counts_path = args.db_gene_counts or os.path.join(args.strains, os.pardir, "db_gene_counts.tsv")
+    db_markers = load_db_gene_counts(db_counts_path)
 
     # Resolve M3 thresholds: explicit CLI > parsed from protal log > defaults.
     log_path = args.protal_log or os.path.join(args.strains, os.pardir, "protal_run.log")
@@ -323,16 +361,21 @@ def main(argv=None):
         base_msa = os.path.join(args.strains, sp + ".msa.fna")
         before_msa = pergene if os.path.exists(pergene) else base_msa
 
-        meta_samples, meta_genes, cell = set(), set(), {}
-        vmax = 0.0
+        meta_samples, meta_genes = set(), set()
+        var_cells = {vk: {} for vk, *_ in HEATMAP_VARS}   # var -> {(sample,gene): value}
+        var_vmax = {vk: 0.0 for vk, *_ in HEATMAP_VARS}
         for r in read_tsv(meta):
-            meta_samples.add(r["sample"]); meta_genes.add(r["gene_id"])
-            try:
-                v = float(r.get("multi_rate_vcov2", 0) or 0)
-            except ValueError:
-                v = 0.0
-            cell[(r["sample"], r["gene_id"])] = v
-            vmax = max(vmax, v)
+            s, g = r["sample"], r["gene_id"]
+            meta_samples.add(s); meta_genes.add(g)
+            for vk, *_ in HEATMAP_VARS:
+                try:
+                    v = float(r.get(vk, 0) or 0)
+                except ValueError:
+                    v = 0.0
+                var_cells[vk][(s, g)] = v
+                var_vmax[vk] = max(var_vmax[vk], v)
+        cell = var_cells["multi_rate_vcov2"]      # MRate2 map (back-compat)
+        vmax = var_vmax["multi_rate_vcov2"]
 
         b_seqs, b_samp = count_fasta_seqs(before_msa)
         b_genes = count_partition_genes(base_part)
@@ -348,6 +391,7 @@ def main(argv=None):
                    before_seqs=b_seqs, before_sample_seqs=b_samp, before_genes=b_genes,
                    after_seqs=a_seqs, after_sample_seqs=a_samp, after_genes=a_genes,
                    qcmsa_ran=summ is not None)
+        row["db_markers"] = db_markers.get(sp)
         if pf:
             row["genes_observed"] = pf["genes_observed"]
             row["genes_in_msa"] = pf["genes_in_msa"]
@@ -363,9 +407,11 @@ def main(argv=None):
         if b_seqs and len(meta_samples) >= 2 and len(meta_genes) >= 2:
             fs = {s for s, _, _ in summ["samples"]} if summ else set()
             fg = {g for g, _, _ in summ["genes"]} if summ else set()
-            heat_data.append((sp, cell, sorted(meta_samples),
-                              sorted(meta_genes, key=lambda g: int(g) if g.isdigit() else g),
-                              fs, fg, vmax))
+            heat_data.append(dict(
+                species=sp, samples=sorted(meta_samples),
+                genes=sorted(meta_genes, key=lambda g: int(g) if g.isdigit() else g),
+                filt_samples=fs, filt_genes=fg,
+                var_cells=var_cells, var_vmax=var_vmax))
 
         # ---- checks ----
         if b_seqs is None:
@@ -378,6 +424,14 @@ def main(argv=None):
         if snp_agg and snp_agg.get("total_variant_positions", 0) > 0 and snp_agg.get("snps_retained", 0) == 0:
             check("WARN", sp, f"ALL {int(snp_agg['total_variant_positions'])} variant positions filtered by "
                               f"SNP filters (M1) across {snp_n} samples - no SNPs retained")
+        dbm = db_markers.get(sp)
+        if pf and dbm and dbm > 0:
+            unhit = dbm - pf["genes_observed"]
+            if unhit / dbm >= 0.4:
+                check("WARN", sp,
+                      f"only {pf['genes_observed']}/{dbm} marker genes in the DB genome got any "
+                      f"read hits ({unhit} unhit, {unhit/dbm:.0%}) - abundance/coverage-limited, "
+                      "before M3 even applies")
         if pf and pf["genes_observed"] > 0:
             frac = pf["genes_dropped"] / pf["genes_observed"]
             if frac >= 0.4:
@@ -404,7 +458,7 @@ def main(argv=None):
     write_tables(args.out, rows)
     write_markdown(args.out, rows, checks, species)
     write_html(args.out, rows, checks, species, args.strains, qcmsa_dir, heat_data,
-               pf_by_species, m3)
+               pf_by_species, m3, db_markers)
 
     n_fail = sum(1 for l, _, _ in checks if l == "FAIL")
     n_warn = sum(1 for l, _, _ in checks if l == "WARN")
@@ -443,18 +497,29 @@ def write_markdown(out, rows, checks, species):
 
 
 def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data,
-               pf_by_species=None, m3=None):
+               pf_by_species=None, m3=None, db_markers=None):
     pf_by_species = pf_by_species or {}
     m3 = m3 or dict(M3_DEFAULTS)
+    db_markers = db_markers or {}
 
     # ---- protal-internal gene/sample filtering (M3) -- per-species panels ----
     pf_items = [(sp, pf) for sp in species if (pf := pf_by_species.get(sp))]
     pf_items.sort(key=lambda t: -(t[1]["genes_observed"]))
-    gene_funnel_colors = {"genes in MSA": "#2ca02c", "genes dropped (M3 coverage)": "#d62728"}
+    gene_funnel_colors = {"genes in MSA": "#2ca02c", "genes dropped (M3 coverage)": "#d62728",
+                          "no read hits (not observed)": "#bbbbbb"}
+
+    def funnel_cats(sp, pf):
+        cats = [("genes in MSA", pf["genes_in_msa"]),
+                ("genes dropped (M3 coverage)", pf["genes_dropped"])]
+        dbm = db_markers.get(sp)
+        if dbm:
+            cats.append(("no read hits (not observed)", max(0, dbm - pf["genes_observed"])))
+        return cats
+
+    funnel_ylabel = ("marker genes in DB genome" if db_markers else "observed genes")
     svg_c_genes = species_panels(
-        [(sp.replace("s__", ""), [("genes in MSA", pf["genes_in_msa"]),
-                                  ("genes dropped (M3 coverage)", pf["genes_dropped"])])
-         for sp, pf in pf_items], gene_funnel_colors, "observed genes")
+        [(sp.replace("s__", ""), funnel_cats(sp, pf)) for sp, pf in pf_items],
+        gene_funnel_colors, funnel_ylabel)
     cell_colors = {"pass coverage": "#2ca02c", "fail: low hcov": "#ff7f0e",
                    "fail: low depth": "#1f77b4", "fail: low hcov+depth": "#d62728"}
     svg_c_cells = species_panels(
@@ -499,11 +564,26 @@ def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data,
                                   ("samples filtered (MRate2 outlier)", c.get("samples_filtered", 0))])
          for sp, c in b_rows], s_colors, "samples")
 
-    # ---- heatmaps ----
-    heat_svgs = [svg_heatmap(s, g, cell, fs, fg,
-                             f"{sp.replace('s__','')}  -  MRate2 (red label/▲ = qcmsa-filtered)",
-                             max(0.02, vmax))
-                 for (sp, cell, s, g, fs, fg, vmax) in heat_data]
+    # ---- per-species filtering-variable heatmaps (one block per species) ----
+    heat_blocks = []
+    for hd in heat_data:
+        s, g = hd["samples"], hd["genes"]
+        fs, fg = hd["filt_samples"], hd["filt_genes"]
+        svgs = []
+        for vk, label, rgb, drive, caption in HEATMAP_VARS:
+            vmaxv = hd["var_vmax"][vk]
+            fail_below = m3["hcov"] if drive == "m3_hcov" else (
+                m3["depth"] if drive == "m3_depth" else None)
+            fmt = "%.3f" if vmaxv <= 5 else "%.0f"
+            svgs.append(
+                f'<div style="margin:6px 0"><div class="muted" style="font-size:12px">'
+                f'<b>{_esc(label)}</b> &mdash; {_esc(caption)}</div>'
+                f'<div class="grid">'
+                + svg_heatmap(s, g, hd["var_cells"][vk], fs, fg, "",
+                              max(1e-9, vmaxv), rgb=rgb, fail_below=fail_below, fmt=fmt)
+                + "</div></div>")
+        heat_blocks.append(f'<h3>{_esc(hd["species"].replace("s__", ""))} '
+                           f'({len(s)} samples &times; {len(g)} genes)</h3>' + "".join(svgs))
 
     # ---- collect reasons for the filtering tables ----
     reason_blocks = []
@@ -540,10 +620,13 @@ def write_html(out, rows, checks, species, strains_dir, qcmsa_dir, heat_data,
             continue
         sites = (f'{r.get("sites_in","?")}&rarr;{r.get("sites_kept","?")}' if r["qcmsa_ran"] else "—")
         obs = r.get("genes_observed")
+        dbm = r.get("db_markers")
+        hit_pct = (f"{obs/dbm:.0%}" if (dbm and obs is not None) else "—")
         kept_pct = (f"{r['before_genes']/obs:.0%}" if obs else "—")
         trs.append(
             f"<tr><td>{_esc(r['species'])}</td><td>{r['meta_samples']}</td>"
-            f"<td>{r.get('genes_observed','—')}</td>"
+            f"<td>{dbm if dbm is not None else '—'}</td>"
+            f"<td>{r.get('genes_observed','—')}</td><td>{hit_pct}</td>"
             f"<td>{r['before_genes']}</td><td>{kept_pct}</td><td>{r['before_seqs']}</td>"
             f"<td>{r.get('after_genes','—')}</td><td>{r.get('after_seqs','—')}</td>"
             f"<td>{sites}</td><td>{r.get('genes_filtered','—')}</td>"
@@ -580,13 +663,17 @@ the MSA at all (columns up to "protal seqs"); <b>qcmsa</b> (M5) then post-filter
 "protal genes" = genes that passed the M3 coverage filter and entered the MSA.</p>
 <table>
 <tr><th rowspan="2">species</th><th rowspan="2">meta samples</th>
-<th colspan="3">protal (M1&ndash;M4)</th><th rowspan="2">protal seqs</th>
+<th colspan="5">protal (M1&ndash;M4)</th><th rowspan="2">protal seqs</th>
 <th colspan="2">qcmsa (M5)</th><th rowspan="2">sites in&rarr;kept</th>
 <th rowspan="2">qcmsa genes filt</th><th rowspan="2">qcmsa samples filt</th></tr>
-<tr><th>genes observed</th><th>genes in MSA</th><th>% genes kept</th>
+<tr><th>DB markers</th><th>genes observed</th><th>% markers hit</th>
+<th>genes in MSA</th><th>% kept (M3)</th>
 <th>genes</th><th>seqs</th></tr>
 {''.join(trs)}
 </table>
+<p class="muted">"DB markers" = marker genes present in the species' reference genome (the true
+denominator). "genes observed" = got &ge;1 read hit (the rest are abundance-limited, lost
+before M3). "% kept (M3)" = of observed genes, the fraction that passed the M3 coverage gate.</p>
 <p class="muted">No protal MSA (too few samples/genes to reconstruct a strain): {_esc(', '.join(no_msa) or '(none)')}</p>
 
 <h2>(a) Which SNPs were filtered out, and why &mdash; protal M1</h2>
@@ -611,13 +698,19 @@ Per species, auto-scaled to its own totals.</p>
 
 <h2>(c) Gene &amp; sample filtering (qcmsa, milestone M5)</h2>
 <p class="muted">qcmsa removes genes/samples that are multi-allelicity (MRate2) outliers via the
-iterative Tukey-IQR rule. Bars show kept vs filtered; the heatmaps below show the underlying
-per-cell MRate2 with filtered rows (red labels) and genes (red &#9650;) flagged.</p>
+iterative Tukey-IQR rule. Bars show kept vs filtered.</p>
 <h3>Gene filtering</h3>
 <div class="grid">{svg_b_genes}</div>
 <h3>Sample filtering</h3>
 <div class="grid">{svg_b_samples}</div>
-{''.join('<div class="grid">'+h+'</div>' for h in heat_svgs)}
+
+<h2>(d) Filtering variables per species (sample &times; gene heatmaps)</h2>
+<p class="muted">For each species, the per-(sample,gene) variables that drive filtering.
+Rows = samples, columns = observed genes (light grey = gene absent in that sample).
+Red row labels / red &#9650; columns mark samples / genes removed by qcmsa. Black cell
+outlines mark cells below the M3 coverage thresholds
+(hcov &lt; {m3['hcov']} or mean depth &lt; {m3['depth']}) that get gap-filled.</p>
+{''.join(heat_blocks)}
 
 <h2>Filtering reasons (detail)</h2>
 {''.join(reason_blocks) or '<p class="muted">No genes or samples were filtered by qcmsa on this run.</p>'}
