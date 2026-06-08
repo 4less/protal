@@ -550,6 +550,7 @@ def main(argv=None):
 
     # --- pass 2: site cleanup (constant / low-parsimony) ---
     col_keep = [True] * n_cols
+    site_removal_reason = Counter()  # reason -> n_sites, for the summary breakdown
     if args.remove_constant or args.min_parsimony_samples > 0:
         for j in range(n_cols):
             counts = Counter()
@@ -560,14 +561,17 @@ def main(argv=None):
             total = sum(counts.values())
             if total == 0:
                 col_keep[j] = False  # all-missing column: nothing to keep
+                site_removal_reason["all_missing"] += 1
                 continue
             majority = max(counts.values())
             minor = total - majority
             distinct = len(counts)
             if args.remove_constant and distinct <= 1:
                 col_keep[j] = False
+                site_removal_reason["constant"] += 1
             elif minor < args.min_parsimony_samples:
                 col_keep[j] = False
+                site_removal_reason["low_parsimony"] += 1
 
     surviving = [j for j in range(n_cols) if col_keep[j]]
     n_removed_sites = n_cols - len(surviving)
@@ -583,7 +587,10 @@ def main(argv=None):
 
     sys.stderr.write(
         f"Site cleanup: removed {n_removed_sites} / {n_cols} sites "
-        f"({len(surviving)} retained)\n"
+        f"({len(surviving)} retained) -- "
+        f"all_missing={site_removal_reason['all_missing']}, "
+        f"constant={site_removal_reason['constant']}, "
+        f"low_parsimony={site_removal_reason['low_parsimony']}\n"
     )
 
     # --- write filtered MSA ---
@@ -631,6 +638,13 @@ def main(argv=None):
             fh.write(f"count\tsites_in\t{n_cols}\t\n")
             fh.write(f"count\tsites_kept\t{len(surviving)}\t\n")
             fh.write(f"count\tsites_removed\t{n_removed_sites}\t\n")
+            fh.write(f"count\tsites_removed_all_missing\t{site_removal_reason['all_missing']}"
+                     f"\tcolumn is 100% '-'/N/. (no informative base in any kept sequence)\n")
+            fh.write(f"count\tsites_removed_constant\t{site_removal_reason['constant']}"
+                     f"\t--remove-constant: column has a single distinct base (no variation)\n")
+            fh.write(f"count\tsites_removed_low_parsimony\t{site_removal_reason['low_parsimony']}"
+                     f"\t--min-parsimony-samples {args.min_parsimony_samples}: "
+                     f"fewer than that many samples differ from the majority base\n")
             fh.write(f"count\toutlier_cells\t{len(outlier_cells)}\t\n")
             fh.write(f"count\tseqs_out\t{n_seqs_out}\t\n")
             fh.write(f"count\treference_seqs_out\t{n_ref}\t\n")
