@@ -1,6 +1,6 @@
 package:
   name: protal
-  version: "0.1.0"  # Update version accordingly
+  version: "0.6.0"  # Update version accordingly
 
 source:
   git_url: https://github.com/4less/protal.git

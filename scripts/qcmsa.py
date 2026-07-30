@@ -15,9 +15,11 @@ The filter has two passes:
      require at least --min-bad bad peers before anything is removed.
 
   2. Site / sequence cleanup (M5 step 4b) -- optional second pass over the
-     surviving columns: drop constant and near-constant (low-parsimony) sites,
-     optionally mask individual cell outliers, and optionally re-apply the
-     per-sequence horizontal-coverage floor after gene removal.
+     surviving columns: drop near-constant (low-parsimony) variable sites,
+     optionally drop constant (invariant) sites (--discard-constant; kept by
+     default, as they inform branch-length estimation), optionally mask
+     individual cell outliers, and optionally re-apply the per-sequence
+     horizontal-coverage floor after gene removal.
 
 Inputs match protal's output contract:
   <msa>        FASTA (plain or .gz) -- protal's <species>.raw.msa.fna
@@ -353,14 +355,16 @@ def build_argparser():
                         "(default: Tukey fence derived from the data)")
 
     # M5 step 4b -- site / sequence cleanup
-    p.add_argument("--remove-constant", dest="remove_constant",
-                   action="store_true", default=True,
-                   help="Drop constant sites (default: on)")
-    p.add_argument("--keep-constant", dest="remove_constant", action="store_false",
-                   help="Keep constant sites")
+    # Constant (invariant) sites are KEPT by default (they inform branch-length
+    # estimation). Pass --discard-constant to drop them.
+    p.add_argument("--discard-constant", dest="remove_constant",
+                   action="store_true", default=False,
+                   help="Discard constant (invariant) sites (default: off; "
+                        "constant sites are kept)")
     p.add_argument("--min-parsimony-samples", type=int, default=2,
-                   help="Drop sites where fewer than N samples differ from the "
-                        "majority base (default 2; subsumes constant-site removal)")
+                   help="Drop variable sites where fewer than N samples differ from "
+                        "the majority base (default 2). Applies only to variable "
+                        "columns; constant sites are governed by --discard-constant.")
     p.add_argument("--reapply-hcov", type=int, default=0,
                    help="After gene/site removal, drop sequences with fewer than "
                         "this many valid (non -/N) bases (default 0 = disabled). "
@@ -569,7 +573,11 @@ def main(argv=None):
             if args.remove_constant and distinct <= 1:
                 col_keep[j] = False
                 site_removal_reason["constant"] += 1
-            elif minor < args.min_parsimony_samples:
+            elif distinct > 1 and minor < args.min_parsimony_samples:
+                # Only the low-parsimony (near-constant *variable*) filter here;
+                # the `distinct > 1` guard keeps it from also dropping constant
+                # columns (minor == 0) when constant sites are kept (the default),
+                # so constant retention is decoupled from --min-parsimony-samples.
                 col_keep[j] = False
                 site_removal_reason["low_parsimony"] += 1
 
@@ -578,7 +586,7 @@ def main(argv=None):
     if not surviving:
         sys.stderr.write(
             "qcmsa.py: all sites removed by cleanup - no MSA produced (skipping). "
-            "Consider --keep-constant / --min-parsimony-samples 0.\n"
+            "Consider --min-parsimony-samples 0 (constant sites are kept by default).\n"
         )
         return 0
 
@@ -641,7 +649,7 @@ def main(argv=None):
             fh.write(f"count\tsites_removed_all_missing\t{site_removal_reason['all_missing']}"
                      f"\tcolumn is 100% '-'/N/. (no informative base in any kept sequence)\n")
             fh.write(f"count\tsites_removed_constant\t{site_removal_reason['constant']}"
-                     f"\t--remove-constant: column has a single distinct base (no variation)\n")
+                     f"\t--discard-constant: column has a single distinct base (no variation)\n")
             fh.write(f"count\tsites_removed_low_parsimony\t{site_removal_reason['low_parsimony']}"
                      f"\t--min-parsimony-samples {args.min_parsimony_samples}: "
                      f"fewer than that many samples differ from the majority base\n")

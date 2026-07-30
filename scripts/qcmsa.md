@@ -61,8 +61,8 @@ It writes (prefix defaults to `<species>`, i.e. the input path minus `.raw.msa.f
 ### Sites and sequences
 | flag | default | effect |
 |---|---|---|
-| `--min-parsimony-samples INT` | 2 | drop sites where fewer than N samples differ from the majority (subsumes constant-site removal) — set `0` to keep all sites |
-| `--keep-constant` | (remove on) | keep constant sites |
+| `--min-parsimony-samples INT` | 2 | drop variable sites where fewer than N samples differ from the majority — set `0` to keep all variable sites |
+| `--remove-constant` / `--keep-constant` | keep (off) | constant (invariant) sites are kept by default (they inform branch lengths); pass `--remove-constant` to drop them |
 | `--reapply-hcov INT` | 0 (off) | drop sequences with fewer than N valid bases |
 
 ## How to change the parameters — three ways
