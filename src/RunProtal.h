@@ -19,6 +19,7 @@
 
 #include <iomanip>
 #include <ranges>
+#include <unistd.h>
 
 // #include "Profiler/ReadFilter.h"
 
@@ -1104,15 +1105,56 @@ namespace protal {
         return out;
     }
 
-    // Locate qcmsa.py: explicit option, then PROTAL_QCMSA_SCRIPT env, then next
-    // to the executable (./scripts, ../scripts). Returns "" if not found.
+    static bool IsExecutableFile(std::filesystem::path const& p) {
+        std::error_code ec;
+        return std::filesystem::is_regular_file(p, ec) && ::access(p.c_str(), X_OK) == 0;
+    }
+
+    // Look up an executable by name in $PATH, the way a shell would.
+    static std::string FindInPath(std::string const& name) {
+        const char* path_env = std::getenv("PATH");
+        if (!path_env || !*path_env) return "";
+        std::string const path(path_env);
+        for (size_t start = 0; start <= path.size(); ) {
+            size_t end = path.find(':', start);
+            if (end == std::string::npos) end = path.size();
+            if (end > start) {
+                std::filesystem::path cand = std::filesystem::path(path.substr(start, end - start)) / name;
+                if (IsExecutableFile(cand)) return cand.string();
+            }
+            start = end + 1;
+        }
+        return "";
+    }
+
+    // Locate the qcmsa post-filter. qcmsa ships as an executable named 'qcmsa'
+    // installed next to the protal binary (see `just install`), so that is what
+    // we look for: explicit --qcmsa_script, then PROTAL_QCMSA_SCRIPT, then
+    // 'qcmsa' next to the protal executable, then 'qcmsa' on $PATH. The
+    // qcmsa.py script of a source checkout is only a last resort so that running
+    // protal straight out of the build tree keeps working.
+    // Returns "" if not found.
     static std::string FindQCMSAScript(Options& options) {
         namespace fs = std::filesystem;
-        if (!options.GetQCMSAScript().empty()) return options.GetQCMSAScript();
+
+        if (!options.GetQCMSAScript().empty()) {
+            std::string const& given = options.GetQCMSAScript();
+            // A bare command name is resolved via $PATH, a path is taken as is.
+            if (given.find('/') == std::string::npos) {
+                if (std::string in_path = FindInPath(given); !in_path.empty()) return in_path;
+            }
+            return given;
+        }
         if (const char* env = std::getenv("PROTAL_QCMSA_SCRIPT"); env && *env)
             return std::string(env);
+
         std::error_code ec;
         fs::path exe = fs::canonical("/proc/self/exe", ec);
+        if (!ec && IsExecutableFile(exe.parent_path() / "qcmsa"))
+            return (exe.parent_path() / "qcmsa").string();
+
+        if (std::string in_path = FindInPath("qcmsa"); !in_path.empty()) return in_path;
+
         if (!ec) {
             fs::path dir = exe.parent_path();
             for (const auto& cand : { dir / "qcmsa.py",                       // alongside the binary
@@ -1124,16 +1166,21 @@ namespace protal {
         return "";
     }
 
-    // M5 step 4c: invoke the qcmsa.py post-filter on a species' MSA. Failures are
+    // M5 step 4c: invoke the qcmsa post-filter on a species' MSA. Failures are
     // non-fatal -- the strain outputs protal already wrote remain valid.
     static void RunQCMSA(Options& options, const std::string& name) {
         namespace fs = std::filesystem;
         std::string script = FindQCMSAScript(options);
         if (script.empty() || !fs::exists(script)) {
-            std::cerr << "[qcmsa] WARNING: qcmsa.py not found (set --qcmsa_script or "
+            std::cerr << "[qcmsa] WARNING: qcmsa not found next to the protal binary or on $PATH "
+                         "(install it with 'just install', or point protal at it with --qcmsa_script / "
                          "PROTAL_QCMSA_SCRIPT); skipping post-filter for " << name << std::endl;
             return;
         }
+        // qcmsa is an executable with a python3 shebang. Only fall back to
+        // running it through the interpreter if it is not executable (e.g. a
+        // qcmsa.py picked straight out of a source checkout).
+        std::string launcher = IsExecutableFile(script) ? "" : "python3 ";
         // Run qcmsa on protal's native (raw) MSA; it writes the final <name>.msa.fna.
         std::string msa = options.GetMSAOutput(name);              // .raw.msa.fna
         std::string partition = options.GetMSAPartitionOutput(name); // .raw.partition.txt
@@ -1145,7 +1192,7 @@ namespace protal {
         }
         std::string prefix = options.GetStrainOutputDir() + '/' + name;
         std::ostringstream cmd;
-        cmd << "python3 " << ShellQuote(script)
+        cmd << launcher << ShellQuote(script)
             << ' ' << ShellQuote(msa)
             << ' ' << ShellQuote(partition)
             << ' ' << ShellQuote(meta)
@@ -1155,7 +1202,7 @@ namespace protal {
         std::cerr << "[qcmsa] " << cmd.str() << std::endl;
         int rc = std::system(cmd.str().c_str());
         if (rc != 0) {
-            std::cerr << "[qcmsa] WARNING: qcmsa.py exited with code " << rc
+            std::cerr << "[qcmsa] WARNING: qcmsa exited with code " << rc
                       << " for " << name << " (post-filter skipped)" << std::endl;
         }
     }
@@ -1189,12 +1236,6 @@ namespace protal {
         size_t partition_start = 0;
         size_t previous_size = 0;
 
-        std::vector<std::pair<size_t,size_t>> gene_cols;
-        std::vector<std::vector<double>> gene_mrate2s;
-        std::vector<uint32_t> gene_col_ids;
-        std::vector<double> current_gene_mrate2;
-
-//        std::cout << "MULTIALLELIC: " << taxid << " " << taxon_name << std::endl;
         std::vector<uint32_t> selected_genes = SelectGenesForTaxon(taxid, taxon_name, profile_indices, loader, options, profiles);
 
         ProgressBar prog(selected_genes.size());
@@ -1220,8 +1261,6 @@ namespace protal {
             // Check if
             size_t samples_with_gene = 0;
 
-            current_gene_mrate2.assign(profile_indices.size(), 0.0);
-
             for (auto i = 0; i < profile_indices.size(); i++) {
                 auto& profile = profiles[profile_indices[i]];
 
@@ -1243,7 +1282,6 @@ namespace protal {
                     auto tmp_vec = region.CalculateCoverageVector2();
                     auto counts_vcov1 = std::count_if(tmp_vec.begin(), tmp_vec.end(), [](auto val){ return(val >= 1);});
                     auto counts_vcov2 = std::count_if(tmp_vec.begin(), tmp_vec.end(), [](auto val){ return(val >= 2);});
-                    current_gene_mrate2[i] = (counts_vcov2 > 0 ? ac.Multi()/static_cast<double>(counts_vcov2) : 0.0);
 
                     double median_vcov = 0.0;
                     double mean_vcov_nonzero = 0.0;
@@ -1340,18 +1378,12 @@ namespace protal {
                 if (msa.front().size() > partition_start) {
                     if (partitions.size() > 0) {
                         partitions.back() += std::to_string(previous_size-1);
-                        gene_cols.back().second = previous_size - 1;
                     }
 
-                    size_t partition_end = msa.front().size();
                     std::string partition = "DNA, gene";
                     partition += std::to_string(geneid) + " = ";
                     partition += std::to_string(partition_start) + '-';
-//                    partition += std::to_string(partition_end-1);
                     partitions.emplace_back(partition);
-                    gene_cols.push_back({partition_start, 0});
-                    gene_mrate2s.push_back(current_gene_mrate2);
-                    gene_col_ids.push_back(geneid);
                     partition_start = msa.front().size();
                 }
             }
@@ -1384,7 +1416,6 @@ namespace protal {
         // std::cout << " Saved MSA to " << options.GetMSAOutput(taxon_name);
 
         partitions.back() += std::to_string(msa.front().size()-1);
-        if (!gene_cols.empty()) gene_cols.back().second = msa.front().size() - 1;
 
         std::ofstream os_part(options.GetMSAPartitionOutput(taxon_name), std::ios::out);
         for (auto i = 0; i < partitions.size(); i++) {
@@ -1394,61 +1425,10 @@ namespace protal {
 
         // std::cout << " Saved Partitions " << std::endl;
 
-        // --- Filtered MSA outputs ---
-        if (!gene_cols.empty()) {
-            double genecol_thresh = options.GetMultiAllelicMeanGeneColThreshold();
-            size_t total_cols = msa[0].size();
-
-            // Compute per-gene mean MRate2 and determine which genes pass the genecol filter
-            std::vector<bool> gene_pass(gene_cols.size(), true);
-            for (size_t g = 0; g < gene_cols.size(); g++) {
-                double mean_mrate2 = 0.0;
-                for (double v : gene_mrate2s[g]) mean_mrate2 += v;
-                mean_mrate2 /= static_cast<double>(gene_mrate2s[g].size());
-                if (mean_mrate2 > genecol_thresh) gene_pass[g] = false;
-            }
-
-            // Build column-inclusion mask for genecol filter
-            std::vector<bool> col_include(total_cols, true);
-            for (size_t g = 0; g < gene_cols.size(); g++) {
-                if (!gene_pass[g]) {
-                    for (size_t c = gene_cols[g].first; c <= gene_cols[g].second; c++)
-                        col_include[c] = false;
-                }
-            }
-
-            // Write genecol filtered MSA (entire gene columns removed)
-            {
-                std::ofstream os_gc(options.GetMSAGeneColFilteredOutput(taxon_name), std::ios::out);
-                for (size_t ri = 0; ri < msa.size(); ri++) {
-                    if (!IsRowGood(msa[ri], min_hcov)) continue;
-                    os_gc << '>' << names[ri] << '\n';
-                    for (size_t ci = 0; ci < total_cols; ci++)
-                        if (col_include[ci]) os_gc << msa[ri][ci];
-                    os_gc << '\n';
-                }
-            }
-
-            // Write genecol filtered partition with recalculated coordinates
-            {
-                std::ofstream os_gc_part(options.GetMSAGeneColFilteredPartitionOutput(taxon_name), std::ios::out);
-                size_t new_start = 0;
-                for (size_t g = 0; g < gene_cols.size(); g++) {
-                    if (!gene_pass[g]) continue;
-                    size_t gene_len = gene_cols[g].second - gene_cols[g].first + 1;
-                    size_t new_end = new_start + gene_len - 1;
-                    os_gc_part << "DNA, gene" << gene_col_ids[g] << " = " << new_start << '-' << new_end << '\n';
-                    new_start = new_end + 1;
-                }
-            }
-
-            // (pergene_filtered MSA output removed -- the qcmsa post-filter handles
-            //  per-sample/gene multi-allelicity filtering on the raw MSA.)
-        }
-
-        auto processed_msa = protal::ProcessMSA(msa, options.GetMSAMinVCOV());
-
-        // std::cout << "Trimmed size: " << processed_msa.front().size() << " with minvcov: " << options.GetMSAMinVCOV() << std::endl;
+        // Strain output is the raw MSA (.raw.msa.fna) plus qcmsa's final
+        // .msa.fna (+ their partition files). The genecol_filtered and processed
+        // MSA variants were removed: per-gene multi-allelicity and site-level
+        // filtering are handled by the qcmsa post-filter on the raw MSA.
 
         // Compute per-sample positions dropped by the vertical coverage filter.
         // A position is removed when fewer than (vcov * num_samples) samples have a valid base there.
@@ -1518,13 +1498,6 @@ namespace protal {
             }
             os_stats.close();
         }
-
-        os = std::ofstream(options.GetMSAProcessedOutput(taxon_name), std::ios::out);
-
-        // std::cout << "Processed output: " << options.GetMSAProcessedOutput(taxon_name) << std::endl;
-
-        OutputMSA(processed_msa, names, os);
-        os.close();
     }
 
 

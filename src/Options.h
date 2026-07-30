@@ -26,12 +26,11 @@ namespace protal {
     static const size_t DEFAULT_MAX_KEY_UBIQUITY = 256;
     static const size_t DEFAULT_MAX_SEED_SIZE = 128;
     static const size_t DEFAULT_MAX_OUT = 1;
-    static const size_t DEFAULT_OUTPUT_TOP = 3;
     static const bool DEFAULT_NO_STRAIN = false;
     static const std::string PROTAL_DB_ENV_VARIABLE = "PROTAL_DB_PATH";
 
-    static const double DEFAULT_MIN_SNP_COV = 2;
-    static const double DEFAULT_MIN_SNP_PHRED_SUM = 90;
+    static const size_t DEFAULT_MIN_SNP_COV = 2;
+    static const size_t DEFAULT_MIN_SNP_PHRED_SUM = 90;
     static const double DEFAULT_MIN_SNP_AF = 0.0;
     static const size_t DEFAULT_MIN_SNP_MEAN_QUAL = 15;
     static const bool   DEFAULT_SNP_REQUIRE_STRAND = true; // disabled via --snp_no_strand
@@ -43,10 +42,6 @@ namespace protal {
     static const double DEFAULT_GENE_MIN_HCOV_FRAC = 0.0;    // off (qcmsa --gene-min-hcov)
     static const double DEFAULT_GENE_MIN_MEAN_DEPTH = 0.0;   // off (qcmsa --gene-min-mean-depth)
     static const size_t DEFAULT_MSA_MIN_SAMPLES = 0;         // off (qcmsa --gene-min-samples)
-    // Permissive hard caps: catch only gross multi-allelicity (repeat regions /
-    // mismapping). Nuanced, run-adaptive filtering is delegated to qcmsa.
-    static const double DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD = 0.50;
-    static const double DEFAULT_MULTI_ALLELIC_MEAN_PERGENE_THRESHOLD = 0.50;
     static const std::string DEFAULT_STRAIN_PRESET = "default";
 
     static cxxopts::Options CxxOptions() {
@@ -59,14 +54,15 @@ namespace protal {
 
         // I/O related options
         options.add_options("I/O")
-                ("db", "Path to protal database folder.", cxxopts::value<std::string>())
-                ("1,first", "Comma separated list of reads. If paired-end, also specify second read via -2/--second.", cxxopts::value<std::string>()->default_value(""))
-                ("2,second", "Comma separated list of reads. must have <-1/--first> specified. Currently this must be specified -- single-end reads are not yet supported.", cxxopts::value<std::string>()->default_value(""))
+                ("db", "Path to protal database folder. If not given, the folder is taken from the environment variable $" + PROTAL_DB_ENV_VARIABLE + ".", cxxopts::value<std::string>())
+                ("1,first", "Comma separated list of first-in-pair read files. The matching second-in-pair files must be given via -2/--second.", cxxopts::value<std::string>()->default_value(""))
+                ("2,second", "Comma separated list of second-in-pair read files, one per file given via -1/--first. Protal currently supports paired-end reads only, so this is mandatory -- single-end reads are not supported yet.", cxxopts::value<std::string>()->default_value(""))
                 ("prefix", "Comma separated list of output prefixes (optional). If not specified, output file prefixes are generated from the input file names by taking their longest common prefix. Only works when both pairs of the read file are in the same folder.", cxxopts::value<std::string>()->default_value(""))
-                ("o,outdir", "Overwrites #OUTDIR in map and needs to be defined if #OUTDIR is not defined in the map. If not otherwise specified in the map file, sam files, profiles, msas, and other miscellaneous files will be stored in the subfolders to this directory 'alignments', 'profiles', 'strains', and 'misc'.", cxxopts::value<std::string>())
+                ("o,outdir", "Overwrites #OUTPUT_DIR in map and needs to be defined if #OUTPUT_DIR is not defined in the map. If not otherwise specified in the map file, sam files, profiles, msas, and other miscellaneous files will be stored in the subfolders to this directory 'alignments', 'profiles', 'strains', and 'misc'.", cxxopts::value<std::string>())
                 
                 ("map", "For larger datasets you can define parameters -1, -2, --prefix and -o in a tsv-file.", cxxopts::value<std::string>()->default_value(""))
-                ("map_range", "If you specified a map file with --map you can also pass a range to protal to run protal only on a subset. The first entry is 1, the end is inclusive. e.g.: 1-10. If the end open or larger than the number of entries in the map file, the last entry in the map file is selected as end.", cxxopts::value<std::string>()->default_value(""));
+                ("map_range", "If you specified a map file with --map you can also pass a range to protal to run protal only on a subset. The first entry is 1, the end is inclusive. e.g.: 1-10. If the end open or larger than the number of entries in the map file, the last entry in the map file is selected as end.", cxxopts::value<std::string>()->default_value(""))
+                ("profile_only", "Comma separated list of existing sam files to profile without re-running the alignment. Read files given via -1/-2 are ignored. Output prefixes are either given via --prefix (one per sam file) or derived from the sam file names.", cxxopts::value<std::string>()->default_value(""));
 
         // Alignment / algorithm options
         options.add_options("Alignment")
@@ -75,9 +71,8 @@ namespace protal {
                 ("u,max_key_ubiquity", "Max key ubiquity. Best matching Flexkey count for seed must be lower or equal", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_KEY_UBIQUITY)))
                 ("s,max_seed_size", "Max seed size after which seeding is stopped.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MAX_SEED_SIZE)))
                 ("w,min_successful_lookups", "If the number of seeds is >=max_seed_size and the number of successful core-mer lookups is >= min_successful_lookups, stop looking for further seeds.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MIN_SUCCESSFUL_LOOKUPS)))
-                ("a,max_score_ani", "A max score makes an alignment stop if the alignment diverges too much. This parameter estimates the score for a given ani and is a tradeoff between speed/accuracy. [ Default: " + std::to_string(DEFAULT_MAX_SCORE_ANI) + "]", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MAX_SCORE_ANI)))
-                ("x,x_drop", "Value determines when to cut of branches in the aligment process that are unpromising. [ Default: " + std::to_string(DEFAULT_X_DROP) + "]", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_X_DROP)))
-                ("e,output_top", "After alignment, alignments are sorted by score. <output_top> specifies how many alignments should be reported starting with the highest scoring alignment.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_OUTPUT_TOP)));
+                ("a,max_score_ani", "A max score makes an alignment stop if the alignment diverges too much. This parameter estimates the score for a given ani and is a tradeoff between speed/accuracy.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MAX_SCORE_ANI)))
+                ("x,x_drop", "Value determines when to cut of branches in the aligment process that are unpromising.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_X_DROP)));
 
         // Profiling options
         options.add_options("Profiling")
@@ -88,25 +83,23 @@ namespace protal {
 
         // Strain / SNP options
         options.add_options("Strains")
-                ("no_strains", "Stay on species level. Do not output SNPs or MSAs. Default is on.")
-                ("snp_min_cov", "Minimum number of reads supporting a variant to call a SNP.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_COV)))
-                ("snp_min_phred_sum", "Minimum cumulative phred score (sum of base qualities) across all supporting reads. Combined with --snp_min_mean_qual via OR: a variant passes quality if phred_sum >= snp_min_phred_sum OR mean_qual >= snp_min_mean_qual.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_PHRED_SUM)))
+                ("no_strains", "Stay on species level. Do not output SNPs or MSAs. Strain analysis is on by default, pass this flag to switch it off.")
+                ("snp_min_cov", "Minimum number of reads supporting a variant to call a SNP.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MIN_SNP_COV)))
+                ("snp_min_phred_sum", "Minimum cumulative phred score (sum of base qualities) across all supporting reads. Combined with --snp_min_mean_qual via OR: a variant passes quality if phred_sum >= snp_min_phred_sum OR mean_qual >= snp_min_mean_qual.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MIN_SNP_PHRED_SUM)))
                 ("snp_min_mean_qual", "Minimum mean base quality across supporting reads. Combined with --snp_min_phred_sum via OR: a variant passes quality if mean_qual >= snp_min_mean_qual OR phred_sum >= snp_min_phred_sum. Note: at low coverage, --snp_min_cov is the binding constraint regardless.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MIN_SNP_MEAN_QUAL)))
                 ("snp_min_af", "Minimum allele frequency for a variant (variant observations / position coverage). Interacts with --snp_min_cov: below coverage = snp_min_cov/snp_min_af, the count filter is stricter.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_AF)))
                 ("snp_no_strand", "Disable strand-bias filter. By default protal requires at least one supporting read from each strand (forward and reverse); pass this flag to allow variants supported by a single strand.")
-                ("k,msa_min_vcov", "Protal outputs two MSAs. The processed MSA is condensed horizontally such that each position in the MSA is covered by at least msa_min_cov percent of the sequences with bases that are neither '-' nor 'N'", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
+                ("k,msa_min_vcov", "Fraction (0-1) of the MSA sequences that must carry a base other than '-' or 'N' at a position for that position to count as vertically covered. Protal itself no longer condenses the MSA, this value is only used to report 'valid positions removed by vertical coverage' per sample in <species>.snp_stats.tsv. Site filtering is done by the qcmsa post-filter.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
                 ("msa_min_hcov", "Minimum non-N/non-'-' bases required per sequence to keep it in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_HCOV)))
                 ("msa_species", "Restrict MSAs to a single species (s__Genus_species) or a comma-separated list.", cxxopts::value<std::string>()->default_value(""))
-                ("multi_allelic_mean_genecol_threshold", "Hard cap: remove entire gene columns from the MSA where mean MRate2 across all samples exceeds this threshold (a gene more multi-allelic than not is a clear repeat region / mismapping signal). Permissive by default; nuanced run-adaptive filtering is delegated to qcmsa. Set to 0.0 for maximally strict behaviour (any multi-allelicity removes the gene).", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD)))
-                ("multi_allelic_mean_pergene_threshold", "Hard cap: in the per-gene filtered MSA, replace a sample's gene columns with '-' where that sample's MRate2 exceeds this threshold. Permissive by default; nuanced run-adaptive filtering is delegated to qcmsa. Set to 0.0 for maximally strict behaviour (any multi-allelicity masks the cell).", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MULTI_ALLELIC_MEAN_PERGENE_THRESHOLD)))
                 ("snp_max_alleles", "Maximum number of alleles at a position to encode as an IUPAC ambiguity code in the MSA. 1 = only the top allele (standard), 2 = encode two-allele mixtures (e.g. R,Y), 3 = also encode three-allele mixtures (e.g. B,H). Alleles are ranked by observation count; ties go to higher-quality allele.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_SNP_MAX_ALLELES)))
                 ("gene_min_hcov_frac", "In-protal gene horizontal-coverage filter. OFF by default (0) -- protal emits a raw MSA and the qcmsa post-filter does this (--gene-min-hcov). Set > 0 to make protal gap-fill cells whose gene is covered below this fraction.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_HCOV_FRAC)))
                 ("gene_min_mean_depth", "In-protal gene depth filter. OFF by default (0) -- handled by qcmsa (--gene-min-mean-depth). Set > 0 to make protal gap-fill cells below this mean depth.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_MEAN_DEPTH)))
                 ("msa_min_samples", "In-protal min-samples-per-gene filter. OFF by default (0) -- handled by qcmsa (--gene-min-samples). Set > 0 to drop genes carried by <= this many samples from protal's MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_SAMPLES)))
-                ("run_qcmsa", "Run the qcmsa.py post-filter (adaptive multi-allelicity outlier removal + site cleanup) on each species' per-gene-filtered MSA. ON BY DEFAULT; disable with --no_qcmsa. Requires python3; fails gracefully with a warning if python3 or the script cannot be found.")
+                ("run_qcmsa", "Run the qcmsa.py post-filter (adaptive multi-allelicity outlier removal + site cleanup) on each species' raw MSA. This is the default, so the flag only makes the default explicit and cannot be combined with --no_qcmsa. Requires python3; fails gracefully with a warning if python3 or the script cannot be found.")
                 ("no_qcmsa", "Disable the qcmsa post-filter (it is on by default).")
-                ("strain_preset", "Aggressiveness preset passed through to qcmsa.py when --run_qcmsa is set: strict | default | sensitive (tunes the Tukey IQR multiplier and min-bad count).", cxxopts::value<std::string>()->default_value(DEFAULT_STRAIN_PRESET))
-                ("qcmsa_script", "Path to qcmsa.py. If empty, protal auto-detects it next to the executable (../scripts/qcmsa.py, ./scripts/qcmsa.py) and honours the PROTAL_QCMSA_SCRIPT environment variable.", cxxopts::value<std::string>()->default_value(""));
+                ("strain_preset", "Aggressiveness preset passed through to qcmsa.py when the post-filter runs: strict | default | sensitive (tunes the Tukey IQR multiplier and min-bad count).", cxxopts::value<std::string>()->default_value(DEFAULT_STRAIN_PRESET))
+                ("qcmsa_script", "Path to (or name of) the qcmsa executable. If empty, protal looks for 'qcmsa' next to its own binary and then on $PATH, honours the PROTAL_QCMSA_SCRIPT environment variable, and finally falls back to the qcmsa.py script of a source checkout.", cxxopts::value<std::string>()->default_value(""));
 
         
         // Advanced / benchmarking / build
@@ -195,8 +188,8 @@ namespace protal {
         double msa_min_vcov = DEFAULT_MSA_MIN_VCOV;
         size_t msa_min_hcov = DEFAULT_MSA_MIN_HCOV;
         std::vector<std::string> msa_species;
-        double snp_min_cov = DEFAULT_MIN_SNP_COV;
-        double snp_min_phred_sum = DEFAULT_MIN_SNP_PHRED_SUM;
+        size_t snp_min_cov = DEFAULT_MIN_SNP_COV;
+        size_t snp_min_phred_sum = DEFAULT_MIN_SNP_PHRED_SUM;
         double snp_min_af = DEFAULT_MIN_SNP_AF;
         size_t snp_min_mean_qual = DEFAULT_MIN_SNP_MEAN_QUAL;
         bool   snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
@@ -204,8 +197,6 @@ namespace protal {
         double gene_min_hcov_frac = DEFAULT_GENE_MIN_HCOV_FRAC;
         double gene_min_mean_depth = DEFAULT_GENE_MIN_MEAN_DEPTH;
         size_t msa_min_samples = DEFAULT_MSA_MIN_SAMPLES;
-        double multi_allelic_mean_genecol_threshold = DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD;
-        double multi_allelic_mean_pergene_threshold = DEFAULT_MULTI_ALLELIC_MEAN_PERGENE_THRESHOLD;
         bool   run_qcmsa = true;
         std::string strain_preset = DEFAULT_STRAIN_PRESET;
         std::string qcmsa_script;
@@ -256,8 +247,6 @@ namespace protal {
         std::string m_profile_truth;
         std::string m_model;
         double m_knob = 0.5;
-        double m_multi_allelic_mean_genecol_threshold = DEFAULT_MULTI_ALLELIC_MEAN_GENECOL_THRESHOLD;
-        double m_multi_allelic_mean_pergene_threshold = DEFAULT_MULTI_ALLELIC_MEAN_PERGENE_THRESHOLD;
 
         size_t m_threads = DEFAULT_THREADS;
 
@@ -274,8 +263,8 @@ namespace protal {
         size_t m_msa_min_hcov = DEFAULT_MSA_MIN_HCOV;
         std::vector<std::string> m_msa_species;
 
-        double m_snp_min_cov = DEFAULT_MIN_SNP_COV;
-        double m_snp_min_phred_sum = DEFAULT_MIN_SNP_PHRED_SUM;
+        size_t m_snp_min_cov = DEFAULT_MIN_SNP_COV;
+        size_t m_snp_min_phred_sum = DEFAULT_MIN_SNP_PHRED_SUM;
         double m_snp_min_af = DEFAULT_MIN_SNP_AF;
         size_t m_snp_min_mean_qual = DEFAULT_MIN_SNP_MEAN_QUAL;
         bool   m_snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
@@ -361,8 +350,6 @@ namespace protal {
                 m_profile_truth(std::move(d.profile_truth)),
                 m_model(std::move(d.model)),
                 m_knob(d.knob),
-                m_multi_allelic_mean_genecol_threshold(d.multi_allelic_mean_genecol_threshold),
-                m_multi_allelic_mean_pergene_threshold(d.multi_allelic_mean_pergene_threshold),
                 m_threads(d.threads),
                 m_align_top(d.align_top),
                 m_max_score_ani(d.max_score_ani),
@@ -445,8 +432,6 @@ namespace protal {
             result_str << "gene min hcov frac:  " << std::to_string(m_gene_min_hcov_frac) << '\n';
             result_str << "gene min mean depth: " << std::to_string(m_gene_min_mean_depth) << '\n';
             result_str << "msa min samples:     " << std::to_string(m_msa_min_samples) << '\n';
-            result_str << "ma genecol thresh:   " << std::to_string(m_multi_allelic_mean_genecol_threshold) << '\n';
-            result_str << "ma pergene thresh:   " << std::to_string(m_multi_allelic_mean_pergene_threshold) << '\n';
             result_str << "run qcmsa:           " << (m_run_qcmsa ? "yes" : "no") << '\n';
             if (m_run_qcmsa) result_str << "strain preset:       " << m_strain_preset << '\n';
             result_str << "msa species:         " << Utils::join(m_msa_species, ",") << '\n';
@@ -752,32 +737,12 @@ namespace protal {
             return m_strain_output_dir + '/' + species_name + ".meta.tsv";
         }
 
-        std::string GetMSAProcessedOutput(std::string species_name) const {
-            return m_strain_output_dir + '/' + species_name + ".processed.msa.fna";
-        }
-
         std::string GetMSAPartitionOutput(std::string species_name) const {
             return m_strain_output_dir + '/' + species_name + ".raw.partition.txt";
         }
 
         std::string GetMSAStatsOutput(std::string species_name) const {
             return m_strain_output_dir + '/' + species_name + ".snp_stats.tsv";
-        }
-
-        std::string GetMSAGeneColFilteredOutput(std::string species_name) const {
-            return m_strain_output_dir + '/' + species_name + ".genecol_filtered.msa.fna";
-        }
-
-        std::string GetMSAGeneColFilteredPartitionOutput(std::string species_name) const {
-            return m_strain_output_dir + '/' + species_name + ".genecol_filtered.partition.txt";
-        }
-
-        double GetMultiAllelicMeanGeneColThreshold() const {
-            return m_multi_allelic_mean_genecol_threshold;
-        }
-
-        double GetMultiAllelicMeanPerGeneThreshold() const {
-            return m_multi_allelic_mean_pergene_threshold;
         }
 
         std::string GetBenchmarkAlignmentOutputFile() const {
@@ -890,13 +855,17 @@ of writing out compressed internally.
 #SAM_OUTPUT_DIR	/path-to-your-results-dir/alignments					
 #PROFILE_OUTPUT_DIR	/path-to-your-results-dir/profiles
 #STRAIN_OUTPUT_DIR	/path-to-your-results-dir/strains	
-#MISC_OUTPUT_DIR	/path-to-your-results-dir/strains	
-#INPUT_DIR	/path-to-input-dir/					
+#MISC_OUTPUT_DIR	/path-to-your-results-dir/misc
+#INPUT_DIR	/path-to-input-dir/
 #SAMPLEID	FIRST	SECOND	SAM	PREFIX	PROFILE
 SAMPLE1	sample1/reads_1.fq	sample1/reads_2.fq	1.sam	AIR1	1.profile
-SAMPLE2	sample2/reads_1.fq	sample2/reads_2.fq	1.sam	AIR2	1.profile
-SAMPLE3	sample3/reads_1.fq	sample3/reads_2.fq	1.sam	AIR3	1.profile
-SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::endl;
+SAMPLE2	sample2/reads_1.fq	sample2/reads_2.fq	2.sam	AIR2	2.profile
+SAMPLE3	sample3/reads_1.fq	sample3/reads_2.fq	3.sam	AIR3	3.profile
+SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	4.sam	AIR4	4.profile
+
+FIRST, SECOND and PREFIX are mandatory (protal currently supports paired-end reads only).
+SAM and PROFILE are optional and default to <PREFIX>.sam and <PREFIX>.profile. Give every
+sample its own SAM/PROFILE name, otherwise the samples overwrite each other's output.)" << std::endl;
         }
 
 
@@ -1097,7 +1066,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     }
                     if (!tokens.empty() && tokens[0] == MAP_VAR_MISC_OUTPUT_DIR) {
                         if (tokens.size() < 2) {
-                            std::cerr << "Line " << line_num << ": Expected value for key " << MAP_VAR_OUTPUT_DIR << std::endl;
+                            std::cerr << "Line " << line_num << ": Expected value for key " << MAP_VAR_MISC_OUTPUT_DIR << std::endl;
                             return false;
                         }
                         misc_output_dir = tokens[1];
@@ -1107,8 +1076,16 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                 } else {
 
                     // Mapping file content
-                    if (prefix_column == -1 || first_column == -1 || second_column == 1) {
+                    if (prefix_column == -1 || first_column == -1) {
                         std::cerr << "The columns must be specified: " << MAP_PREFIX << ", " << MAP_FIRST_READ << ", " << MAP_SECOND_READ << std::endl;
+                        return false;
+                    }
+                    // Protal currently supports paired-end reads only, so a map
+                    // without a SECOND column cannot be processed.
+                    if (second_column == -1) {
+                        std::cerr << "Column '" << MAP_SECOND_READ << "' is missing in " << map_path
+                                  << ". Protal currently supports paired-end reads only, single-end reads are "
+                                     "not supported yet (see --map_help)." << std::endl;
                         return false;
                     }
 
@@ -1118,6 +1095,14 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     }
 
                     splitter.Split(line);
+                    if (tokens.size() <= static_cast<size_t>(std::max({ prefix_column, first_column, second_column }))) {
+                        std::cerr << "Line " << line_num << ": row has " << tokens.size()
+                                  << " column(s) but the header declares " << MAP_PREFIX << ", "
+                                  << MAP_FIRST_READ << " and " << MAP_SECOND_READ
+                                  << " up to column " << std::max({ prefix_column, first_column, second_column }) + 1
+                                  << ". Columns must be tab separated." << std::endl;
+                        return false;
+                    }
                     auto sample_id = tokens[prefix_column];
                     auto prefix_path = path(global_output_dir).append(tokens[prefix_column]);
                     auto first_path = path(input_dir).append(tokens[first_column]);
@@ -1232,12 +1217,12 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
             if (!valid_lengths1 && !m_first_list.empty()) {
                 std::string error =
-                        "You must provide equal amounts of items in options -1, -2 and -3. "
+                        "You must provide equal amounts of items in options -1, -2 and --prefix. "
                         "Provided are -1 (" +
                         std::to_string(m_first_list.size()) +
                         "), -2 (" +
                         std::to_string(m_second_list.size()) +
-                        "), and -3 (" +
+                        "), and --prefix (" +
                         std::to_string(m_prefix_list.size()) +
                         ")";
                 error_log.emplace_back(error);
@@ -1245,16 +1230,26 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
 
             if (!valid_lengths2 && m_profile_only) {
                 std::string error =
-                        "You must provide equal amounts of items in options -3 and --profile_only";
+                        "You must provide equal amounts of items in options --prefix and --profile_only";
                 error_log.emplace_back(error);
             }
 
-            if ((m_first_list.size() != m_second_list.size() && !m_second_list.empty()) || m_first_list.size() != m_sam_list.size()) {
+            // In profile-only mode there are no read files, only sam files.
+            if (!m_profile_only &&
+                (m_first_list.size() != m_second_list.size() || m_first_list.size() != m_sam_list.size())) {
                 std::cerr << "First:  " << m_first_list.size() << std::endl;
                 std::cerr << "Second: " << m_second_list.size() << std::endl;
                 std::cerr << "Sam:    " << m_sam_list.size() << std::endl;
                 std::cerr << "lists different sizes" << std::endl;
                 exit(9);
+            }
+
+            if (m_profile_only) {
+                for (auto& sam : m_sam_list) {
+                    if (!std::filesystem::exists(sam)) {
+                        error_log.emplace_back("--profile_only sam file does not exist: " + sam);
+                    }
+                }
             }
 
             // Check files
@@ -1358,7 +1353,18 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             }
 
             cxx_options.parse_positional({ "reference" });
-            auto result = cxx_options.parse(argc, argv);
+
+            // cxxopts throws on unknown options and on values it cannot convert.
+            // Turn that into a readable message instead of an uncaught exception.
+            cxxopts::ParseResult result;
+            try {
+                result = cxx_options.parse(argc, argv);
+            } catch (const cxxopts::OptionException& e) {
+                std::cerr << "Error parsing options: " << e.what() << std::endl;
+                std::cerr << "Run 'protal --help' for the available options ('protal --full_help' "
+                             "also lists the developer options)." << std::endl;
+                exit(2);
+            }
 
             bool show_help = result.count("help");
             bool show_help_dev = result.count("full_help");
@@ -1401,8 +1407,8 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                 }
             }
 
-            double snp_min_cov        = result["snp_min_cov"].as<double>();
-            double snp_min_phred_sum  = result["snp_min_phred_sum"].as<double>();
+            size_t snp_min_cov        = result["snp_min_cov"].as<size_t>();
+            size_t snp_min_phred_sum  = result["snp_min_phred_sum"].as<size_t>();
             double snp_min_af         = result["snp_min_af"].as<double>();
             size_t snp_min_mean_qual  = result["snp_min_mean_qual"].as<size_t>();
             bool   snp_require_strand = !result.count("snp_no_strand");
@@ -1410,6 +1416,11 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             double gene_min_hcov_frac = result["gene_min_hcov_frac"].as<double>();
             double gene_min_mean_depth = result["gene_min_mean_depth"].as<double>();
             size_t msa_min_samples    = result["msa_min_samples"].as<size_t>();
+            if (result.count("no_qcmsa") && result.count("run_qcmsa")) {
+                std::cerr << "--run_qcmsa and --no_qcmsa are mutually exclusive. The qcmsa post-filter "
+                             "runs by default, pass only --no_qcmsa to switch it off." << std::endl;
+                exit(1);
+            }
             bool   run_qcmsa          = !result.count("no_qcmsa");  // on by default
             std::string strain_preset = result["strain_preset"].as<std::string>();
             std::string qcmsa_script  = result["qcmsa_script"].as<std::string>();
@@ -1491,7 +1502,10 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                     std::cerr << "Map file " << map_file << " does not exist." << std::endl;
                     exit(9);
                 }
-                LoadFromMap(map_file, output_dir, strain_output_dir, misc_output_dir, prefix_list, first_list, second_list, sam_list, profile_list, samplenames_list, profile_truth_list);
+                if (!LoadFromMap(map_file, output_dir, strain_output_dir, misc_output_dir, prefix_list, first_list, second_list, sam_list, profile_list, samplenames_list, profile_truth_list)) {
+                    std::cerr << "Failed to read map file " << map_file << " (see --map_help)." << std::endl;
+                    exit(9);
+                }
 
                 if (range_arg != "") {
                     range = ProcessRange(range_arg, first_list.size());
@@ -1516,6 +1530,24 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             bool mapq_debug_output = result.count("mapq_debug_output");
             bool force = result.count("force");
 
+
+            // Protal currently only supports paired-end reads. Catch single-end (or
+            // otherwise mismatched) input here with a clear message, instead of running
+            // into mismatched read lists further down.
+            if (!build && !profile_only) {
+                if (first_list.empty() && second_list.empty()) {
+                    std::cerr << "No input reads given. Provide paired-end reads via -1/--first and "
+                                 "-2/--second, or a map file via --map (see --map_help)." << std::endl;
+                    exit(31);
+                }
+                if (first_list.size() != second_list.size()) {
+                    std::cerr << "Protal currently supports paired-end reads only, single-end reads are not supported yet." << std::endl;
+                    std::cerr << "  -1/--first:  " << first_list.size() << " file(s)" << std::endl;
+                    std::cerr << "  -2/--second: " << second_list.size() << " file(s)" << std::endl;
+                    std::cerr << "Please provide the same number of comma-separated files for -1/--first and -2/--second." << std::endl;
+                    exit(31);
+                }
+            }
 
             if (profile_only) {
                 if (!first_list.empty()) {
@@ -1557,7 +1589,7 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
                             std::cerr << "Cannot infer output prefix from reads files as they are in different folders:" << std::endl;
                             std::cerr << "  " << first << std::endl;
                             std::cerr << "  " << second << std::endl;
-                            std::cerr << "Please provide output prefixes via -3" << std::endl;
+                            std::cerr << "Please provide output prefixes via --prefix" << std::endl;
                             exit(32);
                         }
                         prefix_list.emplace_back(Utils::LongestCommonPrefixTrimmed(first.filename(), second.filename()));
@@ -1679,8 +1711,6 @@ SAMPLE4	sample4/reads_1.fq	sample4/reads_2.fq	1.sam	AIR4	1.profile)" << std::end
             d.build_gene_mask          = std::move(build_gene_mask);
             d.knob                     = result["knob"].as<double>();
             d.model                    = result["model"].as<std::string>();
-            d.multi_allelic_mean_genecol_threshold = result["multi_allelic_mean_genecol_threshold"].as<double>();
-            d.multi_allelic_mean_pergene_threshold = result["multi_allelic_mean_pergene_threshold"].as<double>();
 
             auto options = Options(std::move(d));
 

@@ -3,7 +3,8 @@ set shell := ["bash", "-cu"]
 # ---- strain test (M1-M5) parameters -- override on the command line, e.g.
 #   just strain-test preset=sensitive
 # ----------------------------------------------------------------------------
-protal      := "build/protal"
+build_dir   := "build"
+protal      := build_dir / "protal"
 strain_db   := env_var_or_default("PROTAL_DB_PATH", "/home/fritscher/data/db/tool/protal/protal-db-r226-0.5.1a")
 strain_input:= "/home/fritscher/non-git/simulate_metagenomes_test/test2"   # simulated dataset (input)
 strain_out  := justfile_directory() / "strain_test_out"
@@ -16,9 +17,9 @@ preset      := "default"
 # leaving gene/sample filtering entirely to qcmsa and letting users re-filter.
 strain_protal_filter_args := ""
 
-# Delete all cmake-build-
+# Delete all build trees
 clear:
-    rm -rf cmake-build-*
+    rm -rf cmake-build-* {{build_dir}}
 
 # Full M1-M5 strain test: run protal (default settings, with the qcmsa post-filter)
 # on the pre-existing dataset alignments, then build the HTML QC report.
@@ -31,7 +32,7 @@ strain-test: strain-protal strain-dbcounts strain-report
 # <species>.raw.msa.fna can be re-filtered with other thresholds.
 strain-test-raw:
     just strain_variant=test2 \
-         strain_protal_filter_args="--gene_min_hcov_frac 0 --gene_min_mean_depth 0 --msa_min_samples 0 --msa_min_hcov 0 --multi_allelic_mean_genecol_threshold 1.1 --multi_allelic_mean_pergene_threshold 1.1" \
+         strain_protal_filter_args="--gene_min_hcov_frac 0 --gene_min_mean_depth 0 --msa_min_samples 0 --msa_min_hcov 0" \
          strain-test
 
 # Count marker genes per species in the DB genome (the true gene denominator,
@@ -160,35 +161,43 @@ strain-report:
 strain-clean:
     rm -rf {{strain_run}}
 
+# The ISA flags are per-target (isa_baseline / isa_avx2 in CMakeLists.txt), so
+# baseline, avx2 and static binaries all come out of one tree -- no need for
+# separate cmake-build-* dirs.
+# Configure the build tree
+configure:
+    cmake -S . -B {{build_dir}} -DCMAKE_BUILD_TYPE=Release
+
 # Baseline (no AVX) build
-baseline:
-    cmake -S . -B cmake-build-baseline -DCMAKE_BUILD_TYPE=Release
-    cmake --build cmake-build-baseline --target protal -- -j$(nproc)
+baseline: configure
+    cmake --build {{build_dir}} --target protal -- -j$(nproc)
 
 # AVX2 build
-avx2:
-    cmake -S . -B cmake-build-avx2 -DCMAKE_BUILD_TYPE=Release
-    cmake --build cmake-build-avx2 --target protal_avx2 -- -j$(nproc)
+avx2: configure
+    cmake --build {{build_dir}} --target protal_avx2 -- -j$(nproc)
 
-# Baseline simulate_metagenomes build
-simulate:
-    cmake -S . -B cmake-build-baseline -DCMAKE_BUILD_TYPE=Release
-    cmake --build cmake-build-baseline --target simulate_metagenomes -- -j$(nproc)
+# simulate_metagenomes build
+simulate: configure
+    cmake --build {{build_dir}} --target simulate_metagenomes -- -j$(nproc)
 
 # Static baseline build (protal_static target)
-static:
-    cmake -S . -B cmake-build-static -DCMAKE_BUILD_TYPE=Release
-    cmake --build cmake-build-static --target protal_static -- -j$(nproc)
+static: configure
+    cmake --build {{build_dir}} --target protal_static -- -j$(nproc)
 
-# Build all targets, baseline avx2 static and simulate
-build-all: clear baseline avx2 simulate static
+# Build all binaries that `just install` ships
+build-all: configure
+    cmake --build {{build_dir}} --target protal protal_avx2 simulate_metagenomes -- -j$(nproc)
 
-# Install protal, protal_avx2, protal_map_utils, protal_launcher and simulate_metagenomes into prefix/bin
-install prefix="$HOME/.local":
+# Always rebuilds first so the installed binaries match the working tree (an
+# out-of-date build dir used to be installed silently).
+# Install protal, protal_avx2, protal_map_utils, protal_launcher, qcmsa and simulate_metagenomes into prefix/bin
+install prefix="$HOME/.local": build-all
     mkdir -p {{prefix}}/bin
-    cp cmake-build-baseline/protal                  {{prefix}}/bin/protal_baseline
-    cp cmake-build-avx2/protal_avx2                 {{prefix}}/bin/protal_avx2
-    cp cmake-build-baseline/simulate_metagenomes    {{prefix}}/bin/simulate_metagenomes
+    cp {{build_dir}}/protal                         {{prefix}}/bin/protal_baseline
+    cp {{build_dir}}/protal_avx2                    {{prefix}}/bin/protal_avx2
+    cp {{build_dir}}/simulate_metagenomes           {{prefix}}/bin/simulate_metagenomes
     cp scripts/protal_map_utils                     {{prefix}}/bin/protal_map_utils
     cp scripts/protal_launcher                      {{prefix}}/bin/protal
-    chmod +x {{prefix}}/bin/protal_baseline {{prefix}}/bin/protal_avx2 {{prefix}}/bin/simulate_metagenomes {{prefix}}/bin/protal_map_utils {{prefix}}/bin/protal
+    cp scripts/qcmsa.py                             {{prefix}}/bin/qcmsa
+    chmod +x {{prefix}}/bin/protal_baseline {{prefix}}/bin/protal_avx2 {{prefix}}/bin/simulate_metagenomes {{prefix}}/bin/protal_map_utils {{prefix}}/bin/protal {{prefix}}/bin/qcmsa
+    @echo "Installed to {{prefix}}/bin: $({{prefix}}/bin/protal --version)"
