@@ -102,12 +102,51 @@ def open_maybe_gz(path, mode="rt"):
     return open(path, mode)
 
 
-_PART_RE = re.compile(r"gene(\d+)\s*=\s*(\d+)\s*-\s*(\d+)")
+# A RAxML-style partition names its blocks with an arbitrary string, so match the
+# name rather than assuming protal's `gene<N>`. Any tool that writes a valid
+# partition file should be usable here; requiring protal's naming made this
+# protal-only in practice while documenting itself as generic.
+_PART_RE = re.compile(r"(\S+)\s*=\s*(\d+)\s*-\s*(\d+)")
+
+_GENE_NUM_RE = re.compile(r"gene(\d+)\Z")
 
 
-def parse_partition(path):
-    """Return list of (gene_id:int, start:int, end:int), 0-based inclusive."""
-    genes = []
+def canon_gene(name):
+    """Join key shared by the partition and the meta.
+
+    protal names a partition `gene4` and calls it `4` in the meta, so the two are
+    reconciled by stripping the prefix. Every other name is its own key, which is
+    what lets a partition written against real reference record names join against
+    a meta written the same way.
+    """
+    m = _GENE_NUM_RE.fullmatch(str(name))
+    return m.group(1) if m else str(name)
+
+
+def gene_sort_key(g):
+    """Numeric ordering for numeric gene ids, lexicographic for the rest.
+
+    Sorting the keys as plain strings would put gene 10 before gene 9 and silently
+    reorder every report protal already produces.
+    """
+    g = str(g)
+    return (0, int(g), "") if g.isdigit() else (1, 0, g)
+
+
+def parse_partition(path, base="auto"):
+    """Return (genes, display, base) where genes is [(key:str, start, end)].
+
+    Coordinates come back 0-based inclusive whatever the input used. `display` maps
+    each key back to the name as written, so the output partition is spelled the way
+    the input was.
+
+    protal writes 0-based inclusive; RAxML -- and so most everything else, rg-msa
+    included -- writes 1-based inclusive. They are told apart by the lowest start:
+    a 1-based file cannot contain 0, and both tools' partitions begin at the start
+    of the alignment.
+    """
+    raw = []
+    display = {}
     with open(path) as fh:
         for line in fh:
             if not line.strip():
@@ -115,8 +154,32 @@ def parse_partition(path):
             m = _PART_RE.search(line)
             if not m:
                 continue
-            genes.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
-    return genes
+            name = m.group(1)
+            key = canon_gene(name)
+            display.setdefault(key, name)
+            raw.append((key, int(m.group(2)), int(m.group(3))))
+    if not raw:
+        return [], {}, base
+
+    if base == "auto":
+        lo = min(s for _, s, _ in raw)
+        if lo == 0:
+            detected = 0
+        elif lo == 1:
+            detected = 1
+        else:
+            sys.stderr.write(
+                f"qcmsa.py: partition starts at {lo}, which is neither 0- nor "
+                f"1-based at the alignment start; assuming 1-based (RAxML). Pass "
+                f"--partition-base to be explicit.\n"
+            )
+            detected = 1
+    else:
+        detected = int(base)
+
+    shift = 1 if detected == 1 else 0
+    genes = [(g, s - shift, e - shift) for g, s, e in raw]
+    return genes, display, detected
 
 
 # protal .meta.tsv columns (the header protal writes). We read by header name so
@@ -156,7 +219,7 @@ def load_meta(path, gene_whitelist):
             if not line.strip():
                 continue
             f = line.rstrip("\n").split("\t")
-            gene = int(f[gi])
+            gene = canon_gene(f[gi])
             if gene not in gene_whitelist:
                 continue
             sample = f[si]
@@ -175,7 +238,7 @@ def load_meta(path, gene_whitelist):
             seen.add(sample)
             samples_seen.append(sample)
         genes_seen.add(gene)
-    return rows, samples_seen, sorted(genes_seen), cov
+    return rows, samples_seen, sorted(genes_seen, key=gene_sort_key), cov
 
 
 def coverage_filter(cov, all_genes, hcov_t, depth_t, min_samples):
@@ -309,6 +372,10 @@ def build_argparser():
     )
     p.add_argument("msa", help="MSA FASTA (plain or .gz)")
     p.add_argument("partition", help="RAxML-style partition file")
+    p.add_argument("--partition-base", choices=["auto", "0", "1"], default="auto",
+                   help="Coordinate base of the partition file. auto (default) "
+                        "detects it from the lowest start: protal writes 0-based, "
+                        "RAxML and rg-msa write 1-based.")
     p.add_argument("meta", help="protal .meta.tsv (with header)")
     p.add_argument("--prefix", default=None,
                    help="Output prefix (default: MSA path with .fna/.gz stripped)")
@@ -407,7 +474,9 @@ def main(argv=None):
                          "distinct --prefix (input should be <name>.raw.msa.fna).")
 
     # --- inputs ---
-    partition = parse_partition(args.partition)
+    partition, gene_display, part_base = parse_partition(
+        args.partition, args.partition_base
+    )
     if not partition:
         raise SystemExit(f"qcmsa.py: no genes parsed from partition '{args.partition}'")
     gene_whitelist = {g for g, _, _ in partition}
@@ -619,7 +688,12 @@ def main(argv=None):
             if length == 0:
                 continue  # gene lost all its sites in cleanup
             new_end = new_start + length - 1
-            fh.write(f"DNA, gene{g} = {new_start}-{new_end}\n")
+            # Spelled and based as the input was, so the file round-trips.
+            out_shift = 1 if part_base == 1 else 0
+            fh.write(
+                f"DNA, {gene_display.get(g, g)} = "
+                f"{new_start + out_shift}-{new_end + out_shift}\n"
+            )
             new_start = new_end + 1
     sys.stderr.write(f"Saved: {part_out}\n")
 
@@ -656,7 +730,7 @@ def main(argv=None):
             fh.write(f"count\toutlier_cells\t{len(outlier_cells)}\t\n")
             fh.write(f"count\tseqs_out\t{n_seqs_out}\t\n")
             fh.write(f"count\treference_seqs_out\t{n_ref}\t\n")
-            for g in sorted(filtered_genes):
+            for g in sorted(filtered_genes, key=gene_sort_key):
                 if g in cov_dropped_genes:
                     nb, txt = cov_reason.get(g, (None, "M3 coverage"))
                     fh.write(f"gene_filtered\t{g}\t{nb}\t{txt}\n")
