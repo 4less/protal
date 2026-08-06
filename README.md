@@ -73,13 +73,43 @@ cmake --build cmake-build-release --target simulate_metagenomes
 Input TSV format (three columns): genome name, GTDB taxonomy string, path to genome FASTA (supports .gz). Example run:
 ```bash
 ./cmake-build-release/simulate_metagenomes \
-  --genome-table genomes.tsv \
-  --output-dir sims/ \
+  --genome_table genomes.tsv \
+  --output_dir sims/ \
   --samples 3 \
-  --sample-prefix sim \
-  --total-read-pairs 100000 \
-  --genomes-per-sample 15 \
+  --sample_prefix sim \
+  --total_read_pairs 100000 \
+  --species_per_sample 15 \
   --distribution power_law \
-  --strains-per-species "Escherichia coli=2,Bacillus subtilis=1"
+  --strains_per_species "0.4,0.2"
 ```
 Reads are simulated with `art_illumina`, concatenated per sample into `<sample>_R1.fq` and `<sample>_R2.fq`, and a `manifest.tsv` records the composition.
+
+### Reproducing a simulated dataset
+
+Every run writes its full provenance next to the reads:
+
+- `manifest.tsv` — one row per (sample, genome), including the FASTA it came from and
+  the `art_seed` ART used for it. `manifests/<sample>.tsv` holds the same rows split
+  per sample.
+- `run_params.tsv` — the command line, the RNG seed (resolved and recorded even when
+  `--seed` was not given), and the ART settings.
+
+A manifest is a complete, self-contained description of a dataset, so replaying one
+does not depend on reproducing the community-design RNG:
+
+```bash
+./cmake-build-release/simulate_metagenomes \
+  --from_manifest sims/manifest.tsv \
+  --output_dir sims_replay/
+```
+
+The replay reproduces the reads byte for byte. All sampling options
+(`--distribution`, `--species_per_sample`, `--seed`, …) are ignored; only the ART
+settings still apply, and `--read_length` is checked against the depths the manifest
+implies. A per-sample manifest replays just that sample.
+
+Manifests written before the `fasta_path` and `art_seed` columns existed still replay:
+pass `--genome_table` so the genomes can be resolved by name, and the composition and
+per-genome depth are reproduced exactly while the reads themselves are fresh
+realizations. The replay's own manifest carries seeds, so it is exactly reproducible
+from then on.

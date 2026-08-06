@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -146,6 +147,7 @@ struct CliOptions {
     std::string pigz_path{"pigz"};
     std::optional<fs::path> protal_metafile_output_dir;
     fs::path strain_sharing_file;
+    std::optional<fs::path> from_manifest;
 };
 
 static std::vector<protal::sim::StrainSharingSpec> parse_strain_sharing_file(const fs::path& path) {
@@ -215,7 +217,13 @@ static cxxopts::Options build_cxxopts() {
 
     options.add_options("I/O")
         ("genome_table", "TSV with genome name, GTDB taxonomy, FASTA path (.gz ok)", cxxopts::value<std::string>())
-        ("o,output_dir",  "Output directory for FASTQs and manifest", cxxopts::value<std::string>());
+        ("o,output_dir",  "Output directory for FASTQs and manifest", cxxopts::value<std::string>())
+        ("from_manifest", "Replay a previous run from its manifest.tsv (combined or per-sample) instead of "
+                          "designing a new community. All --distribution/--species_per_sample/--seed style "
+                          "sampling options are ignored. Manifests carrying an art_seed column reproduce the "
+                          "reads exactly; older ones reproduce the composition with fresh reads. "
+                          "--genome_table is only needed if the manifest has no fasta_path column.",
+                          cxxopts::value<std::string>());
 
     options.add_options("Sampling")
         ("n,samples",           "Number of metagenome samples", cxxopts::value<std::size_t>()->default_value("1"))
@@ -275,14 +283,20 @@ static CliOptions parse_cli(int argc, char** argv) {
         std::exit(0);
     }
 
-    if (!result.count("genome_table") || !result.count("output_dir")) {
-        std::cerr << "Error: --genome_table and --output_dir are required.\n\n";
+    const bool replay = result.count("from_manifest") > 0;
+    if ((!result.count("genome_table") && !replay) || !result.count("output_dir")) {
+        std::cerr << "Error: --output_dir is required, as is --genome_table unless --from_manifest is given.\n\n";
         std::cout << cxx.help({"I/O", "Sampling", "ART", "General"}) << std::endl;
         std::exit(1);
     }
 
     CliOptions opts;
-    opts.genome_table      = result["genome_table"].as<std::string>();
+    if (replay) {
+        opts.from_manifest = result["from_manifest"].as<std::string>();
+    }
+    if (result.count("genome_table")) {
+        opts.genome_table  = result["genome_table"].as<std::string>();
+    }
     opts.output_dir        = result["output_dir"].as<std::string>();
     opts.samples           = result["samples"].as<std::size_t>();
     opts.sample_prefix     = result["sample_prefix"].as<std::string>();
@@ -356,6 +370,131 @@ static CliOptions parse_cli(int argc, char** argv) {
     return opts;
 }
 
+// A manifest pins the community; this pins how it was produced. Written on every run
+// so that neither the seed nor the ART settings live only in shell history.
+static void write_run_params(
+    const CliOptions& cli, std::uint64_t seed, int argc, char** argv, const fs::path& path) {
+    std::ofstream out(path);
+    if (!out) {
+        throw std::runtime_error("Unable to write run parameters: " + path.string());
+    }
+    out << "key\tvalue\n";
+    std::string command;
+    for (int i = 0; i < argc; ++i) {
+        command += (i ? " " : "");
+        command += argv[i];
+    }
+    out << "command\t" << command << '\n';
+    out << "mode\t" << (cli.from_manifest ? "replay" : "design") << '\n';
+    if (cli.from_manifest) {
+        out << "from_manifest\t" << cli.from_manifest->string() << '\n';
+    }
+    out << "seed\t" << seed << '\n';
+    out << "genome_table\t" << cli.genome_table.string() << '\n';
+    out << "read_length\t" << cli.art.read_length << '\n';
+    out << "fragment_mean\t" << cli.art.fragment_mean << '\n';
+    out << "fragment_stdev\t" << cli.art.fragment_stdev << '\n';
+    out << "sequencer\t" << cli.art.sequencer << '\n';
+    std::string extra;
+    for (const auto& arg : cli.art.extra_args) {
+        extra += (extra.empty() ? "" : " ");
+        extra += arg;
+    }
+    out << "extra_art_args\t" << extra << '\n';
+}
+
+static std::vector<protal::sim::SampleOutput> design_and_simulate(
+    CliOptions& cli, std::vector<protal::sim::GenomeRecord> genomes) {
+    ProfileDesignOptions profile{};
+    profile.species_per_sample     = cli.species_per_sample;
+    profile.species_per_sample_min = cli.species_per_sample_min;
+    profile.distribution = cli.distribution;
+    profile.powerlaw_alpha = cli.alpha;
+    profile.negative_binomial_r = cli.nb_r;
+    profile.negative_binomial_p = cli.nb_p;
+    profile.pln_mu = cli.pln_mu;
+    profile.pln_sigma = cli.pln_sigma;
+    profile.strain_probabilities = protal::sim::parse_strain_probabilities(cli.strain_probabilities);
+    profile.include_species = protal::sim::parse_species_list(cli.include_species);
+    profile.genus_species_counts = protal::sim::parse_genus_selection(cli.genus_counts);
+    profile.taxon_species_counts = protal::sim::parse_taxon_selection(cli.taxon_counts);
+    profile.total_read_pairs = cli.total_read_pairs;
+    profile.pick_random_demand_if_fail = cli.pick_random_demand_if_fail;
+    if (!cli.strain_sharing_file.empty()) {
+        profile.strain_sharing = parse_strain_sharing_file(cli.strain_sharing_file);
+        std::cerr << "Loaded " << profile.strain_sharing.size()
+                  << " strain sharing spec(s) from " << cli.strain_sharing_file << '\n';
+    }
+
+    cli.art.threads = std::max(1, cli.threads);
+    MetagenomeSimulator simulator(std::move(genomes), cli.art, *cli.seed, cli.pigz_path);
+
+    return simulator.simulate_samples(
+        profile, cli.samples, cli.sample_prefix, cli.output_dir, cli.test_mode, cli.keep_tmp);
+}
+
+static std::vector<protal::sim::SampleOutput> replay_from_manifest(
+    CliOptions& cli, const std::vector<protal::sim::GenomeRecord>& genomes) {
+    auto design = protal::sim::read_manifest(*cli.from_manifest);
+    protal::sim::resolve_manifest_fasta_paths(design, genomes);
+
+    std::size_t rows = 0;
+    std::size_t seeded = 0;
+    for (const auto& sample : design) {
+        for (const auto& assignment : sample.assignments) {
+            ++rows;
+            seeded += assignment.art_seed.has_value();
+        }
+    }
+    std::cerr << "Replaying " << design.size() << " sample(s), " << rows << " genome assignment(s) from "
+              << cli.from_manifest->string() << '\n';
+    if (seeded == rows) {
+        std::cerr << "All rows carry an art_seed: reads are reproduced exactly.\n";
+    } else {
+        std::cerr << "Warning: " << (rows - seeded) << " of " << rows
+                  << " rows have no art_seed. Composition and depth are reproduced exactly, but those "
+                     "reads are fresh realizations.\n";
+    }
+
+    // The manifest does not store the read length, but it is recoverable from any row:
+    // vertical_coverage = read_pairs * 2 * read_length / genome_length. Replaying at a
+    // different --read_length silently changes every depth, so check rather than trust.
+    for (const auto& sample : design) {
+        for (const auto& assignment : sample.assignments) {
+            if (assignment.read_pairs == 0 || assignment.vertical_coverage <= 0.0) {
+                continue;
+            }
+            const double implied = assignment.vertical_coverage * static_cast<double>(assignment.genome_length) /
+                                   (2.0 * static_cast<double>(assignment.read_pairs));
+            if (std::abs(implied - static_cast<double>(cli.art.read_length)) > 1.0) {
+                std::cerr << "Warning: manifest implies read_length ~" << static_cast<int>(implied + 0.5)
+                          << " but --read_length is " << cli.art.read_length
+                          << "; depths will not match the original run.\n";
+            }
+            break;
+        }
+        break;
+    }
+
+    // The profile designer is unused on a replay, but the simulator still wants a
+    // genome set; the manifest's own genomes are it.
+    std::vector<protal::sim::GenomeRecord> replay_genomes;
+    std::unordered_set<std::string> seen_genomes;
+    for (const auto& sample : design) {
+        for (const auto& assignment : sample.assignments) {
+            if (seen_genomes.insert(assignment.genome.name).second) {
+                replay_genomes.push_back(assignment.genome);
+            }
+        }
+    }
+
+    // The seed is only consumed for rows without a recorded art_seed.
+    cli.art.threads = std::max(1, cli.threads);
+    MetagenomeSimulator simulator(std::move(replay_genomes), cli.art, *cli.seed, cli.pigz_path);
+
+    return simulator.replay_samples(std::move(design), cli.output_dir, cli.test_mode, cli.keep_tmp);
+}
+
 int main(int argc, char** argv) {
     CliOptions cli;
     try {
@@ -366,38 +505,24 @@ int main(int argc, char** argv) {
     }
 
     try {
-        auto genomes = protal::sim::read_genome_table(cli.genome_table);
-        if (cli.seed) {
+        std::vector<protal::sim::GenomeRecord> genomes;
+        if (!cli.genome_table.empty()) {
+            genomes = protal::sim::read_genome_table(cli.genome_table);
+        }
+        // Always resolve the seed here, so an unseeded run still records the seed it
+        // actually used and can be repeated.
+        if (!cli.seed) {
+            cli.seed = std::random_device{}();
+            std::cerr << "Using random seed: " << *cli.seed << '\n';
+        } else {
             std::cerr << "Using fixed seed: " << *cli.seed << '\n';
         }
 
-        ProfileDesignOptions profile{};
-        profile.species_per_sample     = cli.species_per_sample;
-        profile.species_per_sample_min = cli.species_per_sample_min;
-        profile.distribution = cli.distribution;
-        profile.powerlaw_alpha = cli.alpha;
-        profile.negative_binomial_r = cli.nb_r;
-        profile.negative_binomial_p = cli.nb_p;
-        profile.pln_mu = cli.pln_mu;
-        profile.pln_sigma = cli.pln_sigma;
-        profile.strain_probabilities = protal::sim::parse_strain_probabilities(cli.strain_probabilities);
-        profile.include_species = protal::sim::parse_species_list(cli.include_species);
-        profile.genus_species_counts = protal::sim::parse_genus_selection(cli.genus_counts);
-        profile.taxon_species_counts = protal::sim::parse_taxon_selection(cli.taxon_counts);
-        profile.total_read_pairs = cli.total_read_pairs;
-        profile.pick_random_demand_if_fail = cli.pick_random_demand_if_fail;
-        if (!cli.strain_sharing_file.empty()) {
-            profile.strain_sharing = parse_strain_sharing_file(cli.strain_sharing_file);
-            std::cerr << "Loaded " << profile.strain_sharing.size()
-                      << " strain sharing spec(s) from " << cli.strain_sharing_file << '\n';
-        }
+        auto samples = cli.from_manifest ? replay_from_manifest(cli, genomes)
+                                         : design_and_simulate(cli, std::move(genomes));
 
-        std::uint64_t seed = cli.seed ? *cli.seed : std::random_device{}();
-        cli.art.threads = std::max(1, cli.threads);
-        MetagenomeSimulator simulator(std::move(genomes), cli.art, seed, cli.pigz_path);
-
-        auto samples =
-            simulator.simulate_samples(profile, cli.samples, cli.sample_prefix, cli.output_dir, cli.test_mode, cli.keep_tmp);
+        fs::create_directories(cli.output_dir);
+        write_run_params(cli, *cli.seed, argc, argv, cli.output_dir / "run_params.tsv");
 
         auto combined_manifest_path = cli.output_dir / "manifest.tsv";
         protal::sim::write_combined_manifest(samples, combined_manifest_path);

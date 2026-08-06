@@ -104,6 +104,22 @@ static ArtOverrideInfo parse_art_overrides(const std::vector<std::string>& extra
 ArtIlluminaWrapper::ArtIlluminaWrapper(ArtIlluminaOptions options)
     : options_(std::move(options)) {}
 
+std::optional<std::uint64_t> ArtIlluminaWrapper::seed_override() const {
+    const auto overrides = parse_art_overrides(options_.extra_args);
+    if (!overrides.has("-rs")) {
+        return std::nullopt;
+    }
+    const auto value = overrides.get("-rs");
+    if (!value || value->empty()) {
+        return std::nullopt;
+    }
+    try {
+        return std::stoull(*value);
+    } catch (const std::exception&) {
+        return std::nullopt;  // non-numeric: let ART complain about its own argument
+    }
+}
+
 void ArtIlluminaWrapper::decompress_gzip(const fs::path& gz_path, const fs::path& output_path) const {
     gzFile input = gzopen(gz_path.string().c_str(), "rb");
     if (!input) {
@@ -193,7 +209,7 @@ std::pair<fs::path, fs::path> ArtIlluminaWrapper::simulate_read_pairs(
     std::uint64_t read_pairs,
     std::uint64_t genome_length,
     const fs::path& output_prefix,
-    std::mt19937_64& rng,
+    unsigned int art_seed,
     const fs::path& temp_dir) const {
     if (read_pairs == 0 || genome_length == 0) {
         throw std::invalid_argument("read_pairs and genome_length must be greater than zero");
@@ -280,12 +296,11 @@ std::pair<fs::path, fs::path> ArtIlluminaWrapper::simulate_read_pairs(
 
     cmd.insert(cmd.end(), options_.extra_args.begin(), options_.extra_args.end());
 
-    const auto seed = static_cast<unsigned int>(rng());
     if (overrides.has("-rs")) {
         log_override("-rs", overrides.get("-rs"));
     } else {
         cmd.emplace_back("-rs");
-        cmd.emplace_back(std::to_string(seed));
+        cmd.emplace_back(std::to_string(art_seed));
     }
 
     if (!overrides.has("-o")) {

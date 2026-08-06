@@ -328,6 +328,25 @@ std::unordered_map<std::string, std::size_t> parse_taxon_selection(const std::st
     return taxon_counts;
 }
 
+// fasta_path and art_seed are appended after the historical columns, never inserted
+// between them: downstream consumers read manifests by column name, so growing the
+// header on the right keeps every existing reader working.
+static constexpr const char* kManifestHeader =
+    "sample\tgenome\tspecies\ttaxonomy\tgenome_length\tread_pairs\tvertical_coverage\trelative_abundance"
+    "\tfastq_r1\tfastq_r2\tfasta_path\tart_seed\n";
+
+static void write_manifest_row(std::ofstream& out, const SampleOutput& sample, const GenomeAssignment& assignment) {
+    out << sample.sample_name << '\t' << assignment.genome.name << '\t' << assignment.species << '\t'
+        << assignment.genome.taxonomy << '\t' << assignment.genome_length << '\t' << assignment.read_pairs << '\t'
+        << assignment.vertical_coverage << '\t' << assignment.relative_abundance << '\t'
+        << sample.read1_path.string() << '\t' << sample.read2_path.string() << '\t'
+        << assignment.genome.fasta_path.string() << '\t';
+    if (assignment.art_seed) {
+        out << *assignment.art_seed;
+    }
+    out << '\n';
+}
+
 void write_sample_manifest(const SampleOutput& sample, const fs::path& manifest_path) {
     if (!manifest_path.parent_path().empty()) {
         fs::create_directories(manifest_path.parent_path());
@@ -336,12 +355,9 @@ void write_sample_manifest(const SampleOutput& sample, const fs::path& manifest_
     if (!out) {
         throw std::runtime_error("Unable to write manifest: " + manifest_path.string());
     }
-    out << "sample\tgenome\tspecies\ttaxonomy\tgenome_length\tread_pairs\tvertical_coverage\trelative_abundance\tfastq_r1\tfastq_r2\n";
+    out << kManifestHeader;
     for (const auto& assignment : sample.assignments) {
-        out << sample.sample_name << '\t' << assignment.genome.name << '\t' << assignment.species << '\t'
-            << assignment.genome.taxonomy << '\t' << assignment.genome_length << '\t' << assignment.read_pairs << '\t'
-            << assignment.vertical_coverage << '\t' << assignment.relative_abundance << '\t'
-            << sample.read1_path.string() << '\t' << sample.read2_path.string() << '\n';
+        write_manifest_row(out, sample, assignment);
     }
 }
 
@@ -353,13 +369,10 @@ void write_combined_manifest(const std::vector<SampleOutput>& samples, const fs:
     if (!out) {
         throw std::runtime_error("Unable to write manifest: " + manifest_path.string());
     }
-    out << "sample\tgenome\tspecies\ttaxonomy\tgenome_length\tread_pairs\tvertical_coverage\trelative_abundance\tfastq_r1\tfastq_r2\n";
+    out << kManifestHeader;
     for (const auto& sample : samples) {
         for (const auto& assignment : sample.assignments) {
-            out << sample.sample_name << '\t' << assignment.genome.name << '\t' << assignment.species << '\t'
-                << assignment.genome.taxonomy << '\t' << assignment.genome_length << '\t' << assignment.read_pairs
-                << '\t' << assignment.vertical_coverage << '\t' << assignment.relative_abundance << '\t'
-                << sample.read1_path.string() << '\t' << sample.read2_path.string() << '\n';
+            write_manifest_row(out, sample, assignment);
         }
     }
 }
@@ -488,6 +501,17 @@ static void append_fastq(const fs::path& src, std::ofstream& dst)
 }
 
 
+static void normalize_relative_abundance(SampleOutput& sample) {
+    double coverage_sum = 0.0;
+    for (const auto& assignment : sample.assignments) {
+        coverage_sum += assignment.relative_abundance;
+    }
+    for (auto& assignment : sample.assignments) {
+        assignment.relative_abundance =
+            coverage_sum > 0.0 ? assignment.relative_abundance / coverage_sum : 0.0;
+    }
+}
+
 SampleOutput MetagenomeSimulator::simulate_single(
         const ProfileDesignOptions& profile_options,
         const std::string& sample_name,
@@ -495,9 +519,32 @@ SampleOutput MetagenomeSimulator::simulate_single(
         const std::unordered_map<std::string, std::uint64_t>& genome_lengths,
         std::uint64_t paired_read_length,
         bool skip_reads,
-        bool keep_tmp) 
+        bool keep_tmp)
 {
     auto assignments = designer_.design_profile(profile_options, rng_);
+    for (auto& assignment : assignments) {
+        auto it_len = genome_lengths.find(assignment.genome.name);
+        if (it_len == genome_lengths.end()) {
+            throw std::runtime_error("Missing genome length for " + assignment.genome.name);
+        }
+        assignment.genome_length = it_len->second;
+    }
+    SampleOutput sample{sample_name, {}, {}, std::move(assignments)};
+    render_sample(sample, output_dir, paired_read_length, skip_reads, keep_tmp);
+    return sample;
+}
+
+// Runs ART over assignments whose genome, read_pairs and genome_length are already
+// fixed — by the profile designer on a fresh run, or by a manifest on a replay.
+void MetagenomeSimulator::render_sample(
+        SampleOutput& sample,
+        const fs::path& output_dir,
+        std::uint64_t paired_read_length,
+        bool skip_reads,
+        bool keep_tmp)
+{
+    const std::string& sample_name = sample.sample_name;
+    auto& assignments = sample.assignments;
     fs::path reads_dir = output_dir / "reads";
     fs::create_directories(reads_dir);
     const fs::path sample_prefix = reads_dir / sample_name;
@@ -520,15 +567,24 @@ SampleOutput MetagenomeSimulator::simulate_single(
     }
 
     for (auto& assignment : assignments) {
-            auto it_len = genome_lengths.find(assignment.genome.name);
-            if (it_len == genome_lengths.end()) {
+            const auto genome_len = assignment.genome_length;
+            if (genome_len == 0) {
                 throw std::runtime_error("Missing genome length for " + assignment.genome.name);
             }
-            const auto genome_len = it_len->second;
+            // Drawn even when reads are skipped, so that a --test design and the
+            // corresponding real run consume the RNG identically.
+            const auto drawn_seed = static_cast<unsigned int>(rng_());
+            if (auto forced_seed = art_.seed_override()) {
+                // An -rs in extra_art_args beats both the drawn seed and a replayed one.
+                assignment.art_seed = *forced_seed;
+            } else if (!assignment.art_seed) {
+                assignment.art_seed = drawn_seed;
+            }
             if (!skip_reads) {
                 fs::path genome_prefix = temp_dir / assignment.genome.name;
                 auto [fq1, fq2] = art_.simulate_read_pairs(
-                    assignment.genome, assignment.read_pairs, genome_len, genome_prefix, rng_, temp_dir);
+                    assignment.genome, assignment.read_pairs, genome_len,
+                    genome_prefix, static_cast<unsigned int>(*assignment.art_seed), temp_dir);
                 append_fastq(fq1, r1_out);
                 append_fastq(fq2, r2_out);
             }
@@ -536,7 +592,6 @@ SampleOutput MetagenomeSimulator::simulate_single(
             const double coverage = bases / static_cast<double>(genome_len);
             assignment.vertical_coverage = coverage;
             assignment.relative_abundance = coverage;  // normalized later in simulate_samples
-            assignment.genome_length = genome_len;
     }
 
     fs::path r1_gz = r1_path;
@@ -570,7 +625,8 @@ SampleOutput MetagenomeSimulator::simulate_single(
         (void)placeholder2;
     }
 
-    return SampleOutput{sample_name, r1_gz, r2_gz, std::move(assignments)};
+    sample.read1_path = r1_gz;
+    sample.read2_path = r2_gz;
 }
 
 std::vector<SampleOutput> MetagenomeSimulator::simulate_samples(
@@ -615,19 +671,147 @@ std::vector<SampleOutput> MetagenomeSimulator::simulate_samples(
             simulate_single(per_sample_opts, name.str(), output_dir, genome_lengths, paired_read_length, skip_reads, keep_tmp);
         timer.Stop();
 
-        double coverage_sum = 0.0;
-        for (const auto& assignment : sample.assignments) {
-            coverage_sum += assignment.relative_abundance;
-        }
-        for (auto& assignment : sample.assignments) {
-            assignment.relative_abundance =
-                coverage_sum > 0.0 ? assignment.relative_abundance / coverage_sum : 0.0;
-        }
+        normalize_relative_abundance(sample);
 
         timer.PrintResults();
         outputs.push_back(std::move(sample));
     }
     return outputs;
+}
+
+std::vector<SampleOutput> MetagenomeSimulator::replay_samples(
+    std::vector<SampleOutput> design,
+    const fs::path& output_dir,
+    bool skip_reads,
+    bool keep_tmp)
+{
+    const auto paired_read_length = static_cast<std::uint64_t>(art_.options().read_length) * 2ULL;
+    for (auto& sample : design) {
+        protal::Benchmark timer("replay_metagenome " + sample.sample_name);
+        timer.Start();
+        render_sample(sample, output_dir, paired_read_length, skip_reads, keep_tmp);
+        timer.Stop();
+        normalize_relative_abundance(sample);
+        timer.PrintResults();
+    }
+    return design;
+}
+
+std::vector<SampleOutput> read_manifest(const fs::path& manifest_path) {
+    std::ifstream in(manifest_path);
+    if (!in) {
+        throw std::runtime_error("Unable to open manifest: " + manifest_path.string());
+    }
+
+    std::unordered_map<std::string, int> col;
+    std::vector<SampleOutput> samples;
+    std::unordered_map<std::string, std::size_t> sample_index;
+    std::string line;
+    std::size_t line_no = 0;
+    bool header_seen = false;
+
+    auto column = [&](const std::vector<std::string>& fields, const char* name, bool required) -> std::string {
+        auto it = col.find(name);
+        if (it == col.end() || static_cast<std::size_t>(it->second) >= fields.size() || fields[it->second].empty()) {
+            if (required) {
+                throw std::runtime_error("Manifest line " + std::to_string(line_no) + ": missing column \"" +
+                                         std::string(name) + "\" in " + manifest_path.string());
+            }
+            return {};
+        }
+        return fields[it->second];
+    };
+
+    while (std::getline(in, line)) {
+        ++line_no;
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+        auto fields = split_tab(line);
+        if (!header_seen) {
+            for (int i = 0; i < static_cast<int>(fields.size()); ++i) {
+                col.emplace(lowercase(fields[i]), i);
+            }
+            for (const char* required : {"sample", "genome", "species", "taxonomy", "genome_length", "read_pairs"}) {
+                if (!col.count(required)) {
+                    throw std::runtime_error("Manifest " + manifest_path.string() +
+                                             " is missing the required column \"" + std::string(required) + "\"");
+                }
+            }
+            header_seen = true;
+            continue;
+        }
+
+        const std::string sample_name = column(fields, "sample", true);
+        auto [it, inserted] = sample_index.emplace(sample_name, samples.size());
+        if (inserted) {
+            samples.push_back(SampleOutput{sample_name, {}, {}, {}});
+        }
+
+        GenomeAssignment assignment;
+        assignment.genome.name = column(fields, "genome", true);
+        assignment.genome.taxonomy = column(fields, "taxonomy", true);
+        assignment.genome.fasta_path = fs::path(column(fields, "fasta_path", false));
+        assignment.species = column(fields, "species", true);
+        try {
+            assignment.genome_length = std::stoull(column(fields, "genome_length", true));
+            assignment.read_pairs = std::stoull(column(fields, "read_pairs", true));
+        } catch (const std::exception&) {
+            throw std::runtime_error("Manifest line " + std::to_string(line_no) +
+                                     ": genome_length and read_pairs must be integers");
+        }
+        assignment.genome.genome_length = assignment.genome_length;
+        // Recorded so callers can recover the read length the run used; recomputed on replay.
+        const std::string vcov_field = column(fields, "vertical_coverage", false);
+        if (!vcov_field.empty()) {
+            assignment.vertical_coverage = std::stod(vcov_field);
+        }
+        const std::string seed_field = column(fields, "art_seed", false);
+        if (!seed_field.empty()) {
+            assignment.art_seed = std::stoull(seed_field);
+        }
+        samples[it->second].assignments.push_back(std::move(assignment));
+    }
+
+    if (samples.empty()) {
+        throw std::runtime_error("Manifest has no rows: " + manifest_path.string());
+    }
+    return samples;
+}
+
+void resolve_manifest_fasta_paths(std::vector<SampleOutput>& samples, const std::vector<GenomeRecord>& genomes) {
+    std::unordered_map<std::string, fs::path> by_name;
+    by_name.reserve(genomes.size());
+    for (const auto& genome : genomes) {
+        by_name.emplace(genome.name, genome.fasta_path);
+    }
+    std::vector<std::string> unresolved;
+    for (auto& sample : samples) {
+        for (auto& assignment : sample.assignments) {
+            if (!assignment.genome.fasta_path.empty()) {
+                continue;
+            }
+            auto it = by_name.find(assignment.genome.name);
+            if (it == by_name.end()) {
+                unresolved.push_back(assignment.genome.name);
+                continue;
+            }
+            assignment.genome.fasta_path = it->second;
+        }
+    }
+    if (!unresolved.empty()) {
+        std::sort(unresolved.begin(), unresolved.end());
+        unresolved.erase(std::unique(unresolved.begin(), unresolved.end()), unresolved.end());
+        std::string message = "Manifest has no fasta_path for " + std::to_string(unresolved.size()) +
+                              " genome(s) and they are absent from the genome table: ";
+        for (std::size_t i = 0; i < unresolved.size() && i < 5; ++i) {
+            message += (i ? ", " : "") + unresolved[i];
+        }
+        if (unresolved.size() > 5) {
+            message += ", ...";
+        }
+        throw std::runtime_error(message);
+    }
 }
 
 void write_abundance_matrix(const std::vector<SampleOutput>& samples, const fs::path& matrix_path) {

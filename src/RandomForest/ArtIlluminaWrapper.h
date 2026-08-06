@@ -20,10 +20,15 @@ public:
         std::uint64_t read_pairs,
         std::uint64_t genome_length,
         const std::filesystem::path& output_prefix,
-        std::mt19937_64& rng,
+        unsigned int art_seed,
         const std::filesystem::path& temp_dir) const;
 
     const ArtIlluminaOptions& options() const { return options_; }
+
+    // The seed from an -rs/--rndSeed in extra_args, which overrides the one this
+    // wrapper is handed. Callers record it so the manifest names the seed ART really
+    // used, not the one that was ignored.
+    std::optional<std::uint64_t> seed_override() const;
 
 private:
     ArtIlluminaOptions options_;

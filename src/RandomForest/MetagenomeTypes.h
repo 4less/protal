@@ -24,6 +24,9 @@ struct GenomeAssignment {
     double relative_abundance{0.0};
     double vertical_coverage{0.0};
     std::uint64_t genome_length{0};
+    // ART's --rndSeed for this genome. Recorded in the manifest so that a replay
+    // (--from_manifest) reproduces the reads themselves, not just the composition.
+    std::optional<std::uint64_t> art_seed;
 };
 
 enum class AbundanceDistribution {
