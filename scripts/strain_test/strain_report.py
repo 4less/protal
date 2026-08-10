@@ -83,7 +83,6 @@ SNP_FIELDS = [
 POS_FIELDS = [
     ("positions_below_min_cov", "below min cov"),
     ("positions_no_coverage", "no coverage"),
-    ("valid_positions_removed_by_vcov", "removed by vcov"),
 ]
 
 

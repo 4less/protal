@@ -19,7 +19,6 @@ namespace protal {
     static const size_t DEFAULT_THREADS = 1;
     static const size_t DEFAULT_ALIGN_TOP = 3;
     static const double DEFAULT_MAX_SCORE_ANI = 0.9;
-    static const double DEFAULT_MSA_MIN_VCOV = 0.5;
     static const size_t DEFAULT_MSA_MIN_HCOV = 1000;
     static const size_t DEFAULT_MIN_SUCCESSFUL_LOOKUPS = 4;
     static const size_t DEFAULT_X_DROP = 1000;
@@ -36,9 +35,9 @@ namespace protal {
     static const bool   DEFAULT_SNP_REQUIRE_STRAND = true; // disabled via --snp_no_strand
     static const size_t DEFAULT_SNP_MAX_ALLELES = 3;
     // protal emits a RAW MSA (all observed genes, all detected samples). Gene/sample
-    // coverage filtering lives entirely in the qcmsa post-filter (default on), where
-    // it can be re-tuned without re-running protal.
-    static const std::string DEFAULT_STRAIN_PRESET = "default";
+    // coverage filtering, multi-allelicity outlier removal and site cleanup all live
+    // in the qcmsa post-filter (default on), which owns their thresholds and can be
+    // re-run on the raw MSA without re-running protal. Reach them via --qcmsa_args.
 
     static cxxopts::Options CxxOptions() {
         cxxopts::Options options(
@@ -85,14 +84,17 @@ namespace protal {
                 ("snp_min_mean_qual", "Minimum mean base quality across supporting reads. Combined with --snp_min_phred_sum via OR: a variant passes quality if mean_qual >= snp_min_mean_qual OR phred_sum >= snp_min_phred_sum. Note: at low coverage, --snp_min_cov is the binding constraint regardless.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MIN_SNP_MEAN_QUAL)))
                 ("snp_min_af", "Minimum allele frequency for a variant (variant observations / position coverage). Interacts with --snp_min_cov: below coverage = snp_min_cov/snp_min_af, the count filter is stricter.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MIN_SNP_AF)))
                 ("snp_no_strand", "Disable strand-bias filter. By default protal requires at least one supporting read from each strand (forward and reverse); pass this flag to allow variants supported by a single strand.")
-                ("k,msa_min_vcov", "Fraction (0-1) of the MSA sequences that must carry a base other than '-' or 'N' at a position for that position to count as vertically covered. Protal itself no longer condenses the MSA, this value is only used to report 'valid positions removed by vertical coverage' per sample in <species>.snp_stats.tsv. Site filtering is done by the qcmsa post-filter.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_MSA_MIN_VCOV)))
                 ("msa_min_hcov", "Minimum non-N/non-'-' bases required per sequence to keep it in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_HCOV)))
                 ("msa_species", "Restrict MSAs to a single species (s__Genus_species) or a comma-separated list.", cxxopts::value<std::string>()->default_value(""))
-                ("snp_max_alleles", "Maximum number of alleles at a position to encode as an IUPAC ambiguity code in the MSA. 1 = only the top allele (standard), 2 = encode two-allele mixtures (e.g. R,Y), 3 = also encode three-allele mixtures (e.g. B,H). Alleles are ranked by observation count; ties go to higher-quality allele.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_SNP_MAX_ALLELES)))
-                ("no_qcmsa", "Disable the qcmsa post-filter. By default protal runs qcmsa (adaptive multi-allelicity outlier removal + site cleanup) on each species' raw MSA; it requires python3 and fails gracefully with a warning if python3 or the script cannot be found.")
-                ("strain_preset", "Aggressiveness preset passed through to qcmsa.py when the post-filter runs: strict | default | sensitive (tunes the Tukey IQR multiplier and min-bad count).", cxxopts::value<std::string>()->default_value(DEFAULT_STRAIN_PRESET))
-                ("qcmsa_script", "Path to (or name of) the qcmsa executable. If empty, protal looks for 'qcmsa' next to its own binary and then on $PATH, honours the PROTAL_QCMSA_SCRIPT environment variable, and finally falls back to the qcmsa.py script of a source checkout.", cxxopts::value<std::string>()->default_value(""))
-                ("qcmsa_args", "Extra arguments forwarded verbatim to qcmsa, e.g. --qcmsa_args \"--gene-min-hcov 0.5 --gene-min-samples 5\". They are appended last, so they override the options protal passes itself (--preset, --reapply-hcov). Run 'qcmsa --help' for the full list; protal does not validate them.", cxxopts::value<std::string>()->default_value(""));
+                ("snp_max_alleles", "Maximum number of alleles at a position to encode as an IUPAC ambiguity code in the MSA. 1 = only the top allele (standard), 2 = encode two-allele mixtures (e.g. R,Y), 3 = also encode three-allele mixtures (e.g. B,H). Alleles are ranked by observation count; ties go to higher-quality allele.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_SNP_MAX_ALLELES)));
+
+        // MSA post-filter. protal emits a raw MSA and hands it to qcmsa, which does
+        // all gene/sample coverage gating, multi-allelicity outlier removal and site
+        // cleanup. qcmsa owns these thresholds; protal only forwards.
+        options.add_options("qcmsa")
+                ("no_qcmsa", "Disable the qcmsa post-filter, leaving only protal's raw MSA. By default protal runs qcmsa (coverage gating, adaptive multi-allelicity outlier removal, site cleanup) on each species' raw MSA; it requires python3 and fails gracefully with a warning if python3 or the script cannot be found.")
+                ("qcmsa_args", "Extra arguments forwarded verbatim to qcmsa, e.g. --qcmsa_args \"--preset strict --gene-min-hcov 0.5\". This is how you reach every qcmsa knob (aggressiveness preset, coverage thresholds, site cleanup) -- protal has no equivalents of its own and keeps qcmsa's defaults. Appended last, so they override what protal passes itself (--reapply-hcov). Run 'qcmsa --help' for the full list; protal does not validate them.", cxxopts::value<std::string>()->default_value(""))
+                ("qcmsa_script", "Path to (or name of) the qcmsa executable. If empty, protal looks for 'qcmsa' next to its own binary and then on $PATH, honours the PROTAL_QCMSA_SCRIPT environment variable, and finally falls back to the qcmsa.py script of a source checkout.", cxxopts::value<std::string>()->default_value(""));
 
         
         // Advanced / benchmarking / build
@@ -178,7 +180,6 @@ namespace protal {
         size_t max_out = DEFAULT_MAX_OUT;
 
         // strains / MSA
-        double msa_min_vcov = DEFAULT_MSA_MIN_VCOV;
         size_t msa_min_hcov = DEFAULT_MSA_MIN_HCOV;
         std::vector<std::string> msa_species;
         size_t snp_min_cov = DEFAULT_MIN_SNP_COV;
@@ -188,7 +189,6 @@ namespace protal {
         bool   snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
         size_t snp_max_alleles = DEFAULT_SNP_MAX_ALLELES;
         bool   run_qcmsa = true;
-        std::string strain_preset = DEFAULT_STRAIN_PRESET;
         std::string qcmsa_script;
         std::string qcmsa_args;
     };
@@ -223,7 +223,6 @@ namespace protal {
         std::string m_output_dir;
         std::string m_strain_output_dir;
         std::string m_misc_output_dir;
-        std::string m_map_file;
 
         std::vector<std::string> m_first_list;
         std::vector<std::string> m_second_list;
@@ -250,7 +249,6 @@ namespace protal {
         size_t m_max_seed_size = DEFAULT_MAX_SEED_SIZE;
         size_t m_min_successful_lookups = DEFAULT_MIN_SUCCESSFUL_LOOKUPS;
         size_t m_max_out = DEFAULT_MAX_OUT;
-        double m_msa_min_vcov = DEFAULT_MSA_MIN_VCOV;
         size_t m_msa_min_hcov = DEFAULT_MSA_MIN_HCOV;
         std::vector<std::string> m_msa_species;
 
@@ -261,7 +259,6 @@ namespace protal {
         bool   m_snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
         size_t m_snp_max_alleles = DEFAULT_SNP_MAX_ALLELES;
         bool   m_run_qcmsa = true;
-        std::string m_strain_preset = DEFAULT_STRAIN_PRESET;
         std::string m_qcmsa_script;
         std::string m_qcmsa_args;
 
@@ -272,10 +269,6 @@ namespace protal {
         static inline const std::string PROTAL_HITTABLE_GENES_FILE = "species_gene_mask.tsv";
         static inline const std::string PROTAL_UNIQUE_KMER_FILE = "unique_kmers.tsv";
         static inline const std::string PROTAL_TAXONOMY_FILE = "internal_taxonomy.dmp";
-
-        // DEPRECATED
-        static inline const std::string PROTAL_TAXONOMY_GTDB_FILE = "internal_taxonomy_gtdb.dmp";
-        static inline const std::string PROTAL_TAXONOMY_NCBI_FILE = "internal_taxonomy_ncbi.dmp";
 
         static inline const std::string MAP_SAMPLEID = "#SAMPLEID";
         static inline const std::string MAP_FIRST_READ = "FIRST";
@@ -328,7 +321,6 @@ namespace protal {
                 m_output_dir(std::move(d.output_dir)),
                 m_strain_output_dir(std::move(d.strain_output_dir)),
                 m_misc_output_dir(std::move(d.misc_output_dir)),
-                m_map_file(std::move(d.map_file)),
                 m_first_list(std::move(d.first_list)),
                 m_second_list(std::move(d.second_list)),
                 m_prefix_list(std::move(d.prefix_list)),
@@ -347,7 +339,6 @@ namespace protal {
                 m_max_seed_size(d.max_seed_size),
                 m_min_successful_lookups(d.min_successful_lookups),
                 m_max_out(d.max_out),
-                m_msa_min_vcov(d.msa_min_vcov),
                 m_msa_min_hcov(d.msa_min_hcov),
                 m_msa_species(std::move(d.msa_species)),
                 m_snp_min_cov(d.snp_min_cov),
@@ -357,7 +348,6 @@ namespace protal {
                 m_snp_require_strand(d.snp_require_strand),
                 m_snp_max_alleles(d.snp_max_alleles),
                 m_run_qcmsa(d.run_qcmsa),
-                m_strain_preset(std::move(d.strain_preset)),
                 m_qcmsa_script(std::move(d.qcmsa_script)),
                 m_qcmsa_args(std::move(d.qcmsa_args)) {
             if (d.samplename_list.empty()) {
@@ -417,7 +407,6 @@ namespace protal {
             result_str << "snp require strand:  " << (m_snp_require_strand ? "yes" : "no (--snp_no_strand)") << '\n';
             result_str << "snp max alleles:     " << std::to_string(m_snp_max_alleles) << '\n';
             result_str << "run qcmsa:           " << (m_run_qcmsa ? "yes" : "no") << '\n';
-            if (m_run_qcmsa) result_str << "strain preset:       " << m_strain_preset << '\n';
             if (m_run_qcmsa && !m_qcmsa_args.empty())
                 result_str << "qcmsa extra args:    " << m_qcmsa_args << '\n';
             result_str << "msa species:         " << Utils::join(m_msa_species, ",") << '\n';
@@ -513,24 +502,12 @@ namespace protal {
             return m_full_sequence_file;
         }
 
-        std::string GetIndexFolder() const {
-            return m_database_path;
-        }
-
         std::string GetIndexFile() const {
             return m_database_path + "/" + PROTAL_INDEX_FILE;
         }
 
         std::string GetInternalTaxonomyFile() const {
             return m_database_path + "/" + PROTAL_TAXONOMY_FILE;
-        }
-
-        std::string GetInternalTaxonomyGTDBFile() const {
-            return m_database_path + "/" + PROTAL_TAXONOMY_GTDB_FILE;
-        }
-
-        std::string GetInternalTaxonomyNCBIFile() const {
-            return m_database_path + "/" + PROTAL_TAXONOMY_NCBI_FILE;
         }
 
         std::string GetSequenceFile() const {
@@ -595,18 +572,6 @@ namespace protal {
 //        std::string GetSecondFile() const {
 //            return m_second;
 //        }
-
-        std::vector<std::string> GetFirstFiles() const {
-            return m_first_list;
-        }
-
-        std::vector<std::string> GetSecondFiles() const {
-            return m_second_list;
-        }
-
-        std::vector<std::string> GetPrefixes() const {
-            return m_prefix_list;
-        }
 
         size_t GetFileCount() const {
             return m_prefix_list.size();
@@ -763,10 +728,6 @@ namespace protal {
             return m_profile_truth_list.size() == m_profile_list.size();
         }
 
-        auto GetMSAMinVCOV() {
-            return m_msa_min_vcov;
-        }
-
         auto GetMSAMinHCOV() {
             return m_msa_min_hcov;
         }
@@ -781,7 +742,6 @@ namespace protal {
         auto GetSNPRequireStrand() const { return m_snp_require_strand; }
         auto GetSNPMaxAlleles() const { return m_snp_max_alleles; }
         bool GetRunQCMSA() const { return m_run_qcmsa; }
-        const std::string& GetStrainPreset() const { return m_strain_preset; }
         const std::string& GetQCMSAScript() const { return m_qcmsa_script; }
         const std::string& GetQCMSAArgs() const { return m_qcmsa_args; }
 
@@ -816,7 +776,7 @@ namespace protal {
         void PrintHelp(bool show_dev=false) {
             // print groups in desired order, skip groups that start with '_' (hidden)
             auto opt = CxxOptions();
-            std::vector<std::string> groups = { "I/O", "Profiling", "Strains", "General" };
+            std::vector<std::string> groups = { "I/O", "Profiling", "Strains", "qcmsa", "General" };
 
             if (show_dev) {
                 groups.push_back("Alignment");
@@ -1374,7 +1334,6 @@ sample its own SAM/PROFILE name, otherwise the samples overwrite each other's ou
             size_t min_successful_lookups = result["min_successful_lookups"].as<size_t>();
             size_t max_seed_size = result["max_seed_size"].as<size_t>();
             double max_score_ani = result["max_score_ani"].as<double>();
-            double msa_min_vcov = result["msa_min_vcov"].as<double>();
             size_t msa_min_hcov = result["msa_min_hcov"].as<size_t>();
             size_t max_out = result["max_out"].as<size_t>();
             auto msa_species_arg = result["msa_species"].as<std::string>();
@@ -1398,14 +1357,8 @@ sample its own SAM/PROFILE name, otherwise the samples overwrite each other's ou
             bool   snp_require_strand = !result.count("snp_no_strand");
             size_t snp_max_alleles    = result["snp_max_alleles"].as<size_t>();
             bool   run_qcmsa          = !result.count("no_qcmsa");  // on by default
-            std::string strain_preset = result["strain_preset"].as<std::string>();
             std::string qcmsa_script  = result["qcmsa_script"].as<std::string>();
             std::string qcmsa_args    = result["qcmsa_args"].as<std::string>();
-            if (strain_preset != "strict" && strain_preset != "default" && strain_preset != "sensitive") {
-                std::cerr << "Invalid --strain_preset '" << strain_preset
-                          << "'. Must be one of: strict, default, sensitive." << std::endl;
-                exit(1);
-            }
 
 
             auto reference = result["reference"].as<std::string>();
@@ -1658,7 +1611,6 @@ sample its own SAM/PROFILE name, otherwise the samples overwrite each other's ou
             d.align_top                = align_top;
             d.max_out                  = max_out;
             d.max_score_ani            = max_score_ani;
-            d.msa_min_vcov             = msa_min_vcov;
             d.msa_min_hcov             = msa_min_hcov;
             d.msa_species              = std::move(msa_species);
             d.snp_min_phred_sum        = snp_min_phred_sum;
@@ -1667,7 +1619,6 @@ sample its own SAM/PROFILE name, otherwise the samples overwrite each other's ou
             d.snp_min_mean_qual        = snp_min_mean_qual;
             d.snp_require_strand       = snp_require_strand;
             d.run_qcmsa                = run_qcmsa;
-            d.strain_preset            = std::move(strain_preset);
             d.qcmsa_script             = std::move(qcmsa_script);
             d.qcmsa_args               = std::move(qcmsa_args);
             d.snp_max_alleles          = snp_max_alleles;

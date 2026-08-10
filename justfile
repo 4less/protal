@@ -63,7 +63,7 @@ strain-protal:
     PROTAL_DB_PATH="{{strain_db}}" {{protal}} profile \
         --map {{strain_run}}/strain_test_map.tsv \
         -t {{strain_threads}} \
-        --strain_preset {{preset}} {{strain_protal_filter_args}} \
+        --qcmsa_args "--preset {{preset}}" {{strain_protal_filter_args}} \
         > {{strain_run}}/protal_run.log 2>&1 || true
     -tr '\r' '\n' < {{strain_run}}/protal_run.log | grep -vE '^\[=*>* *\] *[0-9]+ %' | tail -40
 

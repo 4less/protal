@@ -59,18 +59,18 @@ It writes (prefix defaults to `<species>`, i.e. the input path minus `.raw.msa.f
 
 ## Setting qcmsa options from a protal run
 
-protal passes `--prefix`, `--preset` (from `--strain_preset`) and `--reapply-hcov`
-(from `--msa_min_hcov`) itself. Every other qcmsa flag is reachable via
+protal passes only `--prefix` and `--reapply-hcov` (from `--msa_min_hcov`) itself;
+everything else keeps qcmsa's own defaults. Every qcmsa flag is reachable through
 `--qcmsa_args`, forwarded verbatim:
 
 ```bash
-protal profile ... --qcmsa_args "--gene-min-hcov 0.5 --gene-min-samples 5"
+protal profile ... --qcmsa_args "--preset strict --gene-min-hcov 0.5"
 ```
 
 These are appended last, so they also override what protal passes — e.g.
-`--qcmsa_args "--preset strict"` beats `--strain_preset default`. protal does not
-validate them; a bad flag surfaces as a qcmsa error and the post-filter is skipped
-for that species with a warning.
+`--qcmsa_args "--reapply-hcov 0"` beats the value derived from `--msa_min_hcov`.
+protal does not validate them; a bad flag surfaces as a qcmsa error and the
+post-filter is skipped for that species with a warning.
 
 ### Sites and sequences
 | flag | default | effect |
@@ -82,15 +82,15 @@ for that species with a warning.
 ## How to change the parameters — three ways
 
 ### 1. Through protal (the easy knob)
-protal runs qcmsa automatically. The one parameter it forwards is the preset:
+protal runs qcmsa automatically; pass its flags through with `--qcmsa_args`:
 
 ```bash
-protal profile --map map.tsv --strain_preset sensitive   # strict | default | sensitive
-protal profile --map map.tsv --no_qcmsa                   # skip qcmsa entirely
+protal profile --map map.tsv --qcmsa_args "--preset sensitive"  # strict|default|sensitive
+protal profile --map map.tsv --no_qcmsa                          # skip qcmsa entirely
 ```
 
-For anything beyond the preset, re-filter the output (below) — you do **not** need
-to re-run protal.
+You can also re-filter existing output (below) with any parameters — that never
+requires re-running protal.
 
 ### 2. Re-filter an existing run (recommended for tuning)
 Run qcmsa directly on the MSA/partition/meta protal already wrote. Nothing is

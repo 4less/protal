@@ -290,7 +290,6 @@ namespace protal {
         size_t positions_no_coverage = 0;      ///< No coverage or sample absent → gap
 
         // Filled externally after ProcessMSA (vertical coverage filter)
-        size_t valid_positions_removed_by_vcov = 0; ///< Positions with valid (non-N, non-gap) bases dropped by vcov filter
 
         size_t TotalPass() const {
             return snps_retained + insertions_retained + deletions_retained;
@@ -372,12 +371,6 @@ namespace protal {
             return d > 0 ? 100.0 * positions_no_coverage / d : 0.0;
         }
 
-        double PctValidRemovedByVcov() const {
-            // Denominator: all positions that had a valid (non-N, non-gap) base before vcov filter.
-            auto valid_before = TotalPass() + positions_ref;
-            return valid_before > 0 ? 100.0 * valid_positions_removed_by_vcov / valid_before : 0.0;
-        }
-
         MSASampleStats& operator+=(MSASampleStats const& o) {
             snps_retained              += o.snps_retained;
             insertions_retained        += o.insertions_retained;
@@ -389,7 +382,6 @@ namespace protal {
             positions_ref              += o.positions_ref;
             positions_below_min_cov    += o.positions_below_min_cov;
             positions_no_coverage      += o.positions_no_coverage;
-            valid_positions_removed_by_vcov += o.valid_positions_removed_by_vcov;
             return *this;
         }
     };
