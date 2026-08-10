@@ -97,6 +97,7 @@ add_executable(protal_static
         protal_config.h.in)
 target_compile_options(protal_static PRIVATE ${PROTAL_COMMON_COMPILE_OPTIONS})
 target_link_options(protal_static PRIVATE -static -static-libgcc -static-libstdc++)
+set_target_properties(protal_static PROPERTIES OUTPUT_NAME "protal_${PROJECT_VERSION}_static")
 
 add_executable(protal_avx2
         src/main.cpp

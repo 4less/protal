@@ -96,8 +96,7 @@ namespace protal {
                 ("gene_min_hcov_frac", "In-protal gene horizontal-coverage filter. OFF by default (0) -- protal emits a raw MSA and the qcmsa post-filter does this (--gene-min-hcov). Set > 0 to make protal gap-fill cells whose gene is covered below this fraction.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_HCOV_FRAC)))
                 ("gene_min_mean_depth", "In-protal gene depth filter. OFF by default (0) -- handled by qcmsa (--gene-min-mean-depth). Set > 0 to make protal gap-fill cells below this mean depth.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_MEAN_DEPTH)))
                 ("msa_min_samples", "In-protal min-samples-per-gene filter. OFF by default (0) -- handled by qcmsa (--gene-min-samples). Set > 0 to drop genes carried by <= this many samples from protal's MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_SAMPLES)))
-                ("run_qcmsa", "Run the qcmsa.py post-filter (adaptive multi-allelicity outlier removal + site cleanup) on each species' raw MSA. This is the default, so the flag only makes the default explicit and cannot be combined with --no_qcmsa. Requires python3; fails gracefully with a warning if python3 or the script cannot be found.")
-                ("no_qcmsa", "Disable the qcmsa post-filter (it is on by default).")
+                ("no_qcmsa", "Disable the qcmsa post-filter. By default protal runs qcmsa (adaptive multi-allelicity outlier removal + site cleanup) on each species' raw MSA; it requires python3 and fails gracefully with a warning if python3 or the script cannot be found.")
                 ("strain_preset", "Aggressiveness preset passed through to qcmsa.py when the post-filter runs: strict | default | sensitive (tunes the Tukey IQR multiplier and min-bad count).", cxxopts::value<std::string>()->default_value(DEFAULT_STRAIN_PRESET))
                 ("qcmsa_script", "Path to (or name of) the qcmsa executable. If empty, protal looks for 'qcmsa' next to its own binary and then on $PATH, honours the PROTAL_QCMSA_SCRIPT environment variable, and finally falls back to the qcmsa.py script of a source checkout.", cxxopts::value<std::string>()->default_value(""));
 
@@ -1416,11 +1415,6 @@ sample its own SAM/PROFILE name, otherwise the samples overwrite each other's ou
             double gene_min_hcov_frac = result["gene_min_hcov_frac"].as<double>();
             double gene_min_mean_depth = result["gene_min_mean_depth"].as<double>();
             size_t msa_min_samples    = result["msa_min_samples"].as<size_t>();
-            if (result.count("no_qcmsa") && result.count("run_qcmsa")) {
-                std::cerr << "--run_qcmsa and --no_qcmsa are mutually exclusive. The qcmsa post-filter "
-                             "runs by default, pass only --no_qcmsa to switch it off." << std::endl;
-                exit(1);
-            }
             bool   run_qcmsa          = !result.count("no_qcmsa");  // on by default
             std::string strain_preset = result["strain_preset"].as<std::string>();
             std::string qcmsa_script  = result["qcmsa_script"].as<std::string>();

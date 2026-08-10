@@ -5,7 +5,7 @@ set shell := ["bash", "-cu"]
 # ----------------------------------------------------------------------------
 build_dir   := "build"
 protal      := build_dir / "protal"
-strain_db   := env_var_or_default("PROTAL_DB_PATH", "/home/fritscher/data/db/tool/protal/protal-db-r226-0.5.1a")
+strain_db   := env_var_or_default("PROTAL_DB_PATH", "/home/fritscher/data/db/tool/protal/protal-db-r226-0.6.0a")
 strain_input:= "/home/fritscher/non-git/simulate_metagenomes_test/test2"   # simulated dataset (input)
 strain_out  := justfile_directory() / "strain_test_out"
 strain_variant := "test1"                 # output subfolder: test1 (full filtering) / test2 (raw)
@@ -44,7 +44,7 @@ strain-dbcounts:
         --out {{strain_run}}/db_gene_counts.tsv
 
 # Build a map that reuses the existing alignments + reads and writes strain
-# results into the repo-local run dir, then run protal with --run_qcmsa (M5).
+# results into the repo-local run dir, then run protal with the qcmsa post-filter (M5).
 strain-protal:
     mkdir -p {{strain_run}}/strains {{strain_run}}/misc {{strain_run}}/profiles
     # Assemble the map: base OUTPUT_DIR + reuse existing SAMs/reads, local strain output.
@@ -63,7 +63,7 @@ strain-protal:
     PROTAL_DB_PATH="{{strain_db}}" {{protal}} profile \
         --map {{strain_run}}/strain_test_map.tsv \
         -t {{strain_threads}} \
-        --run_qcmsa --strain_preset {{preset}} {{strain_protal_filter_args}} \
+        --strain_preset {{preset}} {{strain_protal_filter_args}} \
         > {{strain_run}}/protal_run.log 2>&1 || true
     -tr '\r' '\n' < {{strain_run}}/protal_run.log | grep -vE '^\[=*>* *\] *[0-9]+ %' | tail -40
 

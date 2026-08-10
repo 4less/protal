@@ -560,7 +560,7 @@ def main(argv=None):
     kept_names = [n for n in names if n not in sample_set or n not in filtered_samples]
 
     # Degenerate MSA (e.g. only the reference survived protal's row filter): nothing
-    # meaningful to filter. Warn and skip gracefully so batch/--run_qcmsa runs continue.
+    # meaningful to filter. Warn and skip gracefully so batch/protal-driven runs continue.
     n_sample_seqs = sum(1 for n in kept_names if n in sample_set)
     if n_sample_seqs < 2:
         sys.stderr.write(
