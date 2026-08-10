@@ -1199,6 +1199,9 @@ namespace protal {
             << " --prefix " << ShellQuote(prefix)
             << " --preset " << ShellQuote(options.GetStrainPreset())
             << " --reapply-hcov " << options.GetMSAMinHCOV();
+        // User-supplied flags go last so they win over the defaults protal passes
+        // above. Forwarded verbatim (unquoted) -- they are a flag list, not a value.
+        if (!options.GetQCMSAArgs().empty()) cmd << ' ' << options.GetQCMSAArgs();
         std::cerr << "[qcmsa] " << cmd.str() << std::endl;
         int rc = std::system(cmd.str().c_str());
         if (rc != 0) {
@@ -1215,9 +1218,6 @@ namespace protal {
         auto require_strand = options.GetSNPRequireStrand();
         auto min_mean_qual = options.GetSNPMinMeanQual();
         auto snp_max_alleles = options.GetSNPMaxAlleles();
-        auto gene_min_hcov_frac = options.GetGeneMinHCovFrac();
-        auto gene_min_mean_depth = options.GetGeneMinMeanDepth();
-        auto min_samples_with_gene = options.GetMSAMinSamples();
 
         std::vector<size_t> profile_indices = GetProfilesWithTaxon(taxid, profiles, options, filter);
 
@@ -1288,21 +1288,13 @@ namespace protal {
                     double median_vcov_nonzero = 0.0;
                     double hcov = static_cast<double>(counts_vcov1) / static_cast<double>(gene_obs.m_gene_length);
 
-                    // M3: per-sample gene coverage filter. A gene that is too sparsely
-                    // covered (horizontally or in depth) for this sample is treated as
-                    // absent (gap-filled) rather than contributing a noisy sequence.
-                    double mean_depth_covered = counts_vcov1 > 0
-                        ? std::accumulate(tmp_vec.begin(), tmp_vec.end(), 0.0) / static_cast<double>(counts_vcov1)
-                        : 0.0;
-                    bool gene_passes = hcov >= gene_min_hcov_frac && mean_depth_covered >= gene_min_mean_depth;
-
-                    if (gene_passes) {
-                        samples_with_gene++;
-                        auto snps = SharedAlignmentRegion::GetSNPs(strain.GetVariantHandler());
-                        items.emplace_back( OptionalMSASequenceItem { { std::move(snps), region } } );
-                    } else {
-                        items.emplace_back(OptionalMSASequenceItem{});
-                    }
+                    // protal emits a raw MSA: every observed gene contributes its
+                    // sequence. Coverage-based gating (horizontal coverage, depth,
+                    // min samples per gene) is done by the qcmsa post-filter, which
+                    // reads the hcov / mean_vcov_nonzero columns written below.
+                    samples_with_gene++;
+                    auto snps = SharedAlignmentRegion::GetSNPs(strain.GetVariantHandler());
+                    items.emplace_back( OptionalMSASequenceItem { { std::move(snps), region } } );
 
                     if (os_meta) {
                         auto sorted_cov = tmp_vec;
@@ -1349,7 +1341,7 @@ namespace protal {
                     }
                 }
             }
-            if (samples_with_gene > min_samples_with_gene) {
+            if (samples_with_gene > 0) {
                 previous_size = msa.front().size();
 
                 //

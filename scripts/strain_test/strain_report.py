@@ -122,7 +122,10 @@ def load_db_gene_counts(path):
 
 
 # Default protal M3 thresholds (see Options.h). Used if not overridden/parsed.
-M3_DEFAULTS = dict(hcov=0.50, depth=3.0, min_samples=3)
+# protal no longer filters by gene coverage -- it emits a raw MSA and qcmsa gates.
+# These stay configurable so runs from older protal versions (whose log still carries
+# the thresholds, see parse_m3_params) can have their funnel reconstructed.
+M3_DEFAULTS = dict(hcov=0.0, depth=0.0, min_samples=0)
 
 
 def parse_m3_params(log_path):

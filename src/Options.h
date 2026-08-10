@@ -35,13 +35,9 @@ namespace protal {
     static const size_t DEFAULT_MIN_SNP_MEAN_QUAL = 15;
     static const bool   DEFAULT_SNP_REQUIRE_STRAND = true; // disabled via --snp_no_strand
     static const size_t DEFAULT_SNP_MAX_ALLELES = 3;
-    // Gene/sample coverage filtering is OFF by default: protal emits a RAW MSA
-    // (all observed genes, all detected samples) and the qcmsa post-filter (default
-    // on) does the coverage + multi-allelicity filtering, so it can be re-tuned
-    // without re-running protal. Set these > 0 to make protal filter internally.
-    static const double DEFAULT_GENE_MIN_HCOV_FRAC = 0.0;    // off (qcmsa --gene-min-hcov)
-    static const double DEFAULT_GENE_MIN_MEAN_DEPTH = 0.0;   // off (qcmsa --gene-min-mean-depth)
-    static const size_t DEFAULT_MSA_MIN_SAMPLES = 0;         // off (qcmsa --gene-min-samples)
+    // protal emits a RAW MSA (all observed genes, all detected samples). Gene/sample
+    // coverage filtering lives entirely in the qcmsa post-filter (default on), where
+    // it can be re-tuned without re-running protal.
     static const std::string DEFAULT_STRAIN_PRESET = "default";
 
     static cxxopts::Options CxxOptions() {
@@ -93,12 +89,10 @@ namespace protal {
                 ("msa_min_hcov", "Minimum non-N/non-'-' bases required per sequence to keep it in the MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_HCOV)))
                 ("msa_species", "Restrict MSAs to a single species (s__Genus_species) or a comma-separated list.", cxxopts::value<std::string>()->default_value(""))
                 ("snp_max_alleles", "Maximum number of alleles at a position to encode as an IUPAC ambiguity code in the MSA. 1 = only the top allele (standard), 2 = encode two-allele mixtures (e.g. R,Y), 3 = also encode three-allele mixtures (e.g. B,H). Alleles are ranked by observation count; ties go to higher-quality allele.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_SNP_MAX_ALLELES)))
-                ("gene_min_hcov_frac", "In-protal gene horizontal-coverage filter. OFF by default (0) -- protal emits a raw MSA and the qcmsa post-filter does this (--gene-min-hcov). Set > 0 to make protal gap-fill cells whose gene is covered below this fraction.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_HCOV_FRAC)))
-                ("gene_min_mean_depth", "In-protal gene depth filter. OFF by default (0) -- handled by qcmsa (--gene-min-mean-depth). Set > 0 to make protal gap-fill cells below this mean depth.", cxxopts::value<double>()->default_value(std::to_string(DEFAULT_GENE_MIN_MEAN_DEPTH)))
-                ("msa_min_samples", "In-protal min-samples-per-gene filter. OFF by default (0) -- handled by qcmsa (--gene-min-samples). Set > 0 to drop genes carried by <= this many samples from protal's MSA.", cxxopts::value<size_t>()->default_value(std::to_string(DEFAULT_MSA_MIN_SAMPLES)))
                 ("no_qcmsa", "Disable the qcmsa post-filter. By default protal runs qcmsa (adaptive multi-allelicity outlier removal + site cleanup) on each species' raw MSA; it requires python3 and fails gracefully with a warning if python3 or the script cannot be found.")
                 ("strain_preset", "Aggressiveness preset passed through to qcmsa.py when the post-filter runs: strict | default | sensitive (tunes the Tukey IQR multiplier and min-bad count).", cxxopts::value<std::string>()->default_value(DEFAULT_STRAIN_PRESET))
-                ("qcmsa_script", "Path to (or name of) the qcmsa executable. If empty, protal looks for 'qcmsa' next to its own binary and then on $PATH, honours the PROTAL_QCMSA_SCRIPT environment variable, and finally falls back to the qcmsa.py script of a source checkout.", cxxopts::value<std::string>()->default_value(""));
+                ("qcmsa_script", "Path to (or name of) the qcmsa executable. If empty, protal looks for 'qcmsa' next to its own binary and then on $PATH, honours the PROTAL_QCMSA_SCRIPT environment variable, and finally falls back to the qcmsa.py script of a source checkout.", cxxopts::value<std::string>()->default_value(""))
+                ("qcmsa_args", "Extra arguments forwarded verbatim to qcmsa, e.g. --qcmsa_args \"--gene-min-hcov 0.5 --gene-min-samples 5\". They are appended last, so they override the options protal passes itself (--preset, --reapply-hcov). Run 'qcmsa --help' for the full list; protal does not validate them.", cxxopts::value<std::string>()->default_value(""));
 
         
         // Advanced / benchmarking / build
@@ -193,12 +187,10 @@ namespace protal {
         size_t snp_min_mean_qual = DEFAULT_MIN_SNP_MEAN_QUAL;
         bool   snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
         size_t snp_max_alleles = DEFAULT_SNP_MAX_ALLELES;
-        double gene_min_hcov_frac = DEFAULT_GENE_MIN_HCOV_FRAC;
-        double gene_min_mean_depth = DEFAULT_GENE_MIN_MEAN_DEPTH;
-        size_t msa_min_samples = DEFAULT_MSA_MIN_SAMPLES;
         bool   run_qcmsa = true;
         std::string strain_preset = DEFAULT_STRAIN_PRESET;
         std::string qcmsa_script;
+        std::string qcmsa_args;
     };
 
     class Options {
@@ -268,12 +260,10 @@ namespace protal {
         size_t m_snp_min_mean_qual = DEFAULT_MIN_SNP_MEAN_QUAL;
         bool   m_snp_require_strand = DEFAULT_SNP_REQUIRE_STRAND;
         size_t m_snp_max_alleles = DEFAULT_SNP_MAX_ALLELES;
-        double m_gene_min_hcov_frac = DEFAULT_GENE_MIN_HCOV_FRAC;
-        double m_gene_min_mean_depth = DEFAULT_GENE_MIN_MEAN_DEPTH;
-        size_t m_msa_min_samples = DEFAULT_MSA_MIN_SAMPLES;
         bool   m_run_qcmsa = true;
         std::string m_strain_preset = DEFAULT_STRAIN_PRESET;
         std::string m_qcmsa_script;
+        std::string m_qcmsa_args;
 
     public:
         static inline const std::string PROTAL_INDEX_FILE = "index.prx";
@@ -366,12 +356,10 @@ namespace protal {
                 m_snp_min_mean_qual(d.snp_min_mean_qual),
                 m_snp_require_strand(d.snp_require_strand),
                 m_snp_max_alleles(d.snp_max_alleles),
-                m_gene_min_hcov_frac(d.gene_min_hcov_frac),
-                m_gene_min_mean_depth(d.gene_min_mean_depth),
-                m_msa_min_samples(d.msa_min_samples),
                 m_run_qcmsa(d.run_qcmsa),
                 m_strain_preset(std::move(d.strain_preset)),
-                m_qcmsa_script(std::move(d.qcmsa_script)) {
+                m_qcmsa_script(std::move(d.qcmsa_script)),
+                m_qcmsa_args(std::move(d.qcmsa_args)) {
             if (d.samplename_list.empty()) {
                 m_sampleid_list = m_prefix_list;
             } else {
@@ -428,11 +416,10 @@ namespace protal {
             result_str << "snp min af:          " << std::to_string(m_snp_min_af) << '\n';
             result_str << "snp require strand:  " << (m_snp_require_strand ? "yes" : "no (--snp_no_strand)") << '\n';
             result_str << "snp max alleles:     " << std::to_string(m_snp_max_alleles) << '\n';
-            result_str << "gene min hcov frac:  " << std::to_string(m_gene_min_hcov_frac) << '\n';
-            result_str << "gene min mean depth: " << std::to_string(m_gene_min_mean_depth) << '\n';
-            result_str << "msa min samples:     " << std::to_string(m_msa_min_samples) << '\n';
             result_str << "run qcmsa:           " << (m_run_qcmsa ? "yes" : "no") << '\n';
             if (m_run_qcmsa) result_str << "strain preset:       " << m_strain_preset << '\n';
+            if (m_run_qcmsa && !m_qcmsa_args.empty())
+                result_str << "qcmsa extra args:    " << m_qcmsa_args << '\n';
             result_str << "msa species:         " << Utils::join(m_msa_species, ",") << '\n';
             result_str << "msa min hcov:        " << std::to_string(m_msa_min_hcov) << '\n';
             result_str << "---- Dev Options ----" << std::string(30, '-') << '\n';
@@ -793,12 +780,10 @@ namespace protal {
         auto GetSNPMinMeanQual() const { return m_snp_min_mean_qual; }
         auto GetSNPRequireStrand() const { return m_snp_require_strand; }
         auto GetSNPMaxAlleles() const { return m_snp_max_alleles; }
-        auto GetGeneMinHCovFrac() const { return m_gene_min_hcov_frac; }
-        auto GetGeneMinMeanDepth() const { return m_gene_min_mean_depth; }
-        auto GetMSAMinSamples() const { return m_msa_min_samples; }
         bool GetRunQCMSA() const { return m_run_qcmsa; }
         const std::string& GetStrainPreset() const { return m_strain_preset; }
         const std::string& GetQCMSAScript() const { return m_qcmsa_script; }
+        const std::string& GetQCMSAArgs() const { return m_qcmsa_args; }
 
         size_t GetAlignTop() const {
             return m_align_top;
@@ -1412,12 +1397,10 @@ sample its own SAM/PROFILE name, otherwise the samples overwrite each other's ou
             size_t snp_min_mean_qual  = result["snp_min_mean_qual"].as<size_t>();
             bool   snp_require_strand = !result.count("snp_no_strand");
             size_t snp_max_alleles    = result["snp_max_alleles"].as<size_t>();
-            double gene_min_hcov_frac = result["gene_min_hcov_frac"].as<double>();
-            double gene_min_mean_depth = result["gene_min_mean_depth"].as<double>();
-            size_t msa_min_samples    = result["msa_min_samples"].as<size_t>();
             bool   run_qcmsa          = !result.count("no_qcmsa");  // on by default
             std::string strain_preset = result["strain_preset"].as<std::string>();
             std::string qcmsa_script  = result["qcmsa_script"].as<std::string>();
+            std::string qcmsa_args    = result["qcmsa_args"].as<std::string>();
             if (strain_preset != "strict" && strain_preset != "default" && strain_preset != "sensitive") {
                 std::cerr << "Invalid --strain_preset '" << strain_preset
                           << "'. Must be one of: strict, default, sensitive." << std::endl;
@@ -1683,12 +1666,10 @@ sample its own SAM/PROFILE name, otherwise the samples overwrite each other's ou
             d.snp_min_af               = snp_min_af;
             d.snp_min_mean_qual        = snp_min_mean_qual;
             d.snp_require_strand       = snp_require_strand;
-            d.gene_min_hcov_frac       = gene_min_hcov_frac;
-            d.gene_min_mean_depth      = gene_min_mean_depth;
-            d.msa_min_samples          = msa_min_samples;
             d.run_qcmsa                = run_qcmsa;
             d.strain_preset            = std::move(strain_preset);
             d.qcmsa_script             = std::move(qcmsa_script);
+            d.qcmsa_args               = std::move(qcmsa_args);
             d.snp_max_alleles          = snp_max_alleles;
             d.x_drop                   = x_drop;
             d.max_key_ubiquity         = max_key_ubiquity;

@@ -26,13 +26,13 @@ clear:
 strain-test: strain-protal strain-dbcounts strain-report
     @echo "Report: {{strain_run}}/report/report.html"
 
-# "Raw" variant -> strain_test_out/test2: protal filters ONLY SNPs (M1/M2); it does
-# NOT drop genes (M3), samples (msa_min_samples / per-seq hcov) or mask by
-# multi-allelicity (M4). qcmsa then does all gene/sample filtering. The unfiltered
-# <species>.raw.msa.fna can be re-filtered with other thresholds.
+# "Raw" variant -> strain_test_out/test2: protal filters ONLY SNPs (M1/M2) and does
+# not even apply the per-sequence hcov floor. Gene/sample coverage filtering always
+# lives in qcmsa. The unfiltered <species>.raw.msa.fna can be re-filtered with other
+# thresholds.
 strain-test-raw:
     just strain_variant=test2 \
-         strain_protal_filter_args="--gene_min_hcov_frac 0 --gene_min_mean_depth 0 --msa_min_samples 0 --msa_min_hcov 0" \
+         strain_protal_filter_args="--msa_min_hcov 0" \
          strain-test
 
 # Count marker genes per species in the DB genome (the true gene denominator,

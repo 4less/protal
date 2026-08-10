@@ -53,10 +53,24 @@ It writes (prefix defaults to `<species>`, i.e. the input path minus `.raw.msa.f
 | `--gene-min-mean-depth FLOAT` | **1.0** | min mean depth over covered positions; set 0 to disable |
 | `--gene-min-samples INT` | **3** | drop a gene unless **more than** this many samples pass coverage; set 0 to disable |
 
-> These are the defaults, so the integrated run already applies them. protal's own
-> coverage filtering is OFF by default (it emits a raw MSA); set protal
-> `--gene_min_hcov_frac` / `--gene_min_mean_depth` / `--msa_min_samples` > 0 only if
-> you want protal to filter internally instead.
+> These are the defaults, so the integrated run already applies them. protal has no
+> gene-coverage filtering of its own -- it always emits a raw MSA, so this is the only
+> place these thresholds exist, and changing them never requires re-running protal.
+
+## Setting qcmsa options from a protal run
+
+protal passes `--prefix`, `--preset` (from `--strain_preset`) and `--reapply-hcov`
+(from `--msa_min_hcov`) itself. Every other qcmsa flag is reachable via
+`--qcmsa_args`, forwarded verbatim:
+
+```bash
+protal profile ... --qcmsa_args "--gene-min-hcov 0.5 --gene-min-samples 5"
+```
+
+These are appended last, so they also override what protal passes — e.g.
+`--qcmsa_args "--preset strict"` beats `--strain_preset default`. protal does not
+validate them; a bad flag surfaces as a qcmsa error and the post-filter is skipped
+for that species with a warning.
 
 ### Sites and sequences
 | flag | default | effect |
