@@ -180,9 +180,10 @@ avx2: configure
 simulate: configure
     cmake --build {{build_dir}} --target simulate_metagenomes -- -j$(nproc)
 
-# Static baseline build (protal_static target)
+# Static baseline build: fully static protal + simulate_metagenomes, no AVX/AVX2/AVX512
+# (isa_baseline => -march=x86-64, i.e. SSE2 only, runs on any x86-64 CPU).
 static: configure
-    cmake --build {{build_dir}} --target protal_static -- -j$(nproc)
+    cmake --build {{build_dir}} --target protal_static simulate_metagenomes_static -- -j$(nproc)
 
 # Build all binaries that `just install` ships
 build-all: configure

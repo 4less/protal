@@ -107,12 +107,18 @@ add_executable(simulate_metagenomes
         src/simulate_metagenomes_main.cpp)
 target_compile_options(simulate_metagenomes PRIVATE ${PROTAL_COMMON_COMPILE_OPTIONS})
 
+add_executable(simulate_metagenomes_static
+        src/simulate_metagenomes_main.cpp)
+target_compile_options(simulate_metagenomes_static PRIVATE ${PROTAL_COMMON_COMPILE_OPTIONS})
+target_link_options(simulate_metagenomes_static PRIVATE -static -static-libgcc -static-libstdc++)
+
 
 # Link to cmake file in src
 target_link_libraries(protal PRIVATE protal_lib dl z isa_baseline)
 target_link_libraries(protal_static PRIVATE protal_lib_static dl z isa_baseline)
 target_link_libraries(protal_avx2 PRIVATE protal_lib dl z isa_avx2)
 target_link_libraries(simulate_metagenomes PRIVATE protal_lib dl z isa_baseline)
+target_link_libraries(simulate_metagenomes_static PRIVATE protal_lib_static dl z isa_baseline)
 
 add_subdirectory(src/)
 #add_subdirectory(tests/)
